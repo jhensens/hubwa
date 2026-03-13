@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hobart Hub | Bar Wa Izakaya</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="sidebar no-print">
+        <div class="nav-group">
+            <div class="brand-header">
+                <h1 style="font-size: 1.4rem; margin: 0; color: var(--brand-dark); letter-spacing: 1px;">HOBART HUB</h1>
+                <small style="color: var(--brand-accent); font-size: 10px; letter-spacing: 2px; text-transform: uppercase;">Bar Wa Izakaya</small>
+            </div>
+
+            <div class="nav-item" onclick="window.showView('dashboard')">🏠 Dashboard</div>
+
+            <div class="sidebar-category">Operations</div>
+            <div class="nav-item restricted" onclick="window.showView('sales')">📈 Takings & KPIs</div>
+            <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
+            <div class="nav-item" onclick="window.showView('inventory')">📦 Live Inventory</div>
+            <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers & Ordering</div>
+            <div class="nav-item" onclick="window.showView('prep-list')">📝 Auto-Order List</div>
+            <div class="nav-item restricted" onclick="window.showView('recipes')">⚖️ Recipe Engine</div>
+            <div class="nav-item restricted" onclick="window.showView('invoice')">🧾 Invoice Ripper</div>
+            <div class="nav-item" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
+            <div class="nav-item" onclick="window.showView('allergens')">🧪 Allergen Matrix</div>
+
+            <div class="sidebar-category">Compliance & Staff</div>
+            <div class="nav-item" onclick="window.showView('compliance')">🌡️ Temp & Checklists</div>
+            <div class="nav-item restricted" onclick="window.showView('orientation')">🤝 Staff Onboarding</div>
+            <div class="nav-item" onclick="window.showView('maintenance')">🛠️ Maintenance & Assets</div>
+            <div class="nav-item" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
+            <div class="nav-item" onclick="window.showView('phonebook')">📞 Phonebook</div>
+            <div class="nav-item restricted" onclick="window.showView('safe')">🔓 Digital Safe</div>
+            <div class="nav-item" onclick="window.showView('incidents')">⚠️ Incident Log</div>
+
+            <div class="sidebar-category">Logistics</div>
+            <div class="nav-item" onclick="window.showView('rosters')">🗓️ Shift Rosters</div>
+            <div class="nav-item restricted" onclick="window.showView('handover')">📝 Shift Handover</div>
+            <div class="nav-item" onclick="window.showView('knowledge')">📚 Knowledge Base</div>
+            
+            <div class="sidebar-category">External Links</div>
+            <a href="https://my.tanda.co/dashboard" target="_blank" class="nav-item external-link">⏱️ Tanda ↗</a>
+            <a href="https://my.kounta.com/login" target="_blank" class="nav-item external-link">🛒 Lightspeed ↗</a>
+            <a href="https://manage.meandu.app/" target="_blank" class="nav-item restricted external-link">📱 Me&u ↗</a>
+        </div>
+
+        <div class="sidebar-footer">
+            <div id="btn-lock" class="nav-item btn-lock" onclick="window.toggleLock()">🔒 Lock Hub</div>
+            <div class="nav-item restricted btn-backup" onclick="window.exportData()">💾 Backup Data</div>
+            <div class="nav-item restricted btn-restore">
+                <label for="importFile" style="cursor:pointer; display: block; width: 100%;">📂 Restore Data</label>
+                <input type="file" id="importFile" onchange="window.importData(event)" style="display:none;">
+            </div>
+        </div>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="main-header no-print">
+            <h2 id="viewTitle" style="margin: 0; color: var(--brand-dark); font-weight: 600;">Venue Overview</h2>
+            <div id="sync-status" class="sync-badge">🟢 Live Sync</div>
+        </div>
+        
+        <div class="content-area" id="mainContent">
+            <div class="loading-state">
+                <h2>Loading Hub...</h2>
+                <p>Establishing commercial uplink.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="global-modal-overlay" class="modal-overlay" style="display:none;">
+    <div id="global-modal-content" class="modal-content"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-storage-compat.js"></script>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyA7j35ebfEPzY9bKl9gg177KCkSyPSjk0Y",
+        authDomain: "hobart-hub.firebaseapp.com",
+        projectId: "hobart-hub",
+        storageBucket: "hobart-hub.firebasestorage.app",
+        messagingSenderId: "1093976034443",
+        appId: "1:1093976034443:web:c1167905ae5588abb3d88e",
+        measurementId: "G-CHMH8RHX8C"
+    };
+
+    try {
+        firebase.initializeApp(firebaseConfig);
+        window.db = firebase.firestore();
+        window.storage = firebase.storage();
+    } catch(e) { console.error("Firebase init failed", e); }
+</script>
+
+<script src="core.js"></script>
+<script src="ops.js"></script>
+<script src="mgmt.js"></script>
+</body>
+</html>

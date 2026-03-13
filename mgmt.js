@@ -1,0 +1,521 @@
+// --- 1. TAKINGS & KPI DASHBOARD ---
+window.renderSalesView = () => {
+    const recentSales = (window.salesData || []).slice(-14).reverse();
+    return `
+    <div style="max-width: 1000px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 style="margin:0;">Takings & KPI Dashboard</h2>
+            <div style="display:flex; gap:10px;">
+                <button onclick="window.openAiDepletion()" class="btn btn-purple">✨ AI EOD Stock Depletion</button>
+                <button onclick="document.getElementById('csv-upload').click()" class="btn btn-blue">📈 Upload Takings CSV</button>
+                <input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:20px; margin-bottom:30px;">
+            <div class="card" style="border-top:5px solid var(--green);">
+                <h3 style="margin-top:0;">Revenue Goals</h3>
+                <label style="font-size:12px; color:var(--text-muted);">Wage Target %</label>
+                <input type="number" id="wage-target" class="input-box" value="${(window.salesTargets || {}).wageTarget || 30}" onchange="window.updateWageTarget(this.value)">
+                <p style="font-size:13px; color:var(--text-muted); margin-top:10px;">Setting this helps managers stay within budget based on trade volume.</p>
+            </div>
+            <div class="card">
+                <h3 style="margin-top:0;">Recent Daily Trade</h3>
+                <div style="max-height:300px; overflow-y:auto;">
+                    <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                        <thead>
+                            <tr style="text-align:left; border-bottom:1px solid var(--border);">
+                                <th style="padding:10px;">Date</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Total Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recentSales.length === 0 ? '<tr><td colspan="4" style="padding:10px; color:var(--text-muted);">No sales data uploaded yet.</td></tr>' : recentSales.map(s => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:10px;">${s.date}</td><td style="padding:10px;">$${Number(s.eftpos).toFixed(2)}</td><td style="padding:10px;">$${Number(s.cash).toFixed(2)}</td><td style="padding:10px; font-weight:bold; color:var(--green);">$${Number(s.total).toFixed(2)}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>`;
+};
+
+window.updateWageTarget = (val) => { window.salesTargets.wageTarget = val; window.saveToDisk(); window.showToast("Wage Target Saved"); };
+window.handleSalesCSV = (event) => {
+    const file = event.target.files[0]; const reader = new FileReader();
+    reader.onload = (e) => {
+        e.target.result.split('\n').slice(1).forEach(row => {
+            const cols = row.split(',');
+            if(cols.length > 8) {
+                const date = cols[0]; const eftpos = parseFloat(cols[2]) || 0; const meandu = parseFloat(cols[5]) || 0; const cash = parseFloat(cols[7]) || 0; const total = parseFloat(cols[8]) || 0;
+                if(!window.salesData.find(s => s.date === date) && date) window.salesData.push({ date, eftpos, meandu, cash, total });
+            }
+        });
+        window.saveToDisk(); window.showToast("Takings Imported Successfully!"); window.showView('sales');
+    };
+    reader.readAsText(file);
+};
+
+// --- 2. ORIENTATION & TRAINING ---
+window.renderOrientationView = function(showCompleted = false) {
+    const filtered = (window.orientationLogs || []).map((o, i) => ({...o, originalIndex: i})).filter(o => (o.status === 'Completed') === showCompleted);
+    return `<div style="max-width: 900px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+            <div>
+                <button onclick="window.showView('orientation')" class="btn ${!showCompleted ? 'btn-dark' : 'btn-outline'}">Active Training</button>
+                <button onclick="window.renderCompletedOrientations()" class="btn ${showCompleted ? 'btn-dark' : 'btn-outline'}" style="margin-left:10px;">Fully Trained</button>
+            </div>
+            <div>
+                <button onclick="window.editOnbTemplates()" class="btn btn-outline" style="margin-right:10px;">⚙️ Edit Templates</button>
+                <button onclick="window.addOrientationForm()" class="btn btn-blue">+ New Hire</button>
+            </div>
+        </div>
+        <div id="orientationContent">${filtered.length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No staff in this view.</p></div>' : filtered.map(o => {
+        const template = window.onboardingTemplates[o.role] || window.onboardingTemplates['FOH (Front of House)'];
+        let totalTasks = 0; let completedTasks = 0;
+        let phasesHtml = Object.keys(template).map(phase => {
+            let phaseTasksHtml = template[phase].map(t => {
+                totalTasks++; if (o.tasks && o.tasks[t.id]) completedTasks++;
+                let isDone = o.tasks && o.tasks[t.id];
+                let actionHtml = (t.isUpload && !isDone && o.status !== 'Completed') ? `<input type="file" id="up-${o.originalIndex}-${t.id}" accept="application/pdf,image/*" style="display:none;" onchange="window.handleStaffUpload(${o.originalIndex}, '${t.id}', '${t.cat}', this)"><button onclick="document.getElementById('up-${o.originalIndex}-${t.id}').click()" class="btn btn-blue" style="font-size:10px; padding:3px 8px; margin-left:10px;">Upload File</button>` : '';
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--border);"><label style="font-size:13px; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" style="transform: scale(1.2);" ${isDone ? 'checked' : ''} ${o.status === 'Completed' || t.isUpload ? 'disabled' : `onchange="window.toggleOrientationTask(${o.originalIndex}, '${t.id}', this.checked)"`}><span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${t.label}</span></label>${actionHtml}</div>`;
+            }).join('');
+            return `<div style="margin-bottom:15px;"><h5 style="margin:0 0 5px 0; color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">${phase}</h5>${phaseTasksHtml}</div>`;
+        }).join('');
+        const pct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+        return `<div class="card" style="border-left:6px solid ${pct === 100 ? 'var(--green)' : 'var(--purple)'}; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;"><div><h3 style="margin:0;">${o.name}</h3><span class="tag-pill" style="margin-top:5px;">${o.role}</span><small style="color:var(--text-muted); display:block; margin-top:5px;">Started: ${o.startDate}</small></div><div style="text-align:right;"><strong style="color:${pct === 100 ? 'var(--green)' : 'var(--purple)'}; font-size:24px;">${pct}%</strong>${o.status !== 'Completed' ? `<br><button onclick="window.deleteOrientation(${o.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; margin-top:5px; padding:0; text-decoration:underline;">Remove Staff</button>` : ''}</div></div>${phasesHtml}<div style="margin-top:20px; background:var(--bg-main); padding:15px; border-radius:6px; border:1px solid var(--border);"><h5 style="margin:0 0 10px 0; color:var(--brand-dark);">Staff Acknowledgment</h5><p style="font-size:12px; margin:0 0 10px 0; color:var(--text-muted);">I confirm I have read the venue Handbooks, SOPs, and completed the training checklist above.</p>${o.signature ? `<div style="color:var(--green); font-family:monospace; font-size:14px; padding:10px; border:1px dashed var(--green); background:rgba(16, 185, 129, 0.1);">Signed: ${o.signature} <br><small>${o.signDate}</small></div>` : `<div style="display:flex; gap:10px;"><input type="text" id="sig-${o.originalIndex}" class="input-box" placeholder="Type name to sign..." style="margin:0; flex:1;"><button onclick="window.signOrientation(${o.originalIndex})" class="btn btn-dark">Sign</button></div>`}</div>${pct === 100 && o.signature && o.status !== 'Completed' ? `<button onclick="window.completeOrientation(${o.originalIndex})" class="btn btn-green" style="width:100%; margin-top:20px; font-size:16px;">Approve & Mark as Fully Trained</button>` : ''}</div>`; 
+    }).join('')}</div></div>`;
+}
+
+window.renderCompletedOrientations = () => { document.getElementById('mainContent').innerHTML = window.renderOrientationView(true); };
+
+window.editOnbTemplates = () => {
+    let html = ``;
+    Object.keys(window.onboardingTemplates).forEach(role => {
+        html += `<div style="margin-bottom:20px;"><h3 style="color:var(--brand-dark); border-bottom:2px solid var(--border); padding-bottom:5px;">${role}</h3>`;
+        Object.keys(window.onboardingTemplates[role]).forEach(phase => {
+            html += `<h5 style="margin-top:15px; color:var(--brand-accent);">${phase}</h5>`;
+            window.onboardingTemplates[role][phase].forEach((task, tIdx) => { html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg-main); font-size:13px;"><span>${task.label} ${task.isUpload ? '<span style="color:var(--blue); font-size:10px; border:1px solid var(--blue); padding:2px 4px; border-radius:4px; margin-left:5px;">Upload Required</span>' : ''}</span><button onclick="window.delOnbTask('${role}', '${phase}', ${tIdx})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">&times;</button></div>`; });
+            html += `<div style="display:flex; gap:10px; margin-top:10px;"><input type="text" id="nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}" class="input-box" placeholder="Add new task..." style="flex:1; margin:0;"><button onclick="window.addOnbTask('${role}', '${phase}')" class="btn btn-green">Add Task</button></div>`;
+        });
+        html += `</div>`;
+    });
+    window.openModal("⚙️ Edit Training Templates", html + `<button onclick="window.closeModal(); window.showView('orientation')" class="btn btn-blue" style="width:100%; margin-top:15px;">Done</button>`);
+};
+window.addOnbTask = (role, phase) => { const val = document.getElementById(`nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}`).value; if(val) { window.onboardingTemplates[role][phase].push({id: 't_' + Date.now(), label: val}); window.saveToDisk(); window.editOnbTemplates(); } };
+window.delOnbTask = (role, phase, idx) => { if(confirm("Delete this training task?")) { window.onboardingTemplates[role][phase].splice(idx, 1); window.saveToDisk(); window.editOnbTemplates(); } };
+
+window.addOrientationForm = () => { 
+    let html = `<input type="text" id="o-name" class="input-box" placeholder="Staff Name" style="margin-bottom:15px;"><label style="font-size:11px; color:var(--text-muted);">Role / Department</label><select id="o-role" class="input-box" style="margin-bottom:15px;"><option>FOH (Front of House)</option><option>BOH (Back of House)</option></select><label style="font-size:11px; color:var(--text-muted);">Start Date</label><input type="date" id="o-date" value="${new Date().toISOString().split('T')[0]}" class="input-box" style="margin-bottom:20px;"><button onclick="window.submitOrientation()" class="btn btn-green" style="width:100%;">Create Training Profile</button>`;
+    window.openModal("👋 Start New Hire Orientation", html); 
+};
+window.submitOrientation = () => { const name = document.getElementById('o-name').value; const role = document.getElementById('o-role').value; if(!name) return window.showToast("Staff Name is required.", "error"); window.orientationLogs.push({ name, role, startDate: document.getElementById('o-date').value, status: 'Active', tasks: {}, signature: null, signDate: null }); window.saveToDisk(); window.closeModal(); window.showView('orientation'); window.showToast("Profile Created!"); };
+window.toggleOrientationTask = (index, taskId, isChecked) => { if(!window.orientationLogs[index].tasks) window.orientationLogs[index].tasks = {}; window.orientationLogs[index].tasks[taskId] = isChecked; window.saveToDisk(); window.showView('orientation'); };
+window.handleStaffUpload = async (index, taskId, category, inputElem) => {
+    if (!inputElem.files.length) return;
+    const file = inputElem.files[0]; const btn = inputElem.nextElementSibling; const originalText = btn.innerText; btn.innerText = "Uploading... ⏳"; btn.disabled = true;
+    try {
+        const fileRef = storage.ref().child(`staff_onboarding/${Date.now()}_${file.name}`);
+        await fileRef.put(file);
+        const downloadURL = await fileRef.getDownloadURL();
+        window.digitalSafe.push({ name: `${window.orientationLogs[index].name} - Document`, category: category, expiry: '', type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL });
+        if(!window.orientationLogs[index].tasks) window.orientationLogs[index].tasks = {};
+        window.orientationLogs[index].tasks[taskId] = true; window.saveToDisk(); window.showView('orientation'); window.showToast("Document Uploaded & Saved to Safe!");
+    } catch (error) { window.showToast("Upload failed.", "error"); btn.innerText = originalText; btn.disabled = false; }
+};
+window.signOrientation = (index) => { const sigName = document.getElementById(`sig-${index}`).value; if(!sigName) return window.showToast("Please type your name.", "error"); window.orientationLogs[index].signature = sigName; window.orientationLogs[index].signDate = new Date().toLocaleString(); window.saveToDisk(); window.showView('orientation'); };
+window.completeOrientation = (index) => { window.orientationLogs[index].status = 'Completed'; window.saveToDisk(); window.showView('orientation'); window.showToast("Staff Fully Trained!"); };
+window.deleteOrientation = (index) => { if(confirm("Remove this staff member's training record?")) { window.orientationLogs.splice(index, 1); window.saveToDisk(); window.showView('orientation'); } };
+
+// --- 3. ROTATIONAL TASKS ---
+window.renderTaskView = function() { return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; margin-bottom:20px;"><div><button onclick="window.renderTaskList()" class="btn btn-dark">Active</button><button onclick="window.renderTaskHistory()" class="btn btn-outline" style="margin-left:10px;">Audit History</button></div><button onclick="window.addTaskForm()" class="btn btn-blue">+ Setup Task</button></div><div id="taskSubContent">${window.renderTaskListTemplate()}</div></div>`; }
+window.renderTaskListTemplate = function() { 
+    const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
+    return `<div id="activeTasks">${(window.rotationalTasks || []).map((t, i) => {
+        let isDue = true; let daysLeftText = "DUE NOW";
+        if (t.lastLogIso) {
+            const daysSince = (new Date() - new Date(t.lastLogIso)) / (1000 * 3600 * 24);
+            isDue = daysSince >= freqMap[t.freq];
+            if (!isDue) daysLeftText = `Due in ${Math.ceil(freqMap[t.freq] - daysSince)} days`;
+        }
+        return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; border-left:6px solid ${isDue ? 'var(--red)' : 'var(--green)'}; padding:15px; margin-bottom:10px;"><div><strong style="font-size:16px;">${t.name}</strong><br><small style="color:var(--text-muted);">Freq: ${t.freq} | Last Done: ${t.lastDate || 'Never'}</small><br><strong style="font-size:12px; display:inline-block; margin-top:5px; color:${isDue ? 'var(--red)' : 'var(--green)'};">${daysLeftText}</strong></div><div style="display:flex; align-items:center; gap:10px;"><input type="text" id="staff-${i}" placeholder="Staff Initials" class="input-box" style="width:110px; margin:0;"><button onclick="window.logTaskCompletion(${i})" class="btn btn-green">Log Done</button><button onclick="window.delTask(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div></div>`;
+    }).join('')}</div>`; 
+}
+window.renderTaskList = () => { document.getElementById('taskSubContent').innerHTML = window.renderTaskListTemplate(); };
+window.renderTaskHistory = () => { document.getElementById('taskSubContent').innerHTML = `<table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:15px;">Date</th><th style="padding:15px;">Task</th><th style="padding:15px;">Staff</th></tr></thead><tbody>${(window.taskHistory || []).slice().reverse().map(h => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px; font-size:13px; color:var(--text-muted);">${h.date}</td><td style="padding:15px;">${h.name}</td><td style="padding:15px;"><strong>${h.staff}</strong></td></tr>`).join('')}</tbody></table>`; };
+
+window.addTaskForm = () => { 
+    let html = `<label style="font-size:11px; color:var(--text-muted);">Task Name</label><input type="text" id="t-n" class="input-box" placeholder="e.g. Grease Trap Clean"><label style="font-size:11px; color:var(--text-muted);">Frequency</label><select id="t-f" class="input-box" style="margin-bottom:20px;"><option>Weekly</option><option>Fortnightly</option><option>Monthly</option><option>Quarterly</option></select><button onclick="window.subTask()" class="btn btn-green" style="width:100%;">Save Task</button>`;
+    window.openModal("🔄 New Recurring Task", html);
+};
+window.subTask = () => { window.rotationalTasks.push({ name: document.getElementById('t-n').value, freq: document.getElementById('t-f').value, lastLogIso: null, lastDate: 'Never' }); window.saveToDisk(); window.closeModal(); window.showView('tasks'); window.showToast("Task Created!"); };
+window.logTaskCompletion = (i) => { const s = document.getElementById(`staff-${i}`).value; if(!s) return window.showToast("Enter Staff Initials", "error"); const now = new Date(); window.taskHistory.push({ name: window.rotationalTasks[i].name, staff: s, date: now.toLocaleDateString() }); window.rotationalTasks[i].lastLogIso = now.toISOString(); window.rotationalTasks[i].lastDate = now.toLocaleDateString(); window.saveToDisk(); window.showView('tasks'); window.showToast("Task Logged!"); };
+window.delTask = (i) => { if(confirm("Delete Task?")) { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); }};
+
+// --- 4. COMPLIANCE ---
+window.renderComplianceView = function() {
+    const recentTemps = (window.tempLogs || []).slice(-8).reverse();
+    return `<div style="max-width: 900px; margin: auto;">
+        <div class="card" style="border-top:5px solid var(--blue);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 style="margin:0;">Fridge/Freezer Temp Log</h3><button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Setup Units</button></div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:15px; margin-bottom:20px;">
+                ${(window.fridgeUnits || []).map((f, i) => `
+                    <div style="background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border);">
+                        <strong style="font-size:13px; display:block; margin-bottom:8px; color:var(--brand-dark);">${f}</strong>
+                        <input type="number" step="0.1" id="t-val-${i}" oninput="window.checkT(${i})" class="input-box" placeholder="Temp °C" style="margin:0; width:100%;">
+                        <div id="t-warn-${i}" style="display:none; margin-top:10px;">
+                            <small style="color:var(--red); font-weight:bold; display:block; margin-bottom:4px;">⚠️ High Temp Alert</small>
+                            <input type="text" id="t-action-${i}" class="input-box" placeholder="Corrective Action" style="margin:0; border-color:var(--red); font-size:12px; padding:6px;">
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="display:flex; gap:10px; border-top:1px solid var(--border); padding-top:20px;">
+                <input type="text" id="t-staff" class="input-box" placeholder="Staff Name Signing Off" style="flex:1; margin:0;">
+                <button onclick="window.logAllTemps()" class="btn btn-blue" style="width:200px;">Log All Temps</button>
+            </div>
+            ${recentTemps.length > 0 ? `
+            <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px;">
+                <h4 style="margin:0 0 10px 0; font-size:13px; color:var(--text-muted); text-transform:uppercase;">Recent Logs</h4>
+                <table style="width:100%; font-size:13px; text-align:left; border-collapse:collapse;">
+                    <tbody>
+                        ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:8px 0;">${t.unit}</td><td style="color:${t.value > 5 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${t.staff}</td><td>${t.action ? `<span style="color:var(--red); font-size:11px;">Action: ${t.action}</span><br>` : ''}<span style="color:var(--text-muted); font-size:11px;">${t.time}</span></td></tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; margin-top:30px;"><h3 style="margin:0;">Venue Checklists</h3><button onclick="window.editChecklists()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Edit Lists</button></div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;">
+            ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:20px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
+        </div>
+    </div>`;
+}
+
+window.checkT = (i) => { document.getElementById(`t-warn-${i}`).style.display = parseFloat(document.getElementById(`t-val-${i}`).value) > 5 ? 'block' : 'none'; };
+window.logAllTemps = () => { 
+    const staff = document.getElementById('t-staff').value;
+    if(!staff) return window.showToast("Please enter your name.", "error"); 
+    let logsToAdd = []; const timeNow = new Date().toLocaleString();
+    for(let i = 0; i < (window.fridgeUnits || []).length; i++) {
+        const valStr = document.getElementById(`t-val-${i}`).value;
+        if(!valStr) continue; 
+        const val = parseFloat(valStr); let action = "";
+        if(val > 5) { action = document.getElementById(`t-action-${i}`).value; if(!action) return window.showToast(`High temp requires Action!`, "error"); }
+        logsToAdd.push({ unit: window.fridgeUnits[i], value: val, staff: staff, action: action, time: timeNow });
+    }
+    if(logsToAdd.length === 0) return window.showToast("Enter at least one temp.", "error");
+    window.tempLogs.push(...logsToAdd); window.saveToDisk(); window.showToast("Temps Logged!"); window.showView('compliance'); 
+};
+window.signCheck = (l) => { if(!document.getElementById(`s-${l.replace(/\s/g,'')}`).value) return window.showToast("Please sign name", "error"); window.complianceLogs.push({ type: l, staff: document.getElementById(`s-${l.replace(/\s/g,'')}`).value, time: new Date().toLocaleString() }); window.saveToDisk(); window.showToast(l + " Signed Off"); window.showView('compliance'); };
+
+window.editFridges = () => { 
+    let html = `<div style="margin-bottom:20px;">${(window.fridgeUnits || []).map((f, i) => `<div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid var(--border); align-items:center;"><span style="font-size:14px;">${f}</span> <button onclick="window.delFridge(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div>`).join('')}</div><div style="display:flex; gap:10px;"><input type="text" id="new-fridge" class="input-box" placeholder="New Unit Name" style="margin:0;"><button onclick="window.addFridge()" class="btn btn-green">Add Unit</button></div>`;
+    window.openModal("⚙️ Setup Fridges/Freezers", html);
+};
+window.addFridge = () => { const v = document.getElementById('new-fridge').value; if(v) { window.fridgeUnits.push(v); window.saveToDisk(); window.editFridges(); } };
+window.delFridge = (i) => { window.fridgeUnits.splice(i,1); window.saveToDisk(); window.editFridges(); };
+
+window.editChecklists = () => {
+    let html = `<div style="display:flex; gap:10px; margin-bottom:20px;"><input type="text" id="new-cat" class="input-box" placeholder="New Category (e.g. Weekly Deep Clean)" style="margin:0;"><button onclick="window.addChecklistCat()" class="btn btn-blue">Add Category</button></div><div style="max-height:60vh; overflow-y:auto; padding-right:10px;">`;
+    Object.keys(window.masterChecklists || {}).forEach(cat => { html += `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><h4 style="margin:0; color:var(--brand-accent);">${cat}</h4><button onclick="window.delChecklistCat('${cat}')" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; text-decoration:underline;">Delete Category</button></div>${(window.masterChecklists[cat] || []).map((item, idx) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);"><span style="font-size:13px;">${item}</span><button onclick="window.delChecklistItem('${cat}', ${idx})" style="color:var(--red); background:none; border:none; cursor:pointer;">&times;</button></div>`).join('')}<div style="display:flex; gap:10px; margin-top:15px;"><input type="text" id="add-item-${cat.replace(/\s/g,'')}" class="input-box" placeholder="New task..." style="margin:0; font-size:12px; padding:6px;"><button onclick="window.addChecklistItem('${cat}')" class="btn btn-green" style="padding:6px 12px; font-size:11px;">Add Task</button></div></div>`; });
+    html += `</div>`;
+    window.openModal("⚙️ Edit Checklists", html);
+};
+window.addChecklistCat = () => { const v = document.getElementById('new-cat').value; if(v && !window.masterChecklists[v]) { window.masterChecklists[v] = []; window.saveToDisk(); window.editChecklists(); } };
+window.delChecklistCat = (cat) => { if(confirm("Delete entire category?")) { delete window.masterChecklists[cat]; window.saveToDisk(); window.editChecklists(); window.showView('compliance'); } };
+window.addChecklistItem = (cat) => { const v = document.getElementById(`add-item-${cat.replace(/\s/g,'')}`).value; if(v) { window.masterChecklists[cat].push(v); window.saveToDisk(); window.editChecklists(); window.showView('compliance'); } };
+window.delChecklistItem = (cat, idx) => { window.masterChecklists[cat].splice(idx, 1); window.saveToDisk(); window.editChecklists(); window.showView('compliance'); };
+
+// --- 5. MAINTENANCE & ASSETS ---
+window.renderMaintenanceView = function(activeTab = 'fixit') {
+    let content = '', btnF = 'btn-outline', btnA = 'btn-outline', btnC = 'btn-outline', actionBtn = '';
+    if (activeTab === 'fixit') { content = window.renderFixItBoard(); btnF = 'btn-dark'; } 
+    else if (activeTab === 'assets') { content = window.renderAssetRegister(); btnA = 'btn-dark'; actionBtn = `<button onclick="window.editEq()" class="btn btn-blue">+ Add Asset</button>`; } 
+    else if (activeTab === 'contractors') { content = window.renderContractorBoard(); btnC = 'btn-dark'; actionBtn = `<button onclick="window.showContractorForm()" class="btn btn-green">+ Sign In Contractor</button>`; }
+
+    return `<div style="max-width: 900px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
+            <div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:5px;">
+                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit')" class="btn ${btnF}">🛠️ Fix-It Board</button>
+                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets')" class="btn ${btnA}">⚙️ Asset Register</button>
+                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors')" class="btn ${btnC}">📋 Contractor Log</button>
+            </div>
+            ${actionBtn}
+        </div>
+        <div id="maint-content">${content}</div>
+    </div>`;
+}
+
+window.renderFixItBoard = () => {
+    const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open'); 
+    const closedTickets = (window.defectLogs || []).filter(d => d.status === 'Resolved');
+    const tradies = (window.phoneBook || []).filter(c => c.category === 'Tradie' || c.category === 'Tradie / Maintenance');
+    const tradieOptions = `<option value="">Leave Unassigned (Internal Fix)</option>` + tradies.map(t => `<option value="${t.name}">${t.name} - ${t.phone}</option>`).join('');
+
+    return `<div class="card" style="border-top:5px solid var(--orange);">
+        <h3 style="margin-top:0;">Log a Broken Item</h3>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <input type="text" id="def-item" class="input-box" placeholder="Item (e.g. Table 12 / Coolroom Fan)" style="flex-grow:1; margin:0;">
+            <label style="display:flex; align-items:center; color:var(--red); font-weight:bold; background:rgba(239, 68, 68, 0.1); padding:0 15px; border-radius:6px; border:1px solid rgba(239, 68, 68, 0.2); cursor:pointer;"><input type="checkbox" id="def-urgent" style="margin-right:8px; transform:scale(1.2);"> URGENT</label>
+        </div>
+        <select id="def-tradie" class="input-box" style="margin-bottom:15px;">${tradieOptions}</select>
+        <textarea id="def-desc" class="input-box" placeholder="What is exactly wrong with it?" style="height:60px; margin-bottom:15px;"></textarea>
+        <button onclick="window.submitDefect()" class="btn btn-orange" style="width:100%; font-size:16px;">Submit Ticket</button>
+    </div>
+    
+    <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;">Open Tickets</h3>
+    ${openTickets.length === 0 ? '<div class="card"><p style="color:var(--green); font-weight:bold; margin:0;">No open issues! Venue is looking good.</p></div>' : openTickets.map((d) => `
+        <div class="card" style="border-left:6px solid ${d.urgent ? 'var(--red)' : 'var(--orange)'}; padding:20px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><strong style="font-size:18px;">${d.item} ${d.urgent ? '<span style="color:var(--red); font-size:12px; margin-left:10px; border:1px solid var(--red); padding:2px 6px; border-radius:4px;">URGENT</span>' : ''}</strong><small style="color:var(--text-muted);">Reported: ${d.date}</small></div>
+            <p style="margin:10px 0; color:var(--text-main); font-size:14px; background:var(--bg-main); padding:10px; border-radius:6px;">${d.desc}</p>
+            ${d.tradie ? `<div style="font-size:13px; margin-bottom:15px; color:var(--blue); font-weight:bold;">🛠️ Assigned to: ${d.tradie}</div>` : '<div style="margin-bottom:15px;"></div>'}
+            <div style="display:flex; justify-content:flex-end; align-items:center; border-top:1px dashed var(--border); padding-top:15px;"><input type="number" step="0.01" id="def-cost-${d.originalIndex}" class="input-box" placeholder="Repair Cost ($)" style="width:140px; display:inline; margin:0 10px 0 0;"><button onclick="window.resolveDefect(${d.originalIndex})" class="btn btn-green">Mark Resolved</button></div>
+        </div>`).join('')}
+        
+    <h3 style="margin-top:40px; margin-bottom:15px; color:var(--text-muted); font-size:14px; text-transform:uppercase;">Recently Resolved</h3>
+    ${closedTickets.slice(-5).reverse().map(d => `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:10px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;"><div><strong style="color:var(--green);">✓ ${d.item}</strong> - <span style="font-size:13px; color:var(--text-muted);">${d.desc}</span></div>${d.cost > 0 ? `<strong style="color:var(--red); font-size:14px;">$${d.cost.toFixed(2)}</strong>` : ''}</div>`).join('')}`;
+};
+window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: new Date().toLocaleDateString() }); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
+window.resolveDefect = (index) => { const costInput = document.getElementById(`def-cost-${index}`).value; window.defectLogs[index].status = 'Resolved'; window.defectLogs[index].cost = costInput ? parseFloat(costInput) : 0; window.defectLogs[index].resolvedDate = new Date().toLocaleDateString(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Resolved!"); };
+
+window.renderAssetRegister = () => { return (window.equipmentData || []).length === 0 ? '<p style="color:var(--text-muted);">No assets tracked yet.</p>' : window.equipmentData.map((e, idx) => `<div class="card" style="border-left:5px solid var(--blue); padding:20px; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div><strong style="font-size:18px;">${e.name}</strong> <span style="color:var(--text-muted); font-size:13px; margin-left:10px;">[Code: ${e.code}]</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Service Interval: ${e.interval} months | Last Service: <strong style="color:white;">${e.lastService}</strong></small></div><div style="display:flex; gap:10px;"><button onclick="window.editEq(${idx})" class="btn btn-outline">Edit</button><button onclick="window.logEq(${idx})" class="btn btn-green">Log Service Today</button><button onclick="window.delEq(${idx})" style="background:none; color:var(--red); border:none; cursor:pointer; font-size:18px;">&times;</button></div></div></div>`).join(''); };
+
+window.editEq = (i = null) => { 
+    let e = i !== null ? window.equipmentData[i] : {name: '', code: '', interval: 6, lastService: new Date().toISOString().split('T')[0]}; 
+    let html = `
+        <label style="font-size:11px; color:var(--text-muted);">Equipment Name</label><input type="text" id="eq-n" class="input-box" value="${e.name}">
+        <label style="font-size:11px; color:var(--text-muted);">Asset/Serial Code</label><input type="text" id="eq-c" class="input-box" value="${e.code}">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
+            <div><label style="font-size:11px; color:var(--text-muted);">Interval (Months)</label><input type="number" id="eq-i" class="input-box" value="${e.interval}"></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Last Service Date</label><input type="date" id="eq-d" class="input-box" value="${e.lastService}"></div>
+        </div>
+        <button onclick="window.subEq(${i})" class="btn btn-blue" style="width:100%;">Save Asset</button>
+    `;
+    window.openModal(i !== null ? "⚙️ Edit Asset" : "⚙️ New Asset", html);
+};
+window.subEq = (i) => { let obj = { name: document.getElementById('eq-n').value, code: document.getElementById('eq-c').value, interval: document.getElementById('eq-i').value || 6, lastService: document.getElementById('eq-d').value || new Date().toISOString().split('T')[0] }; if (i !== null) window.equipmentData[i] = obj; else window.equipmentData.push(obj); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); window.showToast("Asset Saved!"); };
+window.logEq = (i) => { window.equipmentData[i].lastService = new Date().toISOString().split('T')[0]; window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); window.showToast("Service Logged!"); };
+window.delEq = (i) => { if(confirm("Remove this asset?")) { window.equipmentData.splice(i,1); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); } };
+
+window.renderContractorBoard = () => {
+    const active = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => !c.timeOut);
+    const history = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => c.timeOut).slice(-10).reverse();
+    return `<h3 style="margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">🟢 Currently On-Site</h3>${active.length === 0 ? '<div class="card"><p style="color:var(--green); margin:0; font-weight:bold;">No contractors currently signed in.</p></div>' : active.map(c => `<div class="card" style="border-left:5px solid var(--green); padding:20px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;"><div><strong style="font-size:18px;">${c.name}</strong> <span style="color:var(--text-muted);">(${c.company})</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Reason: ${c.reason} | <strong>In:</strong> ${c.timeIn}</small></div><button onclick="window.signOutContractor(${c.originalIndex})" class="btn btn-red" style="font-size:16px;">Sign Out</button></div>`).join('')}<h3 style="margin-top:40px; margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">📋 Recent Visits</h3><table style="width:100%; background:var(--card-bg); border-radius:8px; overflow:hidden; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:15px;">Date</th><th style="padding:15px;">Contractor</th><th style="padding:15px;">Reason</th><th style="padding:15px;">Time In/Out</th></tr></thead><tbody>${history.length === 0 ? '<tr><td colspan="4" style="padding:15px; color:var(--text-muted); text-align:center;">No recent logs.</td></tr>' : history.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px; font-size:13px; color:var(--text-muted);">${c.date}</td><td style="padding:15px;"><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.company}</small></td><td style="padding:15px; font-size:13px; color:var(--brand-accent);">${c.reason}</td><td style="padding:15px; font-size:13px;">In: <strong>${c.timeIn}</strong><br>Out: <strong>${c.timeOut}</strong></td></tr>`).join('')}</tbody></table>`;
+}
+window.showContractorForm = () => { 
+    let html = `<input type="text" id="con-name" class="input-box" placeholder="Contractor Name (e.g., John Smith)" required><input type="text" id="con-company" class="input-box" placeholder="Company (e.g., Bob's Plumbing)" required><input type="text" id="con-reason" class="input-box" placeholder="Reason for visit (e.g., Fix grease trap)" style="margin-bottom:20px;" required><button onclick="window.submitContractor()" class="btn btn-green" style="width:100%;">Sign In</button>`;
+    window.openModal("📋 Contractor Sign-In", html); 
+}
+window.submitContractor = () => { const name = document.getElementById('con-name').value; const company = document.getElementById('con-company').value; const reason = document.getElementById('con-reason').value; if(!name || !company) return window.showToast("Required details missing.", "error"); const now = new Date(); window.contractorLogs.push({ date: now.toLocaleDateString(), timeIn: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), timeOut: null, name, company, reason }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed In!"); }
+window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
+
+// --- 6. DIGITAL SAFE ---
+window.renderSafeView = function() {
+    const groupedDocs = (window.digitalSafe || []).reduce((acc, doc, i) => { const cat = doc.category || 'General / Other'; if (!acc[cat]) acc[cat] = []; acc[cat].push({ ...doc, originalIndex: i }); return acc; }, {});
+    let contentHtml = '';
+    if ((window.digitalSafe || []).length === 0) { contentHtml = '<div class="card"><p style="color:var(--text-muted); margin:0;">Safe is empty.</p></div>'; } 
+    else {
+        const categories = ["Licenses & Permits", "Staff RSAs", "Food Safety Certs", "Maintenance Records", "General / Other"];
+        Object.keys(groupedDocs).forEach(c => { if(!categories.includes(c)) categories.push(c); });
+        categories.forEach(cat => {
+            if (groupedDocs[cat] && groupedDocs[cat].length > 0) {
+                contentHtml += `<div style="margin-top: 30px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;"><h3 style="margin: 0; color: var(--brand-dark);">${cat}</h3></div><div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px;">${groupedDocs[cat].map(d => {
+                        let isExpired = d.expiry && new Date(d.expiry) < new Date();
+                        return `<div class="card" style="border-top:5px solid ${isExpired ? 'var(--red)' : 'var(--green)'}; margin-bottom:0;"><div style="display:flex; justify-content:space-between; align-items:flex-start;"><h4 style="margin:0 0 10px 0; font-size:16px;">${d.name}</h4><button onclick="window.delDoc(${d.originalIndex})" style="background:none; border:none; color:var(--red); cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button></div><p style="margin:0 0 20px 0; font-size:13px; color:var(--text-muted);">Expires: <strong style="color:${isExpired ? 'var(--red)' : 'var(--brand-accent)'};">${d.expiry || 'N/A'}</strong></p>${d.data ? `<a href="${d.data}" download="${d.name}" target="_blank" class="btn btn-outline" style="display:block; text-align:center; text-decoration:none;">Download / View File</a>` : `<a href="${d.link}" target="_blank" class="btn btn-outline" style="display:block; text-align:center; text-decoration:none;">View Link ↗</a>`}</div>`
+                    }).join('')}</div>`;
+            }
+        });
+    }
+    return `<div style="max-width: 1000px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Digital Safe</h2><button onclick="window.addDocForm()" class="btn btn-green">+ Upload Document</button></div>${contentHtml}</div>`;
+}
+
+window.addDocForm = () => { 
+    let html = `<label style="font-size:11px; color:var(--text-muted);">Category</label><select id="d-cat" class="input-box"><option>Staff RSAs</option><option>Food Safety Certs</option><option>Licenses & Permits</option><option>Maintenance Records</option><option>General / Other</option></select><label style="font-size:11px; color:var(--text-muted);">Document Name</label><input type="text" id="d-name" class="input-box" placeholder="e.g. John Smith RSA"><label style="font-size:11px; color:var(--text-muted);">Expiry Date (Optional)</label><input type="date" id="d-expiry" class="input-box"><label style="font-size:11px; color:var(--text-muted);">File (PDF/Image)</label><input type="file" id="d-file" accept="application/pdf,image/*" class="input-box" style="padding: 12px; margin-bottom:20px;"><button onclick="window.subDoc()" class="btn btn-green" style="width:100%;" id="btn-doc-save">Save to Safe</button>`;
+    window.openModal("🔓 Upload to Safe", html); 
+};
+
+window.subDoc = async () => { 
+    const name = document.getElementById('d-name').value; const category = document.getElementById('d-cat').value; const expiry = document.getElementById('d-expiry').value; const fileInput = document.getElementById('d-file'); 
+    if (!name) return window.showToast("Name required.", "error"); if (!fileInput.files.length) return window.showToast("Select a file.", "error"); 
+    const file = fileInput.files[0]; const btn = document.getElementById('btn-doc-save'); btn.innerText = "Uploading... ⏳"; btn.disabled = true;
+    try {
+        const fileRef = storage.ref().child(`safe_docs/${Date.now()}_${file.name}`); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
+        window.digitalSafe.push({ name: name, category: category, expiry: expiry, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL }); 
+        window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast("Document Secured!");
+    } catch (error) { window.showToast("Upload failed.", "error"); btn.innerText = "Save to Safe"; btn.disabled = false; }
+};
+window.delDoc = (i) => { if(confirm("Delete this document?")) { window.digitalSafe.splice(i,1); window.saveToDisk(); window.showView('safe'); } };
+
+// --- 7. PHONEBOOK ---
+window.renderPhoneBookView = function() { 
+    const mergedContacts = [...(window.phoneBook || []).map((c, i) => ({ ...c, originalIndex: i, isSupplier: false })), ...(window.suppliers || []).map(s => ({ name: s.name, category: 'Supplier', phone: s.contact || 'No email/phone', notes: `Order Cutoff: ${s.cutoff}`, isSupplier: true }))].sort((a, b) => a.name.localeCompare(b.name));
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Master Phone Book</h2><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:15px;">Name & Category</th><th style="padding:15px;">Contact Detail</th><th style="padding:15px;">Notes</th><th style="text-align:right; padding-right:15px;">Action</th></tr></thead><tbody>${mergedContacts.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">No contacts.</td></tr>' : mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px;"><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.category}</small></td><td style="padding:15px;">${c.phone.includes('@') ? `<a href="mailto:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>` : `<a href="tel:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>`}</td><td style="padding:15px; color:var(--brand-accent); font-size:13px; white-space:pre-wrap;">${c.notes || ''}</td><td style="text-align:right; padding-right:15px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('')}</tbody></table></div>`; 
+}
+window.addContact = () => { 
+    let html = `<input type="text" id="c-n" class="input-box" placeholder="Name"><select id="c-c" class="input-box"><option>Staff</option><option>Tradie / Maintenance</option><option>Service Provider</option><option>Other</option></select><input type="text" id="c-p" class="input-box" placeholder="Phone or Email"><textarea id="c-notes" class="input-box" placeholder="Notes..." style="height:80px; margin-bottom:20px;"></textarea><button onclick="window.subContact()" class="btn btn-green" style="width:100%;">Save Contact</button>`;
+    window.openModal("📞 New Contact", html);
+};
+window.subContact = () => { window.phoneBook.push({ name: document.getElementById('c-n').value, category: document.getElementById('c-c').value, phone: document.getElementById('c-p').value, notes: document.getElementById('c-notes').value }); window.saveToDisk(); window.closeModal(); window.showView('phonebook'); window.showToast("Contact Saved!"); };
+window.delContact = (i) => { if(confirm("Delete this contact?")) { window.phoneBook.splice(i,1); window.saveToDisk(); window.showView('phonebook'); } };
+
+// --- 8. INCIDENT LOG ---
+window.renderIncidentView = function() { return `<div style="max-width: 800px; margin: auto;"><h2 style="margin-top:0; margin-bottom:20px;">Incident Log</h2><div class="card" style="border-top:5px solid var(--red);"><textarea id="inc-desc" class="input-box" style="height:100px;" placeholder="Describe the incident in detail..."></textarea><input type="text" id="inc-staff" class="input-box" placeholder="Staff Name Logging Incident" style="margin-bottom:20px;"><button onclick="window.saveIncident()" class="btn btn-red" style="width:100%; font-size:16px;">Log Incident to Permanent Record</button></div>${(window.incidentLogs || []).slice().reverse().map(l => `<div class="card" style="margin-top:15px; padding:20px; border-left:4px solid var(--red);"><div><strong style="font-size:16px;">${l.staff}</strong><span style="color:var(--text-muted); float:right; font-size:12px;">${l.time}</span></div><p style="margin:10px 0 0 0; color:var(--text-main); font-size:14px; white-space:pre-wrap;">${l.desc}</p></div>`).join('')}</div>`; }
+window.saveIncident = function() { window.incidentLogs.push({ staff: document.getElementById('inc-staff').value, desc: document.getElementById('inc-desc').value, time: new Date().toLocaleString() }); window.saveToDisk(); window.showToast("Incident Logged Permanently", "error"); window.showView('incidents'); };
+
+// --- 9. COMMAND CENTER (DASHBOARD) ---
+window.renderManagerHub = () => {
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
+        .then(res => res.json())
+        .then(data => {
+            if(document.getElementById('hobart-temp')) {
+                document.getElementById('hobart-temp').innerText = `${Math.round(data.current.temperature_2m)}°C`;
+                document.getElementById('hobart-desc').innerText = "Live from Hobart Satellite";
+            }
+        }).catch(e => console.log("Weather fetch failed"));
+
+    const isWeekend = [0, 5, 6].includes(new Date().getDay());
+    const lowStock = (window.inventoryItems || []).filter(i => {
+        if(i.archived) return false;
+        let parTarget = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+        return i.stock < parTarget;
+    });
+    let stockHtml = lowStock.length > 0 ? lowStock.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>⚠️ <strong>${i.name}</strong></span> <span>(${Number(i.stock).toFixed(1)} / ${isWeekend ? i.parWeekend : i.parWeekday})</span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">All inventory is at or above PAR.</p>';
+
+    const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open');
+    let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
+
+    const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>70%).</p>';
+
+    const today = new Date();
+    const todayStr = today.toLocaleDateString();
+    
+    const eqAlerts = (window.equipmentData || []).filter(e => {
+        if(!e.lastService || !e.interval) return false;
+        const nextService = new Date(e.lastService); nextService.setMonth(nextService.getMonth() + Number(e.interval));
+        return ((nextService - today) / (1000 * 3600 * 24)) <= 14;
+    });
+    let eqHtml = eqAlerts.length > 0 ? eqAlerts.map(e => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚙️ <strong>${e.name}</strong> is due for service soon.</div>`).join('') : '';
+
+    const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
+    const overdueTasks = (window.rotationalTasks || []).filter(t => {
+        if(!t.lastLogIso) return true;
+        return ((today - new Date(t.lastLogIso)) / (1000 * 3600 * 24)) >= freqMap[t.freq];
+    });
+    let taskHtml = overdueTasks.length > 0 ? overdueTasks.map(t => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🔄 <strong>${t.name}</strong> (${t.freq}) is DUE NOW.</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">All rotational tasks are current.</p>';
+
+    const todayIncidents = (window.incidentLogs || []).filter(i => i.time.includes(todayStr));
+    let incHtml = todayIncidents.length > 0 ? todayIncidents.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚠️ <strong>${i.staff}</strong>: ${i.desc}</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">No incidents logged today.</p>';
+
+    // Simple COGS Estimate metric
+    let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
+
+    return `<div style="max-width: 1100px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
+            <h2 style="margin:0; font-size:28px;">Command Center</h2>
+            <div style="text-align:right;">
+                <div style="color:var(--brand-dark); font-size:16px; font-weight:bold;">${today.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                <div style="color:var(--brand-accent); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin-top:2px;">Targeting ${isWeekend ? 'WEEKEND' : 'WEEKDAY'} Pars</div>
+            </div>
+        </div>
+    
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
+        <div class="card" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border:none; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.9;">🌤️ Hobart Weather</h3>
+            <div id="hobart-temp" style="font-size:48px; font-weight:bold; margin:10px 0;">Loading...</div>
+            <p id="hobart-desc" style="margin:0; opacity:0.8; font-size:13px;">Connecting to satellite...</p>
+        </div>
+        <div class="card" style="background: rgba(139, 92, 246, 0.1); border:1px solid rgba(139, 92, 246, 0.3);">
+            <h3 style="margin-top:0; color:var(--purple); display:flex; justify-content:space-between;"><span>🚨 Margin Alerts</span> <span style="font-size:12px; background:var(--purple); color:white; padding:2px 8px; border-radius:10px;">${marginAlerts.length}</span></h3>
+            <div style="max-height:120px; overflow-y:auto; padding-right:10px;">${marginHtml}</div>
+        </div>
+        <div class="card" style="border-top:5px solid var(--green); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Est. Stock Value</h3>
+            <div style="font-size:42px; font-weight:bold; color:var(--green); margin:10px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
+            <p style="margin:0; color:var(--text-muted); font-size:12px;">Based on Current Buy Units</p>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
+        <div class="card" style="border-top:5px solid var(--blue);"><h3 style="margin-top:0; color:var(--brand-accent);">📦 Inventory Alerts <small style="color:var(--text-muted); font-weight:normal;">(${isWeekend?'Weekend':'Weekday'} PAR)</small></h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${stockHtml}</div></div>
+        <div class="card" style="border-top:5px solid var(--orange);"><h3 style="margin-top:0; color:var(--brand-accent);">🛠️ Maintenance Tickets</h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${ticketHtml}${eqHtml}</div></div>
+    </div>
+    
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
+        <div class="card" style="border-top:5px solid var(--red);"><h3 style="margin-top:0; color:var(--brand-accent);">🔄 Overdue Tasks</h3><div style="max-height:150px; overflow-y:auto; padding-right:10px;">${taskHtml}</div></div>
+        <div class="card" style="border-top:5px solid var(--red);"><h3 style="margin-top:0; color:var(--brand-accent);">⚠️ Today's Incidents</h3><div style="max-height:150px; overflow-y:auto; padding-right:10px;">${incHtml}</div></div>
+    </div>
+    
+    </div>`;
+};
+
+// --- 10. HANDOVER ---
+window.renderHandoverView = () => {
+    return `<div style="max-width: 900px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 style="margin:0;">Shift Handover</h2>
+            <div>
+                <button onclick="window.generateAIHandoverSummary()" class="btn btn-purple" style="margin-right:10px;">✨ AI Auto-Summary</button>
+                <button onclick="window.newHandoverForm()" class="btn btn-blue">+ New Handover</button>
+            </div>
+        </div>
+        <div id="ai-summary-box"></div>
+        ${(window.handoverLogs || []).length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No handovers logged.</p></div>' : window.handoverLogs.slice().reverse().map(h => `<div class="card" style="border-left:5px solid var(--purple); margin-bottom:15px; padding:20px;"><div style="display:flex; justify-content:space-between; margin-bottom:15px;"><strong style="font-size:18px;">${h.shift} - ${h.date}</strong><span style="color:var(--brand-accent); background:var(--bg-main); padding:4px 10px; border-radius:15px; font-size:12px; border:1px solid var(--border);">Manager: ${h.manager}</span></div><p style="margin:0 0 15px 0; white-space:pre-wrap; font-size:15px; line-height:1.5;">${h.notes}</p>${h.urgent ? `<div style="color:var(--red); font-size:13px; font-weight:bold; background:rgba(239, 68, 68, 0.1); padding:10px; border-radius:6px; border:1px solid rgba(239, 68, 68, 0.2);">⚠️ URGENT PASSON: ${h.urgent}</div>` : ''}</div>`).join('')}
+    </div>`;
+};
+
+window.generateAIHandoverSummary = async () => {
+    const target = document.getElementById('ai-summary-box'); target.innerHTML = `<div class="card" style="text-align:center; border:1px solid var(--purple);"><p style="color:var(--purple); font-weight:bold; font-size:16px;">🤖 AI is analyzing today's logs for you...</p></div>`;
+    const summaryData = { temps: (window.tempLogs || []).filter(l => l.time.includes(new Date().toLocaleDateString())), wastage: (window.wastageLogs || []).filter(l => l.time.includes(new Date().toLocaleDateString())), defects: (window.defectLogs || []).filter(l => l.status === 'Open'), trained: (window.orientationLogs || []).filter(l => l.status === 'Completed').length };
+    const prompt = `Write a short 3-sentence end-of-shift manager summary. Mention today's fridge alerts: ${JSON.stringify(summaryData.temps)}, wastage logged: ${JSON.stringify(summaryData.wastage)}, and current open maintenance issues: ${JSON.stringify(summaryData.defects)}. Keep it professional.`;
+    try {
+        const apiKey = window.getApiKey(); if(!apiKey) return target.innerHTML = '';
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await response.json(); if (data.error) throw new Error(data.error.message);
+        const text = data.candidates[0].content.parts[0].text;
+        target.innerHTML = `<div class="card" style="border-left:5px solid var(--purple); background:rgba(139, 92, 246, 0.05);"><h4 style="margin:0 0 10px 0; color:var(--purple);">🤖 AI Suggested Handover Summary</h4><p style="font-size:15px; font-style:italic; line-height:1.5;">"${text}"</p><button onclick="window.copyToHandover('${text.replace(/'/g, "\\'")}')" class="btn btn-outline" style="font-size:12px; margin-top:10px;">Copy to New Handover</button></div>`;
+    } catch (e) { target.innerHTML = `<div class="card"><p style="color:var(--red);">AI Summary failed. Check API key.</p></div>`; }
+};
+window.copyToHandover = (text) => { window.newHandoverForm(); setTimeout(() => { document.getElementById('h-notes').value = text; }, 100); };
+
+window.newHandoverForm = () => { 
+    let html = `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;"><select id="h-shift" class="input-box" style="margin:0;"><option>AM Shift</option><option>PM Shift</option><option>Full Day</option></select><input type="text" id="h-mgr" class="input-box" placeholder="Manager Name" style="margin:0;"></div><label style="font-size:11px; color:var(--text-muted);">Shift Notes</label><textarea id="h-notes" class="input-box" placeholder="Shift notes, staff issues, 86'd items..." style="height:120px; margin-bottom:15px;"></textarea><label style="font-size:11px; color:var(--red); font-weight:bold;">Urgent Pass-on (Optional)</label><input type="text" id="h-urgent" class="input-box" placeholder="Critical info for next shift..." style="margin-bottom:20px; border-color:var(--red);"><button onclick="window.saveHandover()" class="btn btn-green" style="width:100%; font-size:16px;">Submit Handover</button>`;
+    window.openModal("📝 New Shift Handover", html);
+};
+window.saveHandover = () => { const mgr = document.getElementById('h-mgr').value; const notes = document.getElementById('h-notes').value; if(!mgr || !notes) return window.showToast("Manager and Notes required.", "error"); window.handoverLogs.push({ date: new Date().toLocaleDateString(), shift: document.getElementById('h-shift').value, manager: mgr, notes: notes, urgent: document.getElementById('h-urgent').value }); window.saveToDisk(); window.closeModal(); window.showView('handover'); window.showToast("Handover Submitted!"); };
+
+// --- 11. KNOWLEDGE BASE ---
+window.renderKnowledgeView = () => {
+    const cats = [...new Set((window.knowledgeBase || []).map(k => k.category))];
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; margin-bottom:20px; align-items:center;"><h2 style="margin:0;">Knowledge Base</h2><button onclick="window.newSOPForm()" class="btn btn-blue">+ Add SOP</button></div>${cats.length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No SOPs created yet.</p></div>' : cats.map(c => `<div style="margin-bottom:30px;"><h3 style="color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:10px; text-transform:uppercase; font-size:14px; letter-spacing:1px;">${c}</h3><div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; margin-top:15px;">${window.knowledgeBase.map((k, i) => k.category === c ? `<div class="card" style="margin:0; padding:20px; cursor:pointer; transition:transform 0.2s; border-top:4px solid var(--blue);" onclick="window.viewSOP(${i})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'"><h4 style="margin:0 0 10px 0; font-size:16px;">${k.title}</h4><p style="color:var(--text-muted); font-size:13px; margin:0; line-height:1.4;">${k.content.substring(0, 70)}...</p></div>` : '').join('')}</div></div>`).join('')}</div>`;
+};
+window.newSOPForm = () => { 
+    let html = `<div style="display:flex; gap:10px; margin-bottom:15px;"><input type="text" id="k-title" class="input-box" placeholder="SOP Title" style="flex:2; margin:0;"><input type="text" id="k-cat" class="input-box" placeholder="Category (e.g. FOH Setup)" style="flex:1; margin:0;"></div><textarea id="k-content" class="input-box" placeholder="Write the SOP details here..." style="height:250px; margin-bottom:20px; line-height:1.5;"></textarea><button onclick="window.saveSOP()" class="btn btn-green" style="width:100%; font-size:16px;">Save SOP</button>`;
+    window.openModal("📚 New SOP", html); 
+};
+window.saveSOP = () => { const title = document.getElementById('k-title').value; const content = document.getElementById('k-content').value; if(!title || !content) return window.showToast("Title and Content Required.", "error"); window.knowledgeBase.push({ title: title, category: document.getElementById('k-cat').value || 'General', content: content }); window.saveToDisk(); window.closeModal(); window.showView('knowledge'); window.showToast("SOP Saved!"); };
+window.viewSOP = (i) => { const k = window.knowledgeBase[i]; document.getElementById('mainContent').innerHTML = `<div class="card" style="max-width:800px; margin:auto; padding:40px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;"><h2 style="margin:0;">${k.title}</h2><button onclick="window.deleteSOP(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; text-decoration:underline;">Delete SOP</button></div><span class="tag-pill">${k.category}</span><div style="margin-top:30px; white-space:pre-wrap; line-height:1.8; font-size:15px; color:var(--text-main);">${k.content}</div><button onclick="window.showView('knowledge')" class="btn btn-outline" style="width:100%; margin-top:40px;">Back to Library</button></div>`; };
+window.deleteSOP = (i) => { if(confirm('Delete this SOP?')) { window.knowledgeBase.splice(i,1); window.saveToDisk(); window.showView('knowledge'); window.showToast("SOP Deleted."); } };
+
+// --- 12. ROSTERS ---
+window.renderRosterView = () => {
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Shift Rosters</h2><label class="btn btn-blue" style="cursor:pointer;">+ Upload Roster PDF/Image<input type="file" id="roster-upload" accept="application/pdf,image/*" style="display:none;" onchange="window.handleRosterUpload(event)"></label></div>${(window.shiftRosters || []).length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No rosters uploaded.</p></div>' : window.shiftRosters.slice().reverse().map((r, i) => {
+        let actualIndex = window.shiftRosters.length - 1 - i;
+        let displayHtml = '';
+        if (r.data) {
+            if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${r.data}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; } 
+            else { displayHtml = `<iframe src="${r.data}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
+        }
+        return `<div class="card" style="margin-bottom:20px; border-top: 5px solid var(--blue); padding:30px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${r.name}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
+    }).join('')}</div>`;
+};
+window.handleRosterUpload = async (e) => {
+    if(!e.target.files.length) return;
+    const file = e.target.files[0]; let weekName = prompt("Enter Roster Week Name:", file.name.split('.')[0]); if(!weekName) return;
+    window.showToast("Uploading roster, please wait... ⏳");
+    try {
+        const fileRef = storage.ref().child(`rosters/${Date.now()}_${file.name}`); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
+        window.shiftRosters.push({ name: weekName, date: new Date().toLocaleDateString(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster Uploaded successfully!");
+    } catch(err) { console.error("Upload failed", err); window.showToast("Upload failed.", "error"); }
+};
+window.deleteRoster = (i) => { if(confirm("Delete roster?")) { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } };
