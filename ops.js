@@ -292,8 +292,8 @@ window.renderInventoryView = () => {
                 <td style="padding:15px; font-size:13px; color:var(--text-muted);">${item.location || 'Unassigned'}</td>
                 <td style="padding:15px;"><span style="color:${stock < parTarget ? 'var(--red)' : 'var(--green)'}; font-weight:bold; font-size:16px;">${stock.toFixed(2)}</span> <small>/ ${parTarget} PAR</small></td>
                 <td style="text-align:right; padding:15px; white-space:nowrap;">
-                    <button data-action="history" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px; border-color:var(--purple); color:var(--purple); margin-right:5px;">📈 History</button>
-                    <button data-action="edit" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px;">Edit</button>
+                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px; border-color:var(--purple); color:var(--purple); margin-right:5px;">📈 History</button>
+                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px;">Edit</button>
                 </td>
             </tr>`;
         }).join('');
@@ -334,17 +334,6 @@ window.renderInventoryView = () => {
         ${accordionHtml}
     </div>`;
 };
-
-// Delegated click handler for inventory buttons — attached after render
-document.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-action');
-    const id = btn.getAttribute('data-id');
-    if (!id) return;
-    if (action === 'edit') window.editInvItem(id);
-    if (action === 'history') window.viewPriceTrend(id);
-});
 
 window.editInvItem = (id = null) => {
     let e = id ? window.inventoryItems.find(i => i.id === id) : {
