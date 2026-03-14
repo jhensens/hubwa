@@ -336,11 +336,14 @@ window.renderInventoryView = () => {
 };
 
 window.editInvItem = (id = null) => {
-    let e = id ? window.inventoryItems.find(i => i.id === id) : {
-        id: window.generateId('inv'), name:'', category:'Food', supplier:'', price:0, sku:'',
+    const cleanId = id ? String(id).trim() : null;
+    let found = cleanId ? window.inventoryItems.find(i => i.id === cleanId) : null;
+    let e = found || {
+        id: cleanId || window.generateId('inv'), name:'', category:'Food', supplier:'', price:0, sku:'',
         location:'', gstFree:false, buyUnit:'Unit', yield:1, useUnit:'Unit',
         stock:0, parWeekday:0, parWeekend:0, archived: false, history:[]
     };
+    if (cleanId && !found) console.warn('editInvItem: no item found for id:', cleanId, '| available ids:', window.inventoryItems.slice(0,3).map(i=>i.id));
     let supplierOpts = (window.suppliers || []).map(s =>
         `<option value="${s.name}" ${e.supplier === s.name ? 'selected' : ''}>${s.name}</option>`
     ).join('');
@@ -427,8 +430,9 @@ window.archiveInv = (id) => {
 };
 
 window.viewPriceTrend = (id) => {
-    const item = window.inventoryItems.find(i => i.id === id);
-    if (!item) return;
+    const cleanId = String(id).trim();
+    const item = window.inventoryItems.find(i => i.id === cleanId);
+    if (!item) { console.warn('viewPriceTrend: no item for id:', cleanId); return window.showToast('Item not found.', 'error'); }
     const history = item.history || [];
     let historyHtml = history.length === 0
         ? '<p style="padding:20px; color:var(--text-muted);">No history found. History is built automatically when invoices are processed through Invoice Ripper.</p>'
