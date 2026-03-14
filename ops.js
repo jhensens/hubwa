@@ -1752,7 +1752,21 @@ window.runAiDepletion = async () => {
     const menuItems = (window.recipes || []).filter(r => r.type === 'Menu');
     if (menuItems.length === 0) return statusDiv.innerHTML = `<p style="color:var(--orange);">⚠️ No Menu Recipes built in the Hub yet!</p>`;
     statusDiv.innerHTML = `<p style="color:var(--brand-accent); font-weight:bold;">🤖 AI is translating Lightspeed data...</p>`;
-    const prompt = `Extract items and Quantity Sold from this POS table. Return ONLY JSON: { "results": [ { "rawName": "Exact POS Item Name", "qtySold": 42 } ] } Text: ${rawText}`;
+    const recipeNames = (window.recipes || []).filter(r => r.type === 'Menu').map(r => r.posAlias || r.name).join(', ');
+    const prompt = `You are processing a Lightspeed POS end-of-day Product Mix report for Bar Wa Izakaya.
+Extract ONLY sellable menu items and their quantities sold. 
+
+RULES:
+- Skip modifiers, add-ons, and sub-items (lines indented or prefixed with "--", "Add", "Extra", "No ", "Sub")
+- Skip category headers, totals, voids, refunds, and zero-quantity lines
+- Combine duplicate item names (sum their quantities)
+- Use the exact item name as it appears in the POS report
+- Known menu items for context: ${recipeNames}
+
+Return ONLY valid JSON, no other text: { "results": [ { "rawName": "Exact POS Item Name", "qtySold": 42 } ] }
+
+POS Report:
+${rawText}`;
     try {
         const apiKey = window.getApiKey(); if (!apiKey) return;
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -1796,12 +1810,32 @@ window.renderDepletionConfirmation = () => {
         html += `</div>`;
     }
     if (window.pendingMap.known.length > 0) {
+        // Check for raw ingredient warnings
+        const rawWarnings = [];
+        window.pendingMap.known.forEach(k => {
+            const recipe = window.recipes.find(r => r.id === k.recipeId);
+            if (recipe) {
+                const rawCount = (recipe.ingredients || []).filter(i => i.type === 'raw').length;
+                if (rawCount > 0) rawWarnings.push({ name: recipe.name, rawCount });
+            }
+        });
+        if (rawWarnings.length > 0) {
+            html += `<div style="background:rgba(245,158,11,0.1); border:1px solid var(--orange); padding:12px 15px; border-radius:8px; margin-bottom:15px; font-size:13px;">
+                <strong style="color:var(--orange);">⚠️ Partial depletion warning</strong> — ${rawWarnings.length} matched recipe${rawWarnings.length !== 1 ? 's have' : ' has'} unlinked ingredients that won't be deducted:
+                <ul style="margin:6px 0 0 0; padding-left:18px; color:var(--text-muted);">
+                    ${rawWarnings.map(w => `<li>${w.name} (${w.rawCount} unlinked)</li>`).join('')}
+                </ul>
+                <a onclick="window.showView('batch-linker')" style="color:var(--blue); cursor:pointer; text-decoration:underline; font-size:12px;">Run AI Ingredient Linker to fix this →</a>
+            </div>`;
+        }
         html += `<h4 style="color:var(--green); border-bottom:1px solid var(--border); padding-bottom:5px; margin-top:20px;">✓ Safely Matched Items</h4>
         <div style="max-height:300px; overflow-y:auto; font-size:13px; background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border);">`;
         window.pendingMap.known.forEach(k => {
-            let rName = window.recipes.find(r => r.id === k.recipeId).name;
+            const recipe = window.recipes.find(r => r.id === k.recipeId);
+            const rName = recipe ? recipe.name : k.recipeId;
+            const rawCount = recipe ? (recipe.ingredients || []).filter(i => i.type === 'raw').length : 0;
             html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);">
-                <span><span style="color:var(--text-muted);">${k.posName}</span> ➔ <strong>${rName}</strong></span>
+                <span><span style="color:var(--text-muted);">${k.posName}</span> ➔ <strong>${rName}</strong>${rawCount > 0 ? ` <span style="color:var(--orange); font-size:11px;">(${rawCount} unlinked)</span>` : ''}</span>
                 <span style="color:var(--green); font-weight:bold;">${k.qtySold} sold</span>
             </div>`;
         });
@@ -1815,6 +1849,7 @@ window.renderDepletionConfirmation = () => {
 };
 
 window.executeDepletion = () => {
+    // Commit any newly mapped unknown items
     window.pendingMap.unknown.forEach((u, i) => {
         let selectedId = document.getElementById(`map-unknown-${i}`).value;
         if (selectedId) {
@@ -1823,38 +1858,103 @@ window.executeDepletion = () => {
             window.pendingMap.known.push({ posName: u.posName, recipeId: selectedId, qtySold: u.qtySold });
         }
     });
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-AU');
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Build stock deductions
     let deductions = {};
+    const logLines = [];
+
     window.pendingMap.known.forEach(k => {
         const recipe = window.recipes.find(r => r.id === k.recipeId);
-        if (recipe) {
-            (recipe.ingredients || []).forEach(ing => {
-                if (ing.type === 'inv') {
-                    deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
-                } else if (ing.type === 'batch') {
-                    const batch = window.recipes.find(r => r.id === ing.ref);
-                    if (batch) {
-                        const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
-                        (batch.ingredients || []).forEach(bIng => {
-                            if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
-                        });
-                    }
+        if (!recipe) return;
+
+        // Increment coversPerWeek — rolling 7-day window using depletionLogs
+        recipe.coversPerWeek = (recipe.coversPerWeek || 0) + k.qtySold;
+
+        const rawCount = (recipe.ingredients || []).filter(i => i.type === 'raw').length;
+        logLines.push({ posName: k.posName, recipeName: recipe.name, qtySold: k.qtySold, rawSkipped: rawCount });
+
+        (recipe.ingredients || []).forEach(ing => {
+            if (ing.type === 'inv') {
+                deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
+            } else if (ing.type === 'batch') {
+                const batch = window.recipes.find(r => r.id === ing.ref);
+                if (batch) {
+                    const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
+                    (batch.ingredients || []).forEach(bIng => {
+                        if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
+                    });
                 }
-            });
-        }
+            }
+        });
     });
+
+    // Apply deductions to inventory
     let deductedCount = 0;
+    const stockChanges = [];
     Object.keys(deductions).forEach(invId => {
         let inv = window.inventoryItems.find(i => i.id === invId);
         if (inv) {
             const useUnitsToDeduct = deductions[invId];
             const buyUnitsToDeduct = useUnitsToDeduct / (inv.yield || 1);
-            inv.stock = Math.max(0, (inv.stock || 0) - buyUnitsToDeduct);
+            const before = inv.stock || 0;
+            inv.stock = Math.max(0, before - buyUnitsToDeduct);
+            stockChanges.push({ name: inv.name, before: before.toFixed(2), after: inv.stock.toFixed(2), unit: inv.buyUnit || 'unit' });
             deductedCount++;
         }
     });
+
+    // Write depletion log entry
+    if (!window.depletionLogs) window.depletionLogs = [];
+    window.depletionLogs.push({
+        date: dateStr,
+        time: timeStr,
+        itemsSold: logLines,
+        stockChanges: stockChanges,
+        totalLines: deductedCount,
+        skippedUnmapped: window.pendingMap.unknown.filter((u, i) => !document.getElementById(`map-unknown-${i}`) || !document.getElementById(`map-unknown-${i}`).value).length
+    });
+
     window.saveToDisk();
-    window.showToast(`Success! Deducted ${deductedCount} stock lines.`);
-    window.showView('inventory');
+    window.showToast(`EOD complete — ${deductedCount} stock lines deducted across ${logLines.length} recipes.`);
+
+    // Show summary instead of jumping straight to inventory
+    window.renderDepletionSummary(logLines, stockChanges, deductedCount);
+};
+
+window.renderDepletionSummary = (logLines, stockChanges, deductedCount) => {
+    const html = `<div class="card" style="max-width:800px; margin:auto; border-top:5px solid var(--green);">
+        <div style="text-align:center; padding:20px 0 10px 0;">
+            <div style="font-size:48px; margin-bottom:8px;">✅</div>
+            <h2 style="margin:0; color:var(--green);">EOD Depletion Complete</h2>
+            <p style="color:var(--text-muted); font-size:13px; margin:5px 0 0 0;">${deductedCount} stock lines updated · ${logLines.length} recipes matched</p>
+        </div>
+
+        <h4 style="color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px; margin-top:20px;">Recipes Depleted</h4>
+        <div style="max-height:220px; overflow-y:auto; font-size:13px; background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px;">
+            ${logLines.map(l => `<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--border);">
+                <span><strong>${l.recipeName}</strong>${l.rawSkipped > 0 ? ` <span style="color:var(--orange); font-size:11px;">⚠️ ${l.rawSkipped} unlinked</span>` : ''}</span>
+                <span style="color:var(--green); font-weight:bold;">${l.qtySold} sold</span>
+            </div>`).join('')}
+        </div>
+
+        <h4 style="color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">Stock Changes</h4>
+        <div style="max-height:220px; overflow-y:auto; font-size:12px; background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:20px;">
+            ${stockChanges.map(s => `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px dashed var(--border);">
+                <span style="color:var(--text-muted);">${s.name}</span>
+                <span><strong style="color:var(--red);">${s.before}</strong> → <strong style="color:var(--brand-dark);">${s.after}</strong> <small style="color:var(--text-muted);">${s.unit}</small></span>
+            </div>`).join('')}
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button onclick="window.showView('inventory')" class="btn btn-blue" style="flex:1;">📦 View Inventory</button>
+            <button onclick="window.showView('sales')" class="btn btn-outline" style="flex:1;">← Back to Sales</button>
+        </div>
+    </div>`;
+    document.getElementById('mainContent').innerHTML = html;
 };
 
 // =============================================================================

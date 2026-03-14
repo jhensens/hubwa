@@ -1,6 +1,7 @@
 // --- 1. TAKINGS & KPI DASHBOARD ---
 window.renderSalesView = () => {
     const recentSales = (window.salesData || []).slice(-14).reverse();
+    const recentDepletions = (window.depletionLogs || []).slice(-10).reverse();
     return `
     <div style="max-width: 1000px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -33,6 +34,45 @@ window.renderSalesView = () => {
                     </table>
                 </div>
             </div>
+        </div>
+
+        <div class="card" style="border-top:5px solid var(--purple);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0;">EOD Depletion Log</h3>
+                <span style="font-size:12px; color:var(--text-muted);">${recentDepletions.length} recent runs</span>
+            </div>
+            ${recentDepletions.length === 0
+                ? '<p style="color:var(--text-muted); font-size:13px; margin:0;">No depletions run yet. Use ✨ AI EOD Stock Depletion above after each service.</p>'
+                : recentDepletions.map((d, i) => `
+                    <div style="border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; background:var(--bg-main); cursor:pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                            <div>
+                                <strong style="font-size:14px;">${d.date} <span style="color:var(--text-muted); font-weight:normal; font-size:12px;">at ${d.time}</span></strong>
+                                <span style="margin-left:12px; font-size:12px; color:var(--purple);">${d.totalLines} stock lines · ${(d.itemsSold || []).length} recipes</span>
+                                ${(d.skippedUnmapped || 0) > 0 ? `<span style="margin-left:8px; font-size:11px; color:var(--orange);">⚠️ ${d.skippedUnmapped} unmapped</span>` : ''}
+                            </div>
+                            <span style="color:var(--text-muted); font-size:12px;">▼ Details</span>
+                        </div>
+                        <div style="display:none; padding:15px; font-size:12px;">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                                <div>
+                                    <strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Recipes Sold</strong>
+                                    ${(d.itemsSold || []).map(l => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);">
+                                        <span>${l.recipeName}${l.rawSkipped > 0 ? ` <span style="color:var(--orange);">(${l.rawSkipped} unlinked)</span>` : ''}</span>
+                                        <strong style="color:var(--green);">${l.qtySold}</strong>
+                                    </div>`).join('')}
+                                </div>
+                                <div>
+                                    <strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Stock Deducted</strong>
+                                    ${(d.stockChanges || []).map(s => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);">
+                                        <span style="color:var(--text-muted);">${s.name}</span>
+                                        <span><span style="color:var(--red);">${s.before}</span> → <strong>${s.after}</strong> <small>${s.unit}</small></span>
+                                    </div>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>`).join('')
+            }
         </div>
     </div>`;
 };
