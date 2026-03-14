@@ -121,7 +121,6 @@ window.renderInventoryView = () => {
     const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
     const pillsHtml = ['Active', 'Below PAR', ...cats, 'Archived'].map(c => `<div class="tag-pill ${window.invFilters.filter === c ? 'active' : ''}" onclick="window.invFilters.filter='${c}'; window.showView('inventory')">${c === 'Below PAR' ? '🚨 Below PAR' : c}</div>`).join('');
 
-    // Grouping logic for Accordions
     let grouped = {};
     filtered.forEach(item => {
         let key = window.invFilters.groupBy === 'Zone' ? (item.location || 'Unassigned Zone') : (item.category || 'Unassigned Category');
@@ -197,7 +196,6 @@ window.editInvItem = (id = null) => {
     const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
     const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
     
-    // Backwards compatibility for old 'par' data
     let pWd = e.parWeekday !== undefined ? e.parWeekday : (e.par || 0);
     let pWe = e.parWeekend !== undefined ? e.parWeekend : (e.par || 0);
 
@@ -515,7 +513,16 @@ window.editRecipeForm = (id = null) => {
             <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
         </div>
         
-        <input type="hidden" id="iv-s" value=""><input type="hidden" id="iv-sku" value=""><input type="hidden" id="iv-st" value="0"><input type="hidden" id="iv-parwd" value="0"><input type="hidden" id="iv-parwe" value="0"><input type="hidden" id="iv-loc" value="">
+        <div style="margin-bottom:15px;">
+            <label style="font-size:11px; color:var(--text-muted);">Storage Zone / Location</label>
+            <select id="iv-loc" class="input-box" style="margin:0;">
+                <option value="">Unassigned</option>
+                <optgroup label="BOH (Kitchen)"><option>Walk-in Coolroom</option><option>Pass Under-bench</option><option>Dry Store</option></optgroup>
+                <optgroup label="FOH (Bar)"><option>Main Bar Fridge</option><option>Speed Rail</option><option>Cocktail Station</option></optgroup>
+            </select>
+        </div>
+        
+        <input type="hidden" id="iv-s" value=""><input type="hidden" id="iv-sku" value=""><input type="hidden" id="iv-st" value="0"><input type="hidden" id="iv-parwd" value="0"><input type="hidden" id="iv-parwe" value="0">
         
         <button onclick="window.subInvItem('${id}', false, true)" class="btn btn-green" style="width:100%;">Save to Live Inventory</button>
         `;
@@ -894,7 +901,7 @@ window.executeDepletion = () => {
     window.showView('inventory');
 };
 
-// --- 7. INVOICE RIPPER PRO (WITH MAP-ON-THE-FLY) ---
+// --- 7. INVOICE RIPPER PRO (WITH MAP-ON-THE-FLY & ZONES) ---
 
 window.renderInvoiceView = () => { 
     return `
@@ -1021,10 +1028,12 @@ window.quickAddFromInvoice = (index) => {
     const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
     const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
     
+    let isBev = aiItem.itemName.toLowerCase().includes('wine') || aiItem.itemName.toLowerCase().includes('beer') || aiItem.itemName.toLowerCase().includes('vodka');
+    
     let html = `
     <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Name</label><input type="text" id="iv-n" class="input-box" value="${aiItem.itemName.replace(/"/g, '&quot;')}"></div>
-        <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="Food"><datalist id="cat-list">${catOpts}</datalist></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="${isBev ? 'Beverage' : 'Food'}"><datalist id="cat-list">${catOpts}</datalist></div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px; background:var(--bg-main); padding:10px; border-radius:6px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Buy Price ($)</label><input type="number" step="0.01" id="iv-p" class="input-box" value="${newPrice}"></div>
@@ -1034,6 +1043,15 @@ window.quickAddFromInvoice = (index) => {
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
         <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-units inside)</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="1"></div>
         <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
+    </div>
+    
+    <div style="margin-bottom:15px;">
+        <label style="font-size:11px; color:var(--text-muted);">Storage Zone / Location</label>
+        <select id="iv-loc" class="input-box" style="margin:0;">
+            <option value="">Unassigned</option>
+            <optgroup label="BOH (Kitchen)"><option ${!isBev ? 'selected' : ''}>Walk-in Coolroom</option><option>Pass Under-bench</option><option>Dry Store</option></optgroup>
+            <optgroup label="FOH (Bar)"><option ${isBev ? 'selected' : ''}>Main Bar Fridge</option><option>Speed Rail</option><option>Cocktail Station</option></optgroup>
+        </select>
     </div>
     
     <button onclick="window.saveNewInvoiceItem('${id}', ${index})" class="btn btn-green" style="width:100%; font-size:15px;">Save & Add Stock (+${aiItem.quantity})</button>
@@ -1047,7 +1065,7 @@ window.saveNewInvoiceItem = (id, index) => {
     
     let obj = {
         id: id, name: document.getElementById('iv-n').value, category: document.getElementById('iv-cat').value, sku: aiItem.sku || '', supplier: supplierName,
-        price: parseFloat(document.getElementById('iv-p').value) || 0, location: '', gstFree: false,
+        price: parseFloat(document.getElementById('iv-p').value) || 0, location: document.getElementById('iv-loc').value, gstFree: false,
         stock: Number(aiItem.quantity) || 0, parWeekday: 0, parWeekend: 0,
         yield: parseFloat(document.getElementById('iv-yield').value) || 1, useUnit: document.getElementById('iv-useUnit').value, buyUnit: document.getElementById('iv-buyUnit').value,
         archived: false, history: [{ date: window.pendingInvoiceData.date, price: parseFloat(document.getElementById('iv-p').value) || 0, supplier: supplierName, qty: aiItem.quantity }]
