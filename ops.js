@@ -81,7 +81,24 @@ window.delSupplier = (i) => { if(confirm("Delete Supplier?")) { window.suppliers
 
 // --- 2. LIVE INVENTORY (COMMERCIAL OVERHAUL) ---
 window.invFilters = window.invFilters || { search: '', filter: 'Active' };
-
+// --- DANGER ZONE: WIPE ALL STOCK ---
+window.resetAllStock = () => {
+    let pin = localStorage.getItem('venuePin');
+    if (pin) {
+        let attempt = prompt("⚠️ DANGER: Enter Manager PIN to wipe ALL stock levels to 0.");
+        if (attempt !== pin) return window.showToast("Incorrect PIN.", "error");
+    } else {
+        if(!confirm("⚠️ DANGER: Wipe all stock levels to 0? (No Master PIN is currently set!)")) return;
+    }
+    
+    if(!confirm("Are you absolutely sure? This will keep all your items, prices, and history, but reset current stock to ZERO. This cannot be undone.")) return;
+    
+    let wipeCount = 0;
+    (window.inventoryItems || []).forEach(i => { i.stock = 0; wipeCount++; });
+    window.saveToDisk();
+    window.showView('inventory');
+    window.showToast(`Success: ${wipeCount} items reset to 0 stock.`, "error");
+};
 window.renderInventoryView = () => {
     let filtered = (window.inventoryItems || []).filter(item => {
         if (window.invFilters.filter === 'Active' && item.archived) return false;
