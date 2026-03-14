@@ -459,152 +459,279 @@ window.viewPriceTrend = (id) => {
 };
 
 // =============================================================================
-// 4. RECIPE ENGINE (YIELD-FIRST BUILDER + NESTED BATCHES + AI IMPORT)
+// 4. RECIPE ENGINE — PHASE 2
+// Bulk HTML importer, photo/video, print, scale, station tags, status,
+// Margin Health view, 67% GP threshold
 // =============================================================================
 
-window.recFilters = window.recFilters || { search: '', filter: 'Menu' };
+const GP_TARGET = 67;
+
+window.recFilters = window.recFilters || { search: '', filter: 'All', station: 'All', status: 'Active' };
 window.tempIngs = [];
 window.tempRecipeId = null;
 
+window._courseToType = (course) => {
+    if (!course) return 'Menu';
+    const c = course.toLowerCase();
+    if (c.includes('prep') || c.includes('batch')) return 'Batch';
+    return 'Menu';
+};
+window._courseToStation = (course) => {
+    if (!course) return 'Kitchen';
+    const c = course.toLowerCase();
+    if (c.includes('cocktail') || c.includes('mocktail') || c.includes('bar') || c.includes('batched')) return 'Bar';
+    if (c.includes('prep') || c.includes('preparation')) return 'Prep';
+    return 'Kitchen';
+};
+
 window.renderRecipeView = () => {
+    const stationColor = { 'Kitchen': 'var(--orange)', 'Bar': 'var(--blue)', 'Prep': 'var(--purple)' };
     let filtered = (window.recipes || []).filter(r => {
+        if (window.recFilters.status !== 'All' && (r.status || 'Active') !== window.recFilters.status) return false;
         if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
         if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
+        if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
         if (window.recFilters.search) {
             const s = window.recFilters.search.toLowerCase();
             return r.name.toLowerCase().includes(s) || (r.posAlias && r.posAlias.toLowerCase().includes(s));
         }
         return true;
     });
-
-    const pillsHtml = ['Menu', 'Batch'].map(c =>
-        `<div class="tag-pill ${window.recFilters.filter === c ? 'active' : ''}" onclick="window.recFilters.filter='${c}'; window.showView('recipes')">${c} Recipes</div>`
-    ).join('');
-
+    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView('recipes')">${c}</div>`).join('');
+    const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView('recipes')">${s}</div>`).join('');
+    const statusPills = ['Active',"86'd",'Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView('recipes')">${s}</div>`).join('');
     return `
-    <div style="max-width: 1000px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h2 style="margin:0;">Recipe Engine</h2>
-            <div>
-                <button onclick="window.openAiRecipeImport()" class="btn btn-purple" style="margin-right:10px;">✨ AI Import</button>
+    <div style="max-width:1200px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+            <h2 style="margin:0;">Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window.showView('margins')" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Margin Health</button>
+                <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk HTML Import</button>
+                <button onclick="window.openAiRecipeImport()" class="btn btn-outline" style="font-size:12px;">✨ AI Import</button>
                 <button onclick="window.editRecipeForm()" class="btn btn-blue">+ New Recipe</button>
             </div>
         </div>
-        <input type="text" class="search-bar" placeholder="🔍 Search recipes or POS names..." value="${window.recFilters.search}" oninput="window.recFilters.search=this.value; window.showView('recipes')" autofocus>
-        <div style="margin-bottom: 20px;">${pillsHtml}</div>
-        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px;">
-            ${filtered.length === 0 ? '<p style="color:var(--text-muted);">No recipes found.</p>' : filtered.map(r => `
-                <div class="card" style="border-top:5px solid ${r.type === 'Menu' ? 'var(--brand-dark)' : 'var(--purple)'}; cursor:pointer; transition:transform 0.2s;" onclick="window.editRecipeForm('${r.id}')" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-                    <div style="display:flex; justify-content:space-between;">
-                        <div><h4 style="margin:0;">${r.name}</h4>${r.type === 'Menu' && r.posAlias ? `<small style="color:var(--blue); font-size:11px; font-weight:bold;">[POS: ${r.posAlias}]</small>` : ''}</div>
+        <input type="text" class="search-bar" placeholder="🔍 Search recipes or POS alias..." value="${window.recFilters.search}" oninput="window.recFilters.search=this.value;window.showView('recipes')">
+        <div style="display:flex;gap:20px;margin-bottom:15px;flex-wrap:wrap;">
+            <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Type</small><div style="margin-top:5px;">${typePills}</div></div>
+            <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Station</small><div style="margin-top:5px;">${stationPills}</div></div>
+            <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:15px;">
+            ${filtered.length===0?'<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);grid-column:1/-1;">No recipes found.</div>':filtered.map(r=>{
+                const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
+                const station=r.station||'Kitchen';
+                const status=r.status||'Active';
+                const statusColor=status==='Active'?'var(--green)':status==="86'd"?'var(--red)':'var(--orange)';
+                return `<div class="card" style="border-top:4px solid ${stationColor[station]||'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:15px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    ${r.photo?`<img src="${r.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">`:''}
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                        <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${r.name}</h4>
+                        <span style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};padding:2px 5px;border-radius:8px;white-space:nowrap;">${status}</span>
                     </div>
-                    <div style="font-size:13px; margin:10px 0; color:var(--text-muted);">📋 ${(r.ingredients||[]).length} Ingredients linked</div>
-                    <div style="display:flex; justify-content:space-between; background:var(--bg-main); padding:10px; border-radius:6px; font-size:13px; border:1px solid var(--border);">
-                        <div>Cost: <strong style="color:var(--brand-accent);">$${Number(r.cost||0).toFixed(2)}</strong><br>${r.type === 'Menu' ? `Sell: $${Number(r.price||0).toFixed(2)}` : `Yield: <strong>${r.yieldQty} ${r.yieldUnit}</strong>`}</div>
-                        ${r.type === 'Menu' ? `<div style="text-align:right; font-size:18px; color:${r.gp >= 70 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${r.gp}% GP</div>` : ''}
+                    <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
+                        <span style="font-size:11px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:2px 7px;border-radius:8px;">${station}</span>
+                        <span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span>
                     </div>
-                </div>`).join('')}
+                    <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:8px 10px;border-radius:6px;font-size:12px;border:1px solid var(--border);">
+                        <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost||0).toFixed(2)}</strong><br>${r.type==='Menu'?`Sell: $${Number(r.price||0).toFixed(2)}`:`Yield: ${r.yieldQty} ${r.yieldUnit}`}</div>
+                        ${r.type==='Menu'&&r.price>0?`<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp||0}%</div>`:''}
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients||[]).filter(i=>i.type==='inv'||i.type==='batch').length} linked · ${(r.ingredients||[]).filter(i=>i.type==='raw').length} raw</div>
+                </div>`;
+            }).join('')}
         </div>
     </div>`;
 };
 
-window.editRecipeForm = (id = null) => {
-    let r = id ? window.recipes.find(x => x.id === id) : {
-        id: window.generateId('rec'), name:'', posAlias:'', type: window.recFilters.filter,
-        price:0, yieldQty:1, yieldUnit:'Portion', method:'', ingredients:[], allergens:[]
-    };
-    if (!window.tempRecipeId || window.tempRecipeId !== id) {
-        window.tempIngs = JSON.parse(JSON.stringify(r.ingredients || []));
-        window.tempRecipeId = id || 'new';
-    }
+window.viewRecipe = (id) => {
+    const r = window.recipes.find(x => x.id === id);
+    if (!r) return;
+    const stationColor = {'Kitchen':'var(--orange)','Bar':'var(--blue)','Prep':'var(--purple)'};
+    const station = r.station||'Kitchen';
+    const gpColor = r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
+    let ingListHtml = (r.ingredients||[]).map(ing => {
+        if (ing.type==='raw') return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text-muted);">• ${ing.name}</div>`;
+        const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
+        const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
+        const label = inv?`${ing.qty} ${inv.useUnit} ${inv.name}`:batch?`${ing.qty} ${batch.yieldUnit} ${batch.name}`:`${ing.name}`;
+        const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):null;
+        return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:14px;"><span>• ${label}</span>${cost?`<span style="color:var(--brand-accent);font-size:12px;">$${cost}</span>`:''}</div>`;
+    }).join('');
+    document.getElementById('mainContent').innerHTML = `
+    <div style="max-width:900px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+            <button onclick="window.showView('recipes')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>
+                <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
+            </div>
+        </div>
+        <div class="card" style="border-top:5px solid ${stationColor[station]};padding:30px;">
+            ${r.photo?`<img src="${r.photo}" style="width:100%;max-height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px;">`:''}
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:15px;margin-bottom:20px;">
+                <div>
+                    <h2 style="margin:0 0 8px 0;">${r.name}</h2>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <span style="font-size:12px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:3px 10px;border-radius:12px;">${station}</span>
+                        <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.type}</span>
+                        <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.status||'Active'}</span>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    ${r.type==='Menu'&&r.price>0?`<div style="font-size:36px;font-weight:bold;color:${gpColor};line-height:1;">${r.gp||0}% GP</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)} · Sell $${Number(r.price||0).toFixed(2)}</div>`:''}
+                    ${r.type==='Batch'?`<div style="font-size:18px;font-weight:bold;color:var(--purple);">Yields ${r.yieldQty} ${r.yieldUnit}</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)}</div>`:''}
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:30px;">
+                <div>
+                    <h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
+                    ${ingListHtml||'<p style="color:var(--text-muted);font-size:13px;">No ingredients yet.</p>'}
+                </div>
+                <div>
+                    <h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Method</h3>
+                    <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method||'<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
+                </div>
+            </div>
+            ${r.videoUrl?`<div style="margin-top:25px;border-top:1px solid var(--border);padding-top:20px;"><h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">📹 Training Video</h3><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`:''}
+            ${r.allergens&&r.allergens.length>0?`<div style="margin-top:15px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);padding:12px 15px;border-radius:8px;"><strong style="font-size:12px;color:var(--red);">⚠️ Allergens:</strong> <span style="font-size:13px;color:var(--red);">${r.allergens.join(', ')}</span></div>`:''}
+        </div>
+    </div>`;
+};
 
-    let invOpts = (window.inventoryItems||[]).filter(i => !i.archived).map(inv =>
-        `<option value="inv_${inv.id}">${inv.name} (per ${inv.useUnit || 'Unit'})</option>`
-    ).join('');
-    let batchOpts = (window.recipes||[]).filter(b => b.type === 'Batch' && b.id !== id).map(b =>
-        `<option value="batch_${b.id}">[Batch] ${b.name} (per ${b.yieldUnit})</option>`
-    ).join('');
+window.printRecipe = (id) => {
+    const r = window.recipes.find(x => x.id === id);
+    if (!r) return;
+    let ingText = (r.ingredients||[]).map(ing => {
+        if (ing.type==='raw') return `<li>${ing.name}</li>`;
+        const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
+        const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
+        if (inv) return `<li>${ing.qty} ${inv.useUnit} — ${inv.name}</li>`;
+        if (batch) return `<li>${ing.qty} ${batch.yieldUnit} — ${batch.name}</li>`;
+        return `<li>${ing.name}</li>`;
+    }).join('');
+    const win = window.open('','_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>${r.name}</title><style>
+        body{font-family:sans-serif;font-size:13px;color:#222;max-width:700px;margin:30px auto;line-height:1.6;}
+        h1{font-size:22px;border-bottom:3px solid #333;padding-bottom:8px;margin-bottom:5px;}
+        h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#666;margin:20px 0 8px 0;}
+        .meta{font-size:12px;color:#888;margin-bottom:15px;}
+        .gp{font-size:26px;font-weight:bold;color:${r.gp>=GP_TARGET?'#16a34a':'#dc2626'};float:right;margin-top:-38px;}
+        ul{margin:0;padding-left:20px;}li{margin-bottom:4px;}
+        .method{white-space:pre-wrap;background:#f9f9f9;padding:15px;border-radius:6px;}
+        .allergens{margin-top:15px;padding:10px;background:#fff3f3;border:1px solid #fca5a5;border-radius:6px;font-size:12px;}
+        img{max-width:100%;border-radius:6px;margin-bottom:15px;max-height:200px;object-fit:cover;width:100%;}
+        @media print{body{margin:15px;}}
+    </style></head><body>
+    ${r.photo?`<img src="${r.photo}">`:''}
+    <h1>${r.name}</h1>
+    ${r.type==='Menu'&&r.price>0?`<div class="gp">${r.gp||0}% GP</div>`:''}
+    <div class="meta">${r.station||'Kitchen'} · ${r.type} · ${r.status||'Active'}${r.type==='Batch'?` · Yields ${r.yieldQty} ${r.yieldUnit}`:''}</div>
+    <h2>Ingredients</h2><ul>${ingText||'<li>No ingredients listed</li>'}</ul>
+    <h2>Method</h2><div class="method">${r.method||'No method written.'}</div>
+    ${r.allergens&&r.allergens.length>0?`<div class="allergens"><strong>⚠️ Allergens:</strong> ${r.allergens.join(', ')}</div>`:''}
+    <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">Bar Wa Izakaya · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
+    <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+    win.document.close();
+};
+
+window.editRecipeForm = (id = null) => {
+    const cleanId = id ? String(id).trim() : null;
+    let r = cleanId ? window.recipes.find(x => x.id === cleanId) : null;
+    if (!r) {
+        r = { id: window.generateId('rec'), name:'', posAlias:'', type:'Menu', station:'Kitchen', status:'Active',
+              price:0, yieldQty:1, yieldUnit:'Portion', method:'', ingredients:[], allergens:[], cost:0, gp:0, photo:'', videoUrl:'' };
+    }
+    if (!window.tempRecipeId || window.tempRecipeId !== cleanId) {
+        window.tempIngs = JSON.parse(JSON.stringify(r.ingredients||[]));
+        window.tempRecipeId = cleanId||'new';
+    }
+    let invOpts = (window.inventoryItems||[]).filter(i=>!i.archived).map(inv=>`<option value="inv_${inv.id}">${inv.name} (per ${inv.useUnit||'Unit'})</option>`).join('');
+    let batchOpts = (window.recipes||[]).filter(b=>b.type==='Batch'&&b.id!==cleanId).map(b=>`<option value="batch_${b.id}">[Batch] ${b.name} (per ${b.yieldUnit})</option>`).join('');
 
     const renderBuilder = () => {
         let totalCost = 0;
-        let ingHtml = window.tempIngs.map((ing, tIdx) => {
-            let itemCost = 0; let displayUnit = ing.unit; let isErr = false;
-            if (ing.type === 'inv') {
-                let inv = window.inventoryItems.find(i => i.id === ing.ref);
-                if (inv) { itemCost = ing.qty * ((inv.price||0) / (inv.yield||1)); displayUnit = inv.useUnit; } else { isErr = true; }
-            }
-            if (ing.type === 'batch') {
-                let b = window.recipes.find(x => x.id === ing.ref);
-                if (b) { itemCost = ing.qty * ((b.cost||0) / (b.yieldQty||1)); displayUnit = b.yieldUnit; } else { isErr = true; }
-            }
-            totalCost += itemCost;
-            return `<div style="display:flex; justify-content:space-between; font-size:13px; padding:12px 0; border-bottom:1px solid var(--border); align-items:center;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx}, this.value)" style="width:80px; margin:0; padding:6px; border-color:var(--blue);">
-                    <span><span style="color:var(--text-muted); font-size:11px; margin-right:5px;">${displayUnit}</span><strong style="color:${isErr ? 'var(--red)' : 'var(--text-main)'};">${ing.name} ${isErr ? '(Missing!)' : ''}</strong></span>
+        let ingHtml = window.tempIngs.map((ing,tIdx) => {
+            let itemCost=0,displayUnit=ing.unit||'',isErr=false;
+            if (ing.type==='inv'){const inv=window.inventoryItems.find(i=>i.id===ing.ref);if(inv){itemCost=ing.qty*((inv.price||0)/(inv.yield||1));displayUnit=inv.useUnit;}else{isErr=true;}}
+            else if (ing.type==='batch'){const b=window.recipes.find(x=>x.id===ing.ref);if(b){itemCost=ing.qty*((b.cost||0)/(b.yieldQty||1));displayUnit=b.yieldUnit;}else{isErr=true;}}
+            totalCost+=itemCost;
+            const isRaw=ing.type==='raw';
+            return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;gap:6px;">
+                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                    ${isRaw?`<span style="font-size:10px;color:var(--orange);border:1px solid var(--orange);padding:1px 5px;border-radius:8px;flex-shrink:0;">raw</span>`:`<input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx},this.value)" style="width:65px;margin:0;padding:4px;border-color:var(--blue);flex-shrink:0;">`}
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${displayUnit} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${ing.name}${isErr?' ⚠️':''}</strong></span>
                 </div>
-                <div><span style="margin-right:15px; font-weight:bold; color:var(--brand-accent);">$${itemCost.toFixed(2)}</span> <button onclick="window.rmIng(${tIdx})" style="color:var(--red); border:none; background:none; cursor:pointer; font-weight:bold; font-size:18px;">&times;</button></div>
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    ${!isRaw&&itemCost>0?`<span style="color:var(--brand-accent);font-size:11px;">$${itemCost.toFixed(3)}</span>`:''}
+                    <button onclick="window.rmIng(${tIdx})" style="color:var(--red);border:none;background:none;cursor:pointer;font-size:15px;padding:0;">&times;</button>
+                </div>
             </div>`;
         }).join('');
-
-        let isBatch = r.type === 'Batch';
-        let gp = r.price > 0 ? ((r.price - totalCost) / r.price * 100).toFixed(1) : 0;
-
+        const isBatch=r.type==='Batch';
+        const gp=r.price>0?((r.price-totalCost)/r.price*100).toFixed(1):0;
+        const gpColor=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)';
         document.getElementById('mainContent').innerHTML = `
-        <div class="card" style="max-width:800px; margin:auto; padding-bottom:80px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2 style="margin-top:0;">${id ? 'Edit' : 'New'} Recipe</h2>
-                ${id ? `<button onclick="window.delRecipe('${r.id}')" class="btn btn-red" style="padding:5px 10px; font-size:11px;">🗑️ Delete Recipe</button>` : ''}
+        <div style="max-width:880px;margin:auto;padding-bottom:80px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                <button onclick="window.tempRecipeId=null;window.showView('recipes')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+                <div style="display:flex;gap:8px;">
+                    ${cleanId?`<button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>`:''}
+                    ${cleanId?`<button onclick="window.delRecipe('${r.id}')" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>`:''}
+                </div>
             </div>
-            <div style="display:flex; gap:10px; margin-bottom:15px; align-items:flex-end;">
-                <div style="flex:2;"><label style="font-size:11px; color:var(--text-muted);">Hub Display Name</label><input type="text" id="r-n" class="input-box" value="${r.name}" style="margin:0;"></div>
-                ${!isBatch ? `<div style="flex:2;"><label style="font-size:11px; color:var(--blue); font-weight:bold;">Lightspeed POS Name (Alias)</label><input type="text" id="r-pos" class="input-box" value="${r.posAlias || ''}" placeholder="Exact POS name..." style="margin:0; border-color:var(--blue);"></div>` : ''}
-                <div style="flex:1;"><label style="font-size:11px; color:var(--text-muted);">Type</label><select id="r-type" class="input-box" style="margin:0;" onchange="window.refreshRB()"><option ${r.type==='Menu'?'selected':''}>Menu</option><option ${r.type==='Batch'?'selected':''}>Batch</option></select></div>
-            </div>
-            <div style="background:var(--bg-main); padding:20px; border-radius:8px; margin-bottom:15px; border: 1px solid var(--border);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                    <h3 style="margin:0; color:var(--brand-dark);">Ingredients</h3>
-                    <div>
-                        <button onclick="window.scaleRecipe()" class="btn btn-outline" style="padding:6px 12px; font-size:11px; margin-right:5px;">⚖️ Scale Multiplier</button>
-                        <button onclick="window.openQuickAddIngModal()" class="btn btn-blue" style="padding:6px 12px; font-size:11px;">+ Quick Add New Inventory</button>
+            <div class="card" style="padding:20px;margin-bottom:15px;">
+                <h3 style="margin:0 0 12px 0;">${cleanId?'Edit':'New'} Recipe</h3>
+                <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <div><label style="font-size:11px;color:var(--text-muted);">Name</label><input type="text" id="r-n" class="input-box" value="${r.name}" style="margin:0;"></div>
+                    <div><label style="font-size:11px;color:var(--text-muted);">Type</label><select id="r-type" class="input-box" style="margin:0;" onchange="window.refreshRB()"><option ${r.type==='Menu'?'selected':''}>Menu</option><option ${r.type==='Batch'?'selected':''}>Batch</option></select></div>
+                    <div><label style="font-size:11px;color:var(--text-muted);">Station</label><select id="r-station" class="input-box" style="margin:0;"><option ${(r.station||'Kitchen')==='Kitchen'?'selected':''}>Kitchen</option><option ${r.station==='Bar'?'selected':''}>Bar</option><option ${r.station==='Prep'?'selected':''}>Prep</option></select></div>
+                    <div><label style="font-size:11px;color:var(--text-muted);">Status</label><select id="r-status" class="input-box" style="margin:0;"><option ${(r.status||'Active')==='Active'?'selected':''}>Active</option><option ${r.status==="86'd"?'selected':''}>86'd</option><option ${r.status==='Development'?'selected':''}>Development</option></select></div>
+                </div>
+                <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
+                    ${!isBatch?`<div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${r.posAlias||''}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div>`:'<div></div>'}
+                    <div style="display:flex;gap:8px;">
+                        ${isBatch?`<div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Yield Qty</label><input type="number" step="0.1" id="r-yq" class="input-box" value="${r.yieldQty}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div><div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Unit</label><input type="text" id="r-yu" class="input-box" value="${r.yieldUnit}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div>`:`<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);">Sell Price ($)</label><input type="number" step="0.01" id="r-p" class="input-box" value="${r.price}" oninput="window.refreshRB()" style="margin:0;"></div>`}
                     </div>
                 </div>
-                ${ingHtml || '<p style="font-size:13px; color:var(--text-muted); text-align:center; padding:10px;">No ingredients linked yet.</p>'}
-                <div style="display:flex; gap:10px; margin-top:20px;">
-                    <select id="add-sel" class="input-box" style="flex:2; margin:0;" onchange="window.updateUnitHint()">
-                        <option value="">Search & Select Ingredient...</option>
-                        <optgroup label="Live Inventory">${invOpts}</optgroup>
-                        <optgroup label="Prep Batches">${batchOpts}</optgroup>
-                    </select>
-                    <input type="number" step="0.001" id="add-qty" class="input-box" placeholder="Qty" style="width:100px; margin:0; border-color:var(--blue);">
-                    <button onclick="window.addIng()" class="btn btn-green" style="width:80px;">Add</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
+                <div class="card" style="padding:15px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <h4 style="margin:0;font-size:14px;">Ingredients</h4>
+                        <div style="display:flex;gap:5px;">
+                            <button onclick="window.scaleRecipe()" class="btn btn-outline" style="padding:3px 8px;font-size:11px;">⚖️ Scale</button>
+                            <button onclick="window.openQuickAddIngModal()" class="btn btn-blue" style="padding:3px 8px;font-size:11px;">+ Quick Add</button>
+                        </div>
+                    </div>
+                    <div style="max-height:320px;overflow-y:auto;">${ingHtml||'<p style="font-size:13px;color:var(--text-muted);text-align:center;padding:10px 0;">No ingredients yet.</p>'}</div>
+                    <div style="margin-top:10px;display:flex;gap:5px;">
+                        <select id="add-sel" class="input-box" style="flex:1;margin:0;font-size:12px;" onchange="window.updateUnitHint()"><option value="">Select ingredient...</option><optgroup label="Live Inventory">${invOpts}</optgroup><optgroup label="Prep Batches">${batchOpts}</optgroup></select>
+                        <input type="number" step="0.001" id="add-qty" class="input-box" placeholder="Qty" style="width:65px;margin:0;border-color:var(--blue);">
+                        <button onclick="window.addIng()" class="btn btn-green" style="padding:8px 10px;">Add</button>
+                    </div>
+                    <div id="unit-hint" style="font-size:11px;font-weight:bold;color:var(--blue);margin-top:5px;text-align:right;"></div>
                 </div>
-                <div id="unit-hint" style="font-size:12px; font-weight:bold; color:var(--blue); margin-top:8px; text-align:right;">Select an ingredient to see required Use Unit.</div>
+                <div style="display:flex;flex-direction:column;gap:15px;">
+                    <div class="card" style="padding:15px;text-align:center;border-top:4px solid ${gpColor};">
+                        ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:40px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
+                    </div>
+                    <div class="card" style="padding:15px;">
+                        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">📹 Training Video URL</label>
+                        <input type="text" id="r-video" class="input-box" value="${r.videoUrl||''}" placeholder="YouTube or Vimeo URL..." style="margin:0 0 10px 0;">
+                        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">📸 Recipe Photo</label>
+                        ${r.photo?`<img src="${r.photo}" style="width:100%;height:70px;object-fit:cover;border-radius:5px;margin-bottom:6px;">`:''}
+                        <input type="file" id="r-photo-file" accept="image/*" style="font-size:11px;color:var(--text-muted);" onchange="window.uploadRecipePhoto('${r.id}',this)">
+                    </div>
+                </div>
             </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:15px; padding:15px; border-radius:8px; background:var(--card-bg); border:1px dashed var(--border);">
-                ${isBatch ? `
-                    <div style="display:flex; gap:10px;">
-                        <div style="flex:1;"><label style="font-size:11px; color:var(--brand-accent); font-weight:bold;">Batch Yield Qty</label><input type="number" step="0.1" id="r-yq" class="input-box" value="${r.yieldQty}" oninput="window.refreshRB()" style="border-color:var(--brand-accent);"></div>
-                        <div style="flex:1;"><label style="font-size:11px; color:var(--brand-accent); font-weight:bold;">Yield Unit (e.g. L, kg)</label><input type="text" id="r-yu" class="input-box" value="${r.yieldUnit}" oninput="window.refreshRB()" style="border-color:var(--brand-accent);"></div>
-                    </div>
-                    <div style="text-align:right; display:flex; flex-direction:column; justify-content:center;">
-                        <div style="font-size:12px; color:var(--text-muted);">Total Cost</div>
-                        <div style="font-size:24px; font-weight:bold; color:var(--brand-dark);">$${totalCost.toFixed(2)}</div>
-                        <div style="font-size:12px; color:var(--purple);">($${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit})</div>
-                    </div>
-                ` : `
-                    <div><label style="font-size:11px; color:var(--text-muted);">Sell Price ($)</label><input type="number" step="0.01" id="r-p" class="input-box" value="${r.price}" oninput="window.refreshRB()"></div>
-                    <div style="text-align:right; display:flex; flex-direction:column; justify-content:center;">
-                        <div style="font-size:12px; color:var(--text-muted);">Cost: $${totalCost.toFixed(2)}</div>
-                        <div style="font-size:28px; font-weight:bold; color:${gp >= 70 ? 'var(--green)' : 'var(--red)'};">${gp}% GP</div>
-                    </div>
-                `}
+            <div class="card" style="padding:15px;margin-bottom:15px;">
+                <label style="font-size:11px;color:var(--text-muted);">Method / Prep Notes</label>
+                <textarea id="r-m" class="input-box" placeholder="Method, plating notes, chef tips..." style="height:140px;margin-top:5px;">${r.method||''}</textarea>
             </div>
-            <label style="font-size:11px; color:var(--text-muted);">Prep Method & Notes</label>
-            <textarea id="r-m" class="input-box" placeholder="Method details..." style="height:120px;">${r.method || ''}</textarea>
             <div class="sticky-footer">
-                <button onclick="window.subRecipe('${r.id}', ${totalCost})" class="btn btn-green" style="flex:2;">Save Recipe & Costing</button>
-                <button onclick="window.tempRecipeId = null; window.showView('recipes')" class="btn btn-outline" style="flex:1;">Cancel</button>
+                <button onclick="window.subRecipe('${r.id}',${totalCost})" class="btn btn-green" style="flex:2;font-size:15px;">💾 Save Recipe</button>
+                <button onclick="window.tempRecipeId=null;window.showView('recipes')" class="btn btn-outline" style="flex:1;">Cancel</button>
             </div>
         </div>`;
         window.updateUnitHint();
@@ -612,127 +739,240 @@ window.editRecipeForm = (id = null) => {
 
     window.refreshRB = () => {
         r.name = document.getElementById('r-n').value;
-        if (document.getElementById('r-pos')) r.posAlias = document.getElementById('r-pos').value;
         r.type = document.getElementById('r-type').value;
-        r.method = document.getElementById('r-m').value;
-        if (document.getElementById('r-p')) r.price = parseFloat(document.getElementById('r-p').value) || 0;
-        if (document.getElementById('r-yq')) { r.yieldQty = parseFloat(document.getElementById('r-yq').value) || 1; r.yieldUnit = document.getElementById('r-yu').value; }
+        if (document.getElementById('r-m')) r.method = document.getElementById('r-m').value;
+        if (document.getElementById('r-pos')) r.posAlias = document.getElementById('r-pos').value;
+        if (document.getElementById('r-p')) r.price = parseFloat(document.getElementById('r-p').value)||0;
+        if (document.getElementById('r-yq')) { r.yieldQty=parseFloat(document.getElementById('r-yq').value)||1; r.yieldUnit=document.getElementById('r-yu').value; }
         renderBuilder();
     };
-
     window.updateUnitHint = () => {
-        const sel = document.getElementById('add-sel');
-        const hint = document.getElementById('unit-hint');
-        if (!sel || !hint || !sel.value) { if (hint) hint.innerText = "Select an ingredient..."; return; }
-        const parts = sel.value.split('_');
-        if (parts[0] === 'inv') {
-            let inv = window.inventoryItems.find(i => i.id === sel.value.replace('inv_', ''));
-            if (inv) hint.innerHTML = `⚠️ QUANTITY IN: <span style="background:var(--blue); color:white; padding:2px 6px; border-radius:4px; font-size:14px;">${inv.useUnit}</span> <small style="color:var(--text-muted);">(Buy Unit: ${inv.buyUnit} yields ${inv.yield} ${inv.useUnit})</small>`;
-        } else {
-            let b = window.recipes.find(x => x.id === sel.value.replace('batch_', ''));
-            if (b) hint.innerHTML = `⚠️ QUANTITY IN: <span style="background:var(--purple); color:white; padding:2px 6px; border-radius:4px; font-size:14px;">${b.yieldUnit}</span>`;
-        }
+        const sel=document.getElementById('add-sel'); const hint=document.getElementById('unit-hint');
+        if (!sel||!hint||!sel.value){if(hint)hint.innerText='';return;}
+        const parts=sel.value.split('_');
+        if (parts[0]==='inv'){const inv=window.inventoryItems.find(i=>i.id===sel.value.replace('inv_',''));if(inv)hint.innerHTML=`Enter qty in: <span style="background:var(--blue);color:white;padding:1px 6px;border-radius:4px;">${inv.useUnit}</span>`;}
+        else {const b=window.recipes.find(x=>x.id===sel.value.replace('batch_',''));if(b)hint.innerHTML=`Enter qty in: <span style="background:var(--purple);color:white;padding:1px 6px;border-radius:4px;">${b.yieldUnit}</span>`;}
     };
-
     window.scaleRecipe = () => {
-        let mult = parseFloat(prompt("Enter scale multiplier (e.g. 2 to double, 0.5 to halve):", "2"));
-        if (!mult || isNaN(mult)) return;
-        window.tempIngs.forEach(ing => ing.qty = parseFloat((ing.qty * mult).toFixed(3)));
-        if (document.getElementById('r-yq')) { document.getElementById('r-yq').value = (parseFloat(document.getElementById('r-yq').value) * mult).toFixed(2); }
-        window.refreshRB();
-        window.showToast(`Recipe scaled by ${mult}x`);
+        const mult=parseFloat(prompt("Scale multiplier (e.g. 2=double, 0.5=halve):","2"));
+        if (!mult||isNaN(mult)) return;
+        window.tempIngs.forEach(ing=>{if(ing.qty)ing.qty=parseFloat((ing.qty*mult).toFixed(3));});
+        if (document.getElementById('r-yq')) document.getElementById('r-yq').value=(parseFloat(document.getElementById('r-yq').value)*mult).toFixed(2);
+        window.refreshRB(); window.showToast(`Scaled by ${mult}x`);
     };
-
-    window.updateIngQty = (idx, val) => { window.tempIngs[idx].qty = parseFloat(val) || 0; window.refreshRB(); };
-
+    window.updateIngQty = (idx,val) => { window.tempIngs[idx].qty=parseFloat(val)||0; window.refreshRB(); };
+    window.rmIng = (tIdx) => { window.tempIngs.splice(tIdx,1); window.refreshRB(); };
     window.addIng = () => {
-        let qty = parseFloat(document.getElementById('add-qty').value);
-        let selVal = document.getElementById('add-sel').value;
-        if (!qty || !selVal) return window.showToast("Select item and enter quantity.", "error");
-        let parts = selVal.split('_'); let type = parts[0]; let refId = selVal.replace(type + '_', '');
-        if (type === 'inv') {
-            let inv = window.inventoryItems.find(i => i.id === refId);
-            window.tempIngs.push({ type: 'inv', ref: refId, qty: qty, unit: inv.useUnit || 'Unit', name: inv.name });
-        } else {
-            let b = window.recipes.find(x => x.id === refId);
-            window.tempIngs.push({ type: 'batch', ref: refId, qty: qty, unit: b.yieldUnit, name: b.name });
-        }
+        const qty=parseFloat(document.getElementById('add-qty').value); const selVal=document.getElementById('add-sel').value;
+        if (!qty||!selVal) return window.showToast("Select item and enter quantity.","error");
+        const parts=selVal.split('_'); const type=parts[0]; const refId=selVal.replace(type+'_','');
+        if (type==='inv'){const inv=window.inventoryItems.find(i=>i.id===refId);if(!inv)return;window.tempIngs.push({type:'inv',ref:refId,qty,unit:inv.useUnit||'Unit',name:inv.name});}
+        else {const b=window.recipes.find(x=>x.id===refId);if(!b)return;window.tempIngs.push({type:'batch',ref:refId,qty,unit:b.yieldUnit,name:b.name});}
         window.refreshRB();
     };
-
-    window.rmIng = (tIdx) => { window.tempIngs.splice(tIdx, 1); window.refreshRB(); };
-
     window.openQuickAddIngModal = () => {
-        const id = window.generateId('inv');
-        const supplierOpts = (window.suppliers || []).map(s => `<option value="${s.name}">${s.name}</option>`).join('');
-        const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
-        const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
-        let html = `
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
+        const newId=window.generateId('inv');
+        const supplierOpts=(window.suppliers||[]).map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+        const allCats=['Food','Beverage','Packaging','Chemicals','Other',...new Set((window.inventoryItems||[]).map(i=>i.category))];
+        const catOpts=[...new Set(allCats)].map(c=>`<option value="${c}">`).join('');
+        window.openModal("⚡ Quick Add Ingredient",`
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
             <div><label style="font-size:11px;">Name</label><input type="text" id="iv-n" class="input-box" placeholder="e.g. Kombu"></div>
-            <div><label style="font-size:11px;">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="Food"><datalist id="cat-list">${catOpts}</datalist></div>
+            <div><label style="font-size:11px;">Category</label><input type="text" id="iv-cat" list="iq-cats" class="input-box" value="Food"><datalist id="iq-cats">${catOpts}</datalist></div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
             <div><label style="font-size:11px;">Supplier</label><select id="iv-s" class="input-box"><option value="">-- None --</option>${supplierOpts}</select></div>
             <div><label style="font-size:11px;">SKU</label><input type="text" id="iv-sku" class="input-box" placeholder="Optional"></div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px; background:var(--bg-main); padding:10px; border-radius:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;background:var(--bg-main);padding:10px;border-radius:6px;">
             <div><label style="font-size:11px;">Buy Price ($)</label><input type="number" step="0.01" id="iv-p" class="input-box" value="0"></div>
             <div><label style="font-size:11px;">Buy Unit</label><input type="text" id="iv-buyUnit" class="input-box" value="Unit"></div>
             <div style="display:none;"><input type="checkbox" id="iv-gst"></div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
-            <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-units in buy-unit)</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="1"></div>
-            <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;border:1px dashed var(--blue);padding:10px;border-radius:6px;">
+            <div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Yield</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="1"></div>
+            <div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="font-size:11px; color:var(--text-muted);">Storage Zone</label>
-            ${window.buildZoneSelect('', 'iv-loc')}
-        </div>
+        <div style="margin-bottom:15px;"><label style="font-size:11px;">Storage Zone</label>${window.buildZoneSelect('','iv-loc')}</div>
         <input type="hidden" id="iv-st" value="0"><input type="hidden" id="iv-parwd" value="0"><input type="hidden" id="iv-parwe" value="0">
-        <button onclick="window.subInvItem('${id}', false, true)" class="btn btn-green" style="width:100%;">Save to Live Inventory</button>`;
-        window.openModal("⚡ Quick Add Ingredient", html);
+        <button onclick="window.subInvItem('${newId}',false,true)" class="btn btn-green" style="width:100%;">Save to Inventory</button>`);
     };
-
     renderBuilder();
 };
 
+window.uploadRecipePhoto = async (recipeId, input) => {
+    const file = input.files[0]; if (!file) return;
+    if (typeof storage==='undefined') return window.showToast("Firebase Storage not connected.","error");
+    window.showToast("Uploading photo...");
+    try {
+        const ref = storage.ref().child(`recipes/${recipeId}_${Date.now()}`);
+        await ref.put(file); const url = await ref.getDownloadURL();
+        const recipe = window.recipes.find(r=>r.id===recipeId);
+        if (recipe) { recipe.photo=url; window.saveToDisk(); window.showToast("Photo saved!"); window.editRecipeForm(recipeId); }
+    } catch(e) { window.showToast("Photo upload failed: "+e.message,"error"); }
+};
+
 window.subRecipe = (id, totalCost) => {
-    let existingIdx = window.recipes.findIndex(x => x.id === id);
-    let type = document.getElementById('r-type').value;
-    let oldAllergens = existingIdx >= 0 && window.recipes[existingIdx].allergens ? window.recipes[existingIdx].allergens : [];
-    let obj = {
-        id: id, name: document.getElementById('r-n').value,
-        posAlias: type === 'Menu' && document.getElementById('r-pos') ? document.getElementById('r-pos').value : '',
-        type: type, ingredients: window.tempIngs, cost: totalCost,
-        method: document.getElementById('r-m').value, allergens: oldAllergens, archived: false,
-        price: type === 'Menu' ? (parseFloat(document.getElementById('r-p').value) || 0) : 0,
-        yieldQty: type === 'Batch' ? (parseFloat(document.getElementById('r-yq').value) || 1) : 1,
-        yieldUnit: type === 'Batch' ? document.getElementById('r-yu').value : 'Portion',
+    const existingIdx = window.recipes.findIndex(x=>x.id===id);
+    const type = document.getElementById('r-type').value;
+    const oldRecipe = existingIdx>=0 ? window.recipes[existingIdx] : {};
+    const obj = {
+        id, name: document.getElementById('r-n').value,
+        posAlias: type!=='Batch'&&document.getElementById('r-pos')?document.getElementById('r-pos').value:'',
+        type, station: document.getElementById('r-station').value, status: document.getElementById('r-status').value,
+        ingredients: window.tempIngs, cost: totalCost, method: document.getElementById('r-m').value,
+        allergens: oldRecipe.allergens||[], photo: oldRecipe.photo||'',
+        videoUrl: document.getElementById('r-video')?document.getElementById('r-video').value:(oldRecipe.videoUrl||''),
+        archived: false,
+        price: type==='Menu'?(parseFloat(document.getElementById('r-p').value)||0):0,
+        yieldQty: type==='Batch'?(parseFloat(document.getElementById('r-yq').value)||1):1,
+        yieldUnit: type==='Batch'?document.getElementById('r-yu').value:'Portion',
         gp: 0
     };
-    if (type === 'Menu' && obj.price > 0) obj.gp = parseFloat(((obj.price - totalCost) / obj.price * 100).toFixed(1));
-    if (existingIdx >= 0) window.recipes[existingIdx] = obj; else window.recipes.push(obj);
-    window.tempRecipeId = null; window.saveToDisk(); window.showToast("Recipe Costing Saved!"); window.showView('recipes');
+    if (type==='Menu'&&obj.price>0) obj.gp=parseFloat(((obj.price-totalCost)/obj.price*100).toFixed(1));
+    if (existingIdx>=0) window.recipes[existingIdx]=obj; else window.recipes.push(obj);
+    window.tempRecipeId=null; window.saveToDisk(); window.showToast("Recipe saved!"); window.showView('recipes');
 };
 
 window.delRecipe = (id) => {
-    if (confirm("Permanently delete Recipe?")) {
-        window.recipes = window.recipes.filter(x => x.id !== id);
-        window.tempRecipeId = null; window.saveToDisk(); window.showToast("Recipe Deleted"); window.showView('recipes');
+    if (confirm("Permanently delete this recipe?")) {
+        window.recipes=window.recipes.filter(x=>x.id!==id);
+        window.tempRecipeId=null; window.saveToDisk(); window.showToast("Recipe deleted."); window.showView('recipes');
     }
 };
 
+// =============================================================================
+// MARGIN HEALTH VIEW
+// =============================================================================
+window.renderMarginView = () => {
+    const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active');
+    menuRecipes.forEach(recipe => {
+        let cost=0;
+        (recipe.ingredients||[]).forEach(ing=>{
+            if(ing.type==='inv'){const inv=window.inventoryItems.find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
+            else if(ing.type==='batch'){const b=window.recipes.find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
+        });
+        recipe.cost=cost; recipe.gp=recipe.price>0?parseFloat(((recipe.price-cost)/recipe.price*100).toFixed(1)):0;
+    });
+    const sorted=[...menuRecipes].sort((a,b)=>a.gp-b.gp);
+    const below=sorted.filter(r=>r.gp<GP_TARGET);
+    const above=sorted.filter(r=>r.gp>=GP_TARGET);
+    const avgGp=menuRecipes.length>0?(menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length).toFixed(1):0;
+    const stationColor={'Kitchen':'var(--orange)','Bar':'var(--blue)','Prep':'var(--purple)'};
+    const rowHtml=(recipes)=>recipes.map(r=>{
+        const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>=GP_TARGET-5?'var(--orange)':'var(--red)';
+        return `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 15px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${r.name}</strong> <small style="color:${stationColor[r.station||'Kitchen']};font-size:11px;">${r.station||'Kitchen'}</small></td>
+            <td style="padding:12px 15px;font-size:13px;color:var(--brand-accent);">$${Number(r.cost||0).toFixed(2)}</td>
+            <td style="padding:12px 15px;font-size:13px;">$${Number(r.price||0).toFixed(2)}</td>
+            <td style="padding:12px 15px;min-width:140px;"><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;"><div style="width:${Math.min(100,Math.max(0,r.gp))}%;background:${gpColor};height:100%;border-radius:4px;"></div></div><strong style="color:${gpColor};font-size:14px;min-width:38px;">${r.gp}%</strong></div></td>
+            <td style="padding:12px 15px;text-align:right;"><button onclick="window.editRecipeForm('${r.id}')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Edit</button></td>
+        </tr>`;
+    }).join('');
+    return `
+    <div style="max-width:1100px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div><h2 style="margin:0;">Margin Health</h2><small style="color:var(--text-muted);">Target: ${GP_TARGET}% GP · Active menu recipes · Updates live when invoices processed</small></div>
+            <button onclick="window.showView('recipes')" class="btn btn-outline">← Recipes</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">
+            <div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">${menuRecipes.length}</div><div style="font-size:12px;color:var(--text-muted);">Active Menu Recipes</div></div>
+            <div class="card" style="text-align:center;border-top:4px solid ${avgGp>=GP_TARGET?'var(--green)':'var(--red)'};"><div style="font-size:34px;font-weight:bold;color:${avgGp>=GP_TARGET?'var(--green)':'var(--red)'};">${avgGp}%</div><div style="font-size:12px;color:var(--text-muted);">Average GP</div></div>
+            <div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">${below.length}</div><div style="font-size:12px;color:var(--text-muted);">Below ${GP_TARGET}%</div></div>
+            <div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">${above.length}</div><div style="font-size:12px;color:var(--text-muted);">At or Above Target</div></div>
+        </div>
+        ${below.length>0?`<div class="card" style="padding:0;overflow:visible;margin-bottom:20px;border-top:4px solid var(--red);"><div style="padding:15px 20px;background:rgba(239,68,68,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--red);">⚠️ Below ${GP_TARGET}% (${below.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th></th></tr></thead><tbody>${rowHtml(below)}</tbody></table></div></div>`:`<div class="card" style="border-top:4px solid var(--green);text-align:center;padding:20px;margin-bottom:20px;"><p style="color:var(--green);font-weight:bold;font-size:16px;margin:0;">✅ All recipes above ${GP_TARGET}% GP target.</p></div>`}
+        <div class="card" style="padding:0;overflow:visible;"><div style="padding:15px 20px;background:rgba(16,185,129,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--green);">✓ Healthy Margins (${above.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th></th></tr></thead><tbody>${rowHtml(above)}</tbody></table></div></div>
+    </div>`;
+};
+
+// =============================================================================
+// BULK HTML IMPORTER
+// =============================================================================
+window.openBulkHtmlImport = () => {
+    document.getElementById('mainContent').innerHTML = `
+    <div style="max-width:700px;margin:auto;">
+        <h2 style="margin-top:0;">📥 Bulk Recipe HTML Import</h2>
+        <div class="card" style="border-top:5px solid var(--purple);">
+            <p style="color:var(--text-muted);font-size:14px;margin-top:0;">Upload your Recipe Keeper HTML export. All recipes imported as stubs — ingredients stored as raw text, ready to link to inventory over time.</p>
+            <div style="background:var(--bg-main);padding:15px;border-radius:8px;margin-bottom:15px;font-size:13px;color:var(--text-muted);">
+                <strong style="color:var(--brand-dark);">What gets imported:</strong><br>
+                ✓ Name · ✓ Station (Kitchen/Bar/Prep) · ✓ Type (Menu/Batch) · ✓ Ingredients as text · ✓ Method<br><br>
+                <strong style="color:var(--orange);">Duplicate check:</strong> Recipes with matching names are skipped automatically.
+            </div>
+            <input type="file" id="html-import-file" accept=".html,.htm" style="display:none;" onchange="window.runBulkHtmlImport(event)">
+            <button onclick="document.getElementById('html-import-file').click()" class="btn btn-purple" style="width:100%;font-size:16px;padding:14px;">📂 Select Recipe HTML File</button>
+            <div id="import-status" style="margin-top:15px;"></div>
+        </div>
+        <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+    </div>`;
+};
+
+window.runBulkHtmlImport = (event) => {
+    const file = event.target.files[0]; if (!file) return;
+    const statusDiv = document.getElementById('import-status');
+    statusDiv.innerHTML = `<p style="color:var(--blue);">⏳ Reading file...</p>`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(e.target.result,'text/html');
+            const recipeNodes = doc.querySelectorAll('.recipe-details');
+            if (recipeNodes.length===0) { statusDiv.innerHTML=`<p style="color:var(--red);">No recipes found. Make sure this is a Recipe Keeper HTML export.</p>`; return; }
+            const existing = new Set((window.recipes||[]).map(r=>r.name.toLowerCase().trim()));
+            let imported=0, duplicates=0;
+            recipeNodes.forEach(node => {
+                const nameEl = node.querySelector('[itemprop="name"]');
+                if (!nameEl) return;
+                const name = nameEl.textContent.trim();
+                if (!name) return;
+                if (existing.has(name.toLowerCase())) { duplicates++; return; }
+                const course = (node.querySelector('[itemprop="recipeCourse"]')||{}).textContent||'';
+                const ingredientsEl = node.querySelector('[itemprop="recipeIngredients"]');
+                const directionsEl = node.querySelector('[itemprop="recipeDirections"]');
+                const notesEl = node.querySelector('[itemprop="recipeNotes"]');
+                const rawIngredients = ingredientsEl ? Array.from(ingredientsEl.querySelectorAll('p')).map(p=>p.textContent.trim()).filter(t=>t.length>0) : [];
+                const directions = directionsEl ? Array.from(directionsEl.querySelectorAll('p')).map(p=>p.textContent.trim()).filter(t=>t.length>0).join('\n') : '';
+                const notes = notesEl ? notesEl.textContent.trim() : '';
+                const method = [directions,notes].filter(Boolean).join('\n\n');
+                const ingredients = rawIngredients.map(line=>({type:'raw',name:line,qty:0,unit:''}));
+                window.recipes.push({
+                    id: window.generateId('rec'), name, posAlias:'',
+                    type: window._courseToType(course), station: window._courseToStation(course),
+                    status:'Active', course: course||'', ingredients, cost:0, gp:0, price:0,
+                    yieldQty:1, yieldUnit:'Portion', method, allergens:[], photo:'', videoUrl:'', archived:false
+                });
+                existing.add(name.toLowerCase());
+                imported++;
+            });
+            window.saveToDisk();
+            statusDiv.innerHTML = `<div class="card" style="border-top:4px solid var(--green);text-align:center;padding:20px;">
+                <div style="font-size:40px;margin-bottom:10px;">✅</div>
+                <h3 style="color:var(--green);margin:0 0 10px 0;">Import Complete!</h3>
+                <div style="font-size:14px;color:var(--text-muted);"><strong style="color:var(--green);">${imported}</strong> recipes imported · <strong style="color:var(--orange);">${duplicates}</strong> duplicates skipped</div>
+                <div style="margin-top:15px;display:flex;gap:10px;justify-content:center;">
+                    <button onclick="window.showView('recipes')" class="btn btn-blue">View Recipes</button>
+                    <button onclick="window.showView('margins')" class="btn btn-purple">Check Margins</button>
+                </div>
+            </div>`;
+        } catch(err) { statusDiv.innerHTML=`<p style="color:var(--red);">Parse error: ${err.message}</p>`; }
+    };
+    reader.readAsText(file);
+};
+
+// =============================================================================
+// AI SINGLE RECIPE IMPORT
+// =============================================================================
 window.openAiRecipeImport = () => {
     document.getElementById('mainContent').innerHTML = `
-    <div style="max-width:800px; margin:auto;">
+    <div style="max-width:800px;margin:auto;">
         <h2 style="margin-top:0;">✨ AI Recipe Importer</h2>
         <div class="card" style="border-top:5px solid var(--purple);">
-            <p style="color:var(--text-muted); font-size:14px; margin-top:0;">Paste recipe text from Recipe Keeper, websites, or emails. The AI will parse it and match ingredients to your Live Inventory.</p>
-            <textarea id="ai-recipe-text" class="input-box" style="height:250px; font-family:monospace; font-size:12px;" placeholder="Paste recipe text here..."></textarea>
-            <button onclick="window.runAiRecipeImport()" class="btn btn-purple" style="width:100%; font-size:16px; padding:12px;">Parse & Cost Recipe</button>
-            <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%; margin-top:10px;">Cancel</button>
-            <div id="ai-recipe-status" style="margin-top:15px; text-align:center;"></div>
+            <p style="color:var(--text-muted);font-size:14px;margin-top:0;">Paste a single recipe. AI will parse and match ingredients to your Live Inventory.</p>
+            <textarea id="ai-recipe-text" class="input-box" style="height:250px;font-family:monospace;font-size:12px;" placeholder="Paste recipe text here..."></textarea>
+            <button onclick="window.runAiRecipeImport()" class="btn btn-purple" style="width:100%;font-size:16px;padding:12px;">Parse & Cost Recipe</button>
+            <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+            <div id="ai-recipe-status" style="margin-top:15px;text-align:center;"></div>
         </div>
     </div>`;
 };
@@ -740,34 +980,26 @@ window.openAiRecipeImport = () => {
 window.runAiRecipeImport = async () => {
     const rawText = document.getElementById('ai-recipe-text').value;
     const statusDiv = document.getElementById('ai-recipe-status');
-    if (!rawText.trim()) return window.showToast("Please paste a recipe first.", "error");
-    statusDiv.innerHTML = `<p style="color:var(--purple); font-weight:bold;">🤖 Analyzing recipe and cross-referencing live inventory...</p>`;
-    const invNames = (window.inventoryItems || []).map(i => `${i.id}:${i.name} (per ${i.useUnit})`).join(', ');
-    const prompt = `You are a culinary AI for Bar Wa Izakaya. Extract the recipe from the provided text.
-    Return ONLY a JSON object exactly matching this structure:
-    { "name": "Recipe Name", "method": "Write the method clearly.", "yieldQty": 1, "ingredients": [ { "name": "Parsed Name", "qty": 1.5, "unit": "kg", "matchedInvId": null } ] }
-    Rules: 1. Match ingredient to these existing inventory IDs: [${invNames}]. 2. If strong match, set "matchedInvId" to the string ID. If no match, set null. 3. Convert units to standard metric if possible.
-    Recipe Text: ${rawText}`;
+    if (!rawText.trim()) return window.showToast("Please paste a recipe first.","error");
+    statusDiv.innerHTML=`<p style="color:var(--purple);font-weight:bold;">🤖 Analyzing recipe...</p>`;
+    const invNames=(window.inventoryItems||[]).map(i=>`${i.id}:${i.name} (per ${i.useUnit})`).join(', ');
+    const prompt=`You are a culinary AI for Bar Wa Izakaya. Extract the recipe from this text.
+Return ONLY JSON: { "name": "Name", "method": "Method", "yieldQty": 1, "ingredients": [ { "name": "Name", "qty": 1.5, "unit": "kg", "matchedInvId": null } ] }
+Match to inventory IDs where possible: [${invNames}]
+Recipe: ${rawText}`;
     try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+        const apiKey=window.getApiKey(); if(!apiKey) return;
+        const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:"application/json"}})});
+        const data=await response.json(); if(data.error) throw new Error(data.error.message);
+        let rawJson=data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim();
+        const aiResult=JSON.parse(rawJson);
+        window.tempIngs=aiResult.ingredients.map(ing=>{
+            if(ing.matchedInvId&&window.inventoryItems.find(x=>x.id===ing.matchedInvId)){const inv=window.inventoryItems.find(x=>x.id===ing.matchedInvId);return{type:'inv',ref:ing.matchedInvId,qty:ing.qty,unit:inv.useUnit||ing.unit,name:inv.name};}
+            return {type:'raw',name:`${ing.qty} ${ing.unit} ${ing.name}`,qty:0,unit:''};
         });
-        const data = await response.json(); if (data.error) throw new Error(data.error.message);
-        let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
-        const aiResult = JSON.parse(rawJson);
-        window.tempIngs = aiResult.ingredients.map(ing => {
-            if (ing.matchedInvId !== null && window.inventoryItems.find(x => x.id === ing.matchedInvId)) {
-                let inv = window.inventoryItems.find(x => x.id === ing.matchedInvId);
-                return { type: 'inv', ref: ing.matchedInvId, qty: ing.qty, unit: inv.useUnit || ing.unit, name: inv.name };
-            } else { return { type: 'unmatched', name: `${ing.qty} ${ing.unit} ${ing.name}` }; }
-        });
-        let unmatched = window.tempIngs.filter(i => i.type === 'unmatched'); window.tempIngs = window.tempIngs.filter(i => i.type !== 'unmatched');
-        let extraNotes = unmatched.length > 0 ? `\n\n--- ⚠️ MISSING INGREDIENTS (Add to Live Inventory first) ---\n` + unmatched.map(u => u.name).join('\n') : '';
-        let newObj = { id: window.generateId('rec'), name: aiResult.name || 'Imported Recipe', posAlias: '', type: 'Menu', price: 0, yieldQty: aiResult.yieldQty || 1, yieldUnit: 'Portion', method: (aiResult.method || '') + extraNotes, ingredients: window.tempIngs, cost: 0, gp: 0, allergens: [], archived: false };
+        const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
         window.recipes.push(newObj); window.editRecipeForm(newObj.id); window.showToast("AI Parsing Complete!");
-    } catch (e) { statusDiv.innerHTML = `<p style="color:var(--red);">API Error: ${e.message}</p>`; }
+    } catch(e) { statusDiv.innerHTML=`<p style="color:var(--red);">API Error: ${e.message}</p>`; }
 };
 
 // =============================================================================
