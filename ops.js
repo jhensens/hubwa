@@ -138,21 +138,7 @@ window.deleteZone = (i) => {
     }
 };
 
-// Register the zones view in the router (patch core router)
-const _origShowView = window.showView;
-window.showView = (view) => {
-    if (view === 'zones' && window.renderZoneManager) {
-        window.closeModal();
-        window.currentView = 'zones';
-        const content = document.getElementById('mainContent');
-        const viewTitle = document.getElementById('viewTitle');
-        if (viewTitle) viewTitle.innerText = 'Storage Zones';
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        try { content.innerHTML = window.renderZoneManager(); } catch(e) { content.innerHTML = `<div class="card"><p style="color:var(--red);">${e.message}</p></div>`; }
-        return;
-    }
-    _origShowView(view);
-};
+// Zones view is registered in core.js router — no patch needed here
 
 // =============================================================================
 // 2. SUPPLIER MANAGEMENT
