@@ -2,7 +2,8 @@
 window.inventoryItems = []; 
 window.recipes = []; 
 window.wastageLogs = [];
-window.posMappings = {}; // NEW: AI Depletion Memory for Map-on-the-Fly
+window.posMappings = {};
+window.storageZones = [];
 
 // UPDATED: Commercial Supplier data (Min spend & Delivery Days)
 window.suppliers = [
@@ -86,7 +87,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones'];
 
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
@@ -212,6 +213,7 @@ window.showView = (view) => {
         else if (view === 'allergens' && window.renderAllergenView) content.innerHTML = window.renderAllergenView();
         else if ((view === 'runsheet' || view === 'sheet-gen') && window.renderSheetGenView) content.innerHTML = window.renderSheetGenView();
         else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
+        else if (view === 'zones' && window.renderZoneManager) content.innerHTML = window.renderZoneManager();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
