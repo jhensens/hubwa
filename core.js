@@ -215,6 +215,7 @@ window.showView = (view) => {
         else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
         else if (view === 'zones' && window.renderZoneManager) content.innerHTML = window.renderZoneManager();
         else if (view === 'margins' && window.renderMarginView) content.innerHTML = window.renderMarginView();
+        else if (view === 'margins' && window.renderMarginView) content.innerHTML = window.renderMarginView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);

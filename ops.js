@@ -244,6 +244,7 @@ window.resetAllStock = () => {
 };
 
 window.invFilters = window.invFilters || { search: '', filter: 'Active', groupBy: 'Category' };
+window._invSelected = window._invSelected || new Set();
 
 window.renderInventoryView = () => {
     let isWeekend = [0, 5, 6].includes(new Date().getDay());
@@ -262,8 +263,15 @@ window.renderInventoryView = () => {
     });
 
     const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
+    const belowParCount = (window.inventoryItems||[]).filter(i => {
+        if (i.archived) return false;
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return i.stock < par;
+    }).length;
+    const belowBadge = belowParCount > 0 ? ' <span style="background:var(--red);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;">' + belowParCount + '</span>' : '';
     const pillsHtml = ['Active', 'Below PAR', ...cats, 'Archived'].map(c =>
-        `<div class="tag-pill ${window.invFilters.filter === c ? 'active' : ''}" onclick="window.invFilters.filter='${c}'; window.showView('inventory')">${c === 'Below PAR' ? '🚨 Below PAR' : c}</div>`
+        '<div class="tag-pill ' + (window.invFilters.filter===c?'active':'') + '" onclick="window.invFilters.filter=\'' + c + '\'; window.showView(\'inventory\')">' +
+        (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c) + '</div>'
     ).join('');
 
     let grouped = {};
@@ -281,31 +289,57 @@ window.renderInventoryView = () => {
             let stock = Number(item.stock) || 0;
             let yieldVal = Number(item.yield) || 1;
             let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
+            const isSelected = window._invSelected.has(item.id);
             return `
-            <tr style="border-bottom:1px solid var(--bg-main); opacity: ${item.archived ? '0.5' : '1'};">
-                <td style="padding:15px;"><strong>${item.name}</strong><br><small style="color:var(--text-muted);">${item.sku || 'No SKU'} | ${item.supplier || 'No Supplier'}</small></td>
-                <td style="padding:15px;">
+            <tr style="border-bottom:1px solid var(--bg-main); opacity:${item.archived?'0.5':'1'}; background:${isSelected?'rgba(59,130,246,0.07)':''};">
+                <td style="padding:10px 8px; width:36px; text-align:center;">
+                    <input type="checkbox" ${isSelected?'checked':''} onchange="window._invToggleSelect('${item.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;">
+                </td>
+                <td style="padding:12px 10px;">
+                    <strong style="cursor:pointer;" onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}">${item.name}</strong>
+                    <br><small style="color:var(--text-muted);">${item.sku || 'No SKU'} | ${item.supplier || 'No Supplier'}</small>
+                </td>
+                <td style="padding:12px 10px;">
                     <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong> / ${item.buyUnit || 'Unit'}<br>
                     <small style="color:var(--blue); font-weight:bold;">Yields ${yieldVal} ${item.useUnit || 'Unit'}</small><br>
-                    <small style="color:var(--text-muted);">$${(price / yieldVal).toFixed(4)} per ${item.useUnit || 'Unit'}</small>
+                    <small style="color:var(--text-muted);">$${(price/yieldVal).toFixed(4)} per ${item.useUnit || 'Unit'}</small>
                 </td>
-                <td style="padding:15px; font-size:13px; color:var(--text-muted);">${item.location || 'Unassigned'}</td>
-                <td style="padding:15px;"><span style="color:${stock < parTarget ? 'var(--red)' : 'var(--green)'}; font-weight:bold; font-size:16px;">${stock.toFixed(2)}</span> <small>/ ${parTarget} PAR</small></td>
-                <td style="text-align:right; padding:15px; white-space:nowrap;">
-                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px; border-color:var(--purple); color:var(--purple); margin-right:5px;">📈 History</button>
-                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:5px 10px;">Edit</button>
+                <td style="padding:12px 10px; font-size:13px; color:var(--text-muted);">${item.location || 'Unassigned'}</td>
+                <td style="padding:12px 10px;">
+                    <span style="color:${stock<parTarget?'var(--red)':'var(--green)'}; font-weight:bold; font-size:16px; cursor:pointer;" title="Click to edit stock" onclick="window._inlineEditStock('${item.id}')">${stock.toFixed(2)}</span>
+                    <small style="color:var(--text-muted);"> / </small>
+                    <span style="color:var(--text-muted); font-size:12px; cursor:pointer;" title="Click to edit PAR" onclick="window._inlineEditPar('${item.id}')">${parTarget} PAR</span>
+                </td>
+                <td style="text-align:right; padding:12px 10px; white-space:nowrap;">
+                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:4px 8px; border-color:var(--purple); color:var(--purple); margin-right:4px;">📈</button>
+                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:4px 8px;">Edit</button>
                 </td>
             </tr>`;
         }).join('');
 
+        const grpSel = grouped[groupName].filter(i => window._invSelected.has(i.id)).length;
+        const allChk = grpSel === grouped[groupName].length && grouped[groupName].length > 0 ? 'checked' : '';
         return `
         <details class="card" style="padding:0; overflow:visible; margin-bottom:10px;" open>
-            <summary style="padding:15px 20px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;">
-                <span>${groupName} <span style="color:var(--text-muted); font-size:12px; font-weight:normal; margin-left:10px;">(${grouped[groupName].length} items)</span></span>
-                <span style="color:var(--blue); font-size:12px;">Click to expand/collapse</span>
+            <summary style="padding:12px 15px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;">
+                <span style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" ${allChk} onclick="event.stopPropagation(); window._invSelectGroup('${groupName}', this.checked)" style="transform:scale(1.2);">
+                    ${groupName} <span style="color:var(--text-muted); font-size:12px; font-weight:normal;">(${grouped[groupName].length} items)</span>
+                </span>
+                <span style="color:var(--blue); font-size:12px;">▼</span>
             </summary>
             <div style="overflow-x:auto; overflow-y:visible;">
-                <table style="width:100%; border-collapse: collapse;"><tbody>${itemsHtml}</tbody></table>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="background:#0a0a0c; font-size:11px; color:var(--text-muted); text-transform:uppercase;">
+                        <th style="padding:8px; width:36px;"></th>
+                        <th style="padding:8px 10px; text-align:left;">Product</th>
+                        <th style="padding:8px 10px; text-align:left;">Pricing</th>
+                        <th style="padding:8px 10px; text-align:left;">Zone</th>
+                        <th style="padding:8px 10px; text-align:left;">Stock / PAR</th>
+                        <th style="padding:8px 10px;"></th>
+                    </tr></thead>
+                    <tbody>${itemsHtml}</tbody>
+                </table>
             </div>
         </details>`;
     }).join('');
@@ -314,25 +348,102 @@ window.renderInventoryView = () => {
         accordionHtml = '<div class="card" style="text-align:center; padding:30px; color:var(--text-muted);">No products found matching filters.</div>';
     }
 
+    const selCount = window._invSelected.size;
+    const selWord = selCount === 1 ? 'item' : 'items';
+    const bulkBar = selCount > 0 ? `
+    <div style="position:sticky; bottom:20px; z-index:100; background:var(--card-bg); border:1px solid var(--blue); border-radius:12px; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 8px 30px rgba(0,0,0,0.5); flex-wrap:wrap; gap:10px; margin-top:15px;">
+        <span style="font-weight:bold; color:var(--blue);">${selCount} ${selWord} selected</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="window._invBulkAction('zone')" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">📍 Zone</button>
+            <button onclick="window._invBulkAction('supplier')" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">🚚 Supplier</button>
+            <button onclick="window._invBulkAction('category')" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">🏷️ Category</button>
+            <button onclick="window._invBulkAction('archive')" class="btn btn-orange" style="font-size:12px; padding:6px 12px;">📦 Archive</button>
+            <button onclick="window._invBulkAction('delete')" class="btn btn-red" style="font-size:12px; padding:6px 12px;">🗑️ Delete</button>
+            <button onclick="window._invSelected=new Set(); window.showView('inventory')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; color:var(--text-muted);">✕ Clear</button>
+        </div>
+    </div>` : '';
+
     return `
-    <div style="max-width: 1200px; margin: auto;">
+    <div style="max-width:1300px; margin:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-            <h2 style="margin:0;">Live Inventory</h2>
+            <h2 style="margin:0;">Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Manage Zones</button>
-                <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red);">⚠️ Wipe Stock to 0</button>
+                <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
+                <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
         </div>
         <input type="text" class="search-bar" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window.showView('inventory')">
-        <div style="margin-bottom: 15px;">${pillsHtml}</div>
+        <div style="margin-bottom:15px;">${pillsHtml}</div>
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:15px; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted); align-self:center;">Group By:</span>
-            <button onclick="window.invFilters.groupBy='Category'; window.showView('inventory')" class="btn ${window.invFilters.groupBy === 'Category' ? 'btn-dark' : 'btn-outline'}" style="padding:6px 15px; font-size:12px;">Category</button>
-            <button onclick="window.invFilters.groupBy='Zone'; window.showView('inventory')" class="btn ${window.invFilters.groupBy === 'Zone' ? 'btn-dark' : 'btn-outline'}" style="padding:6px 15px; font-size:12px;">Storage Zone (Walking Order)</button>
+            <button onclick="window.invFilters.groupBy='Category'; window.showView('inventory')" class="btn ${window.invFilters.groupBy==='Category'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Category</button>
+            <button onclick="window.invFilters.groupBy='Zone'; window.showView('inventory')" class="btn ${window.invFilters.groupBy==='Zone'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Zone</button>
         </div>
         ${accordionHtml}
+        ${bulkBar}
     </div>`;
+};
+
+// ── Bulk select helpers ──────────────────────────────────────
+window._invToggleSelect = (id, checked) => {
+    if (checked) window._invSelected.add(id); else window._invSelected.delete(id);
+    window.showView('inventory');
+};
+window._invSelectGroup = (groupName, checked) => {
+    (window.inventoryItems||[]).forEach(item => {
+        const key = window.invFilters.groupBy==='Zone' ? (item.location||'Unassigned Zone') : (item.category||'Unassigned Category');
+        if (key === groupName) { if (checked) window._invSelected.add(item.id); else window._invSelected.delete(item.id); }
+    });
+    window.showView('inventory');
+};
+window._invBulkAction = (action) => {
+    const ids = [...window._invSelected];
+    if (!ids.length) return;
+    if (action === 'delete') {
+        if (!confirm('Permanently delete ' + ids.length + ' items? This cannot be undone.')) return;
+        window.inventoryItems = window.inventoryItems.filter(i => !ids.includes(i.id));
+        window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items deleted.'); window.showView('inventory'); return;
+    }
+    if (action === 'archive') {
+        ids.forEach(id => { const it = window.inventoryItems.find(i=>i.id===id); if(it) it.archived=true; });
+        window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items archived.'); window.showView('inventory'); return;
+    }
+    const opts = action === 'zone'
+        ? '<option value="">Unassigned</option>' + (window.storageZones||[]).map(z=>'<option value="'+z.name+'">'+z.name+'</option>').join('')
+        : action === 'supplier'
+        ? '<option value="">-- None --</option>' + (window.suppliers||[]).map(s=>'<option value="'+s.name+'">'+s.name+'</option>').join('')
+        : ['Food','Beverage','Packaging','Chemicals','Other',...new Set((window.inventoryItems||[]).map(i=>i.category))].map(c=>'<option>'+c+'</option>').join('');
+    const label = action === 'zone' ? 'Zone' : action === 'supplier' ? 'Supplier' : 'Category';
+    window.openModal('Change ' + label + ' for ' + ids.length + ' items',
+        '<select id="bulk-val" class="input-box">' + opts + '</select>' +
+        '<button onclick="window._applyBulk(\'' + action + '\')" class="btn btn-green" style="width:100%;margin-top:10px;">Apply to ' + ids.length + ' Items</button>');
+};
+window._applyBulk = (action) => {
+    const val = document.getElementById('bulk-val').value;
+    const field = action === 'zone' ? 'location' : action;
+    const ids = [...window._invSelected];
+    ids.forEach(id => { const it = window.inventoryItems.find(i=>i.id===id); if(it) it[field]=val; });
+    window._invSelected = new Set(); window.closeModal(); window.saveToDisk(); window.showToast(ids.length + ' items updated.'); window.showView('inventory');
+};
+
+// ── Inline stock & PAR edit ──────────────────────────────────
+window._inlineEditStock = (id) => {
+    const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
+    const val = prompt('Update stock for "' + item.name + '" (current: ' + item.stock + ' ' + item.buyUnit + '):', item.stock);
+    if (val === null) return;
+    const n = parseFloat(val); if (isNaN(n)) return window.showToast('Invalid number.','error');
+    item.stock = n; window.saveToDisk(); window.showToast(item.name + ' → ' + n + ' ' + item.buyUnit); window.showView('inventory');
+};
+window._inlineEditPar = (id) => {
+    const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
+    const isWe = [0,5,6].includes(new Date().getDay());
+    const field = isWe ? 'parWeekend' : 'parWeekday';
+    const label = (isWe ? 'Weekend' : 'Weekday') + ' PAR';
+    const val = prompt('Update ' + label + ' for "' + item.name + '":', item[field]||0);
+    if (val === null) return;
+    const n = parseFloat(val); if (isNaN(n)) return window.showToast('Invalid number.','error');
+    item[field] = n; item.par = n; window.saveToDisk(); window.showToast(item.name + ' ' + label + ' → ' + n); window.showView('inventory');
 };
 
 window.editInvItem = (id = null) => {
@@ -1290,6 +1401,23 @@ window.executeDepletion = () => {
 
 window.pendingInvoiceData = null;
 
+// AI zone prediction from product name
+window._guessZoneFromName = (name) => {
+    const n = name.toLowerCase();
+    if (/beer|lager|ale|cider|wine|sake|spirit|vodka|gin|rum|whisky|whiskey|bourbon|liqueur|champagne|prosecco|seltzer|soft drink|cola|juice|syrup|bitters|vermouth|aperol|campari|tonic|soda|mineral water|energy drink|cocktail/i.test(n)) {
+        const z = (window.storageZones||[]).find(x=>x.area==='FOH');
+        return { dept:'FOH', zone: z?z.name:'' };
+    }
+    if (/chicken|beef|pork|lamb|fish|salmon|tuna|prawn|crab|squid|egg|flour|rice|noodle|pasta|oil|butter|cream|milk|cheese|tofu|mushroom|vegetable|onion|garlic|ginger|herb|spice|sauce|miso|soy|dashi|kombu|vinegar|sugar|salt|pepper|wagyu|duck|seafood|produce|frozen|fresh/i.test(n)) {
+        const z = (window.storageZones||[]).find(x=>x.area==='BOH');
+        return { dept:'BOH', zone: z?z.name:'' };
+    }
+    if (/bag|box|container|wrap|foil|glove|chemical|cleaner|sanitiser|sanitizer|detergent|paper|napkin|straw|tissue/i.test(n)) {
+        return { dept:'BOH', zone:'Dry Store' };
+    }
+    return { dept:'BOH', zone:'' };
+};
+
 window.renderInvoiceView = () => {
     return `
     <div style="max-width: 1300px; margin: auto;">
@@ -1607,7 +1735,10 @@ window._renderInvoiceReviewUI = () => {
                 </div>
                 <div style="flex:1; text-align:right; font-size:13px;">
                     ${priceChange
-                        ? `<span style="color:${pctChange > 0 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">$${Number(s.aiItem.unitPrice).toFixed(2)} <small>(${pctChange > 0 ? '▲' : '▼'}${Math.abs(pctChange)}%)</small></span><br><small style="color:var(--text-muted);">was $${Number(inv.price).toFixed(2)}</small>`
+                        ? (() => {
+                            const big = Math.abs(pctChange) >= 10;
+                            return `<span style="color:${big?'var(--red)':pctChange>0?'var(--orange)':'var(--green)'}; font-weight:bold;">$${Number(s.aiItem.unitPrice).toFixed(2)} ${big?'🚨':''}<small>(${pctChange>0?'▲':'▼'}${Math.abs(pctChange)}%)</small></span><br><small style="color:var(--text-muted);">was $${Number(inv.price).toFixed(2)}</small>`;
+                          })()
                         : `<span style="color:var(--brand-accent);">$${Number(s.aiItem.unitPrice || 0).toFixed(2)}</span>`
                     }
                 </div>
@@ -1678,8 +1809,10 @@ window._irQuickAdd = (index) => {
     const supplierName = window.pendingInvoiceData.supplier || '';
     const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
     const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
-    const isBev = /wine|beer|vodka|gin|rum|spirit|cider|sake|whisky|whiskey|bourbon|liqueur|lager|ale|seltzer/i.test(aiItem.itemName);
+    const guess = window._guessZoneFromName(aiItem.itemName);
+    const isBev = guess.dept === 'FOH';
     const guessedCat = isBev ? 'Beverage' : 'Food';
+    const guessedZone = guess.zone || '';
     const html = `
     <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Name</label><input type="text" id="iq-n" class="input-box" value="${aiItem.itemName.replace(/"/g, '&quot;')}"></div>
@@ -1689,20 +1822,24 @@ window._irQuickAdd = (index) => {
         <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><input type="text" id="iq-sup" class="input-box" value="${supplierName}"></div>
         <div><label style="font-size:11px; color:var(--text-muted);">SKU</label><input type="text" id="iq-sku" class="input-box" value="${aiItem.sku || ''}"></div>
     </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+        <div><label style="font-size:11px; color:var(--text-muted);">Department <small style="color:var(--blue);">(AI guess: ${guess.dept})</small></label>
+            <select id="iq-dept" class="input-box"><option ${isBev?'selected':''}>FOH</option><option ${!isBev?'selected':''}>BOH</option><option>Office</option></select>
+        </div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Storage Zone <small style="color:var(--blue);">(AI guess)</small></label>
+            ${window.buildZoneSelect(guessedZone, 'iq-loc')}
+        </div>
+    </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px; background:var(--bg-main); padding:10px; border-radius:6px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Buy Price ($)</label><input type="number" step="0.01" id="iq-p" class="input-box" value="${Number(aiItem.unitPrice || 0).toFixed(2)}"></div>
         <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit</label><input type="text" id="iq-buyUnit" class="input-box" value="${aiItem.buyUnit || 'CTN'}"></div>
         <div style="padding-top:20px;"><label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="iq-gst" ${aiItem.gstFree ? 'checked' : ''} style="transform:scale(1.2);"> GST Free</label></div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
         <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-Units per Buy-Unit)</label><input type="number" step="0.01" id="iq-yield" class="input-box" value="1"></div>
         <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iq-useUnit" class="input-box" value="${isBev ? 'ml' : 'kg'}"></div>
     </div>
-    <div style="margin-bottom:15px;">
-        <label style="font-size:11px; color:var(--text-muted);">Storage Zone</label>
-        ${window.buildZoneSelect(isBev ? (window.storageZones.find(z => z.area === 'FOH') || {}).name || '' : (window.storageZones.find(z => z.area === 'BOH') || {}).name || '', 'iq-loc')}
-    </div>
-    <button onclick="window._irSaveNewItem('${newId}', ${index})" class="btn btn-green" style="width:100%; font-size:15px; padding:12px;">Save New Item & Link to Invoice</button>`;
+    <button onclick="window._irSaveNewItem('${newId}', ${index})" class="btn btn-green" style="width:100%; font-size:15px; padding:12px;">Save & Link to Invoice</button>`;
     window.openModal(`⚡ Quick Add: ${aiItem.itemName}`, html);
 };
 
@@ -1721,10 +1858,11 @@ window._irSaveNewItem = (newId, index) => {
         yield: parseFloat(document.getElementById('iq-yield').value) || 1,
         useUnit: document.getElementById('iq-useUnit').value,
         location: document.getElementById('iq-loc').value,
-        stock: 0,
+        department: document.getElementById('iq-dept') ? document.getElementById('iq-dept').value : 'BOH',
+        stock: Number(aiItem.quantity) || 0,
         parWeekday: 0, parWeekend: 0, par: 0,
         archived: false,
-        history: []
+        history: [{ date: window.pendingInvoiceData.date || new Date().toLocaleDateString('en-AU'), supplier: supplierName, invoiceNo: window.pendingInvoiceData.invoiceNumber||'', qty: aiItem.quantity, price: parseFloat(document.getElementById('iq-p').value)||0, prevPrice: 0 }]
     };
     // Auto-add supplier if not known
     if (supplierName && !window.suppliers.find(s => s.name === supplierName)) {
@@ -1913,7 +2051,7 @@ window.checkRecipeMargins = () => {
             else if (ing.type === 'batch') { let b = window.recipes.find(r => r.id === ing.ref); if (b) currentCost += Number(ing.qty) * (Number(b.cost) / Number(b.yieldQty || 1)); }
         });
         const newGp = recipe.price > 0 ? ((recipe.price - currentCost) / recipe.price * 100).toFixed(1) : 0;
-        if (Number(newGp) < 70) alerts.push({ name: recipe.name, currentGp: newGp, cost: currentCost.toFixed(2) });
+        if (Number(newGp) < GP_TARGET) alerts.push({ name: recipe.name, currentGp: newGp, cost: currentCost.toFixed(2) });
         recipe.cost = currentCost;
         recipe.gp = parseFloat(newGp);
     });
