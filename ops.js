@@ -345,7 +345,6 @@ document.addEventListener('click', (e) => {
     if (action === 'edit') window.editInvItem(id);
     if (action === 'history') window.viewPriceTrend(id);
 });
-};
 
 window.editInvItem = (id = null) => {
     let e = id ? window.inventoryItems.find(i => i.id === id) : {
