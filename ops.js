@@ -313,12 +313,12 @@ window.renderInventoryView = () => {
         }).join('');
 
         return `
-        <details class="card" style="padding:0; overflow:hidden; margin-bottom:10px;" open>
-            <summary style="padding:15px 20px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border);">
+        <details class="card" style="padding:0; overflow:visible; margin-bottom:10px;" open>
+            <summary style="padding:15px 20px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;">
                 <span>${groupName} <span style="color:var(--text-muted); font-size:12px; font-weight:normal; margin-left:10px;">(${grouped[groupName].length} items)</span></span>
                 <span style="color:var(--blue); font-size:12px;">Click to expand/collapse</span>
             </summary>
-            <div style="overflow-x:auto;">
+            <div style="overflow-x:auto; overflow-y:visible;">
                 <table style="width:100%; border-collapse: collapse;"><tbody>${itemsHtml}</tbody></table>
             </div>
         </details>`;
