@@ -78,9 +78,6 @@ window.subSupplier = (i) => {
     window.saveToDisk(); window.showView('suppliers');
 };
 window.delSupplier = (i) => { if(confirm("Delete Supplier?")) { window.suppliers.splice(i,1); window.saveToDisk(); window.showView('suppliers'); } };
-
-// --- 2. LIVE INVENTORY (COMMERCIAL OVERHAUL) ---
-window.invFilters = window.invFilters || { search: '', filter: 'Active' };
 // --- DANGER ZONE: WIPE ALL STOCK ---
 window.resetAllStock = () => {
     let pin = localStorage.getItem('venuePin');
@@ -110,6 +107,8 @@ window.renderInventoryView = () => {
         }
         return true;
     });
+// --- 2. LIVE INVENTORY (COMMERCIAL OVERHAUL) ---
+window.invFilters = window.invFilters || { search: '', filter: 'Active' };
 
     const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
     const pillsHtml = ['Active', ...cats, 'Archived'].map(c => `<div class="tag-pill ${window.invFilters.filter === c ? 'active' : ''}" onclick="window.invFilters.filter='${c}'; window.showView('inventory')">${c}</div>`).join('');
