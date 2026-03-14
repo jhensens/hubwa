@@ -383,7 +383,8 @@ window.renderManagerHub = () => {
     let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>70%).</p>';
+    const GP_THRESHOLD = 67;
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : `<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>${GP_THRESHOLD}%).</p>`;
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
@@ -408,6 +409,10 @@ window.renderManagerHub = () => {
     // Simple COGS Estimate metric
     let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
 
+    // Unlinked raw ingredients count
+    const totalRaw = (window.recipes || []).filter(r => !r.archived).reduce((sum, r) => sum + (r.ingredients || []).filter(i => i.type === 'raw').length, 0);
+    const recipesWithRaw = (window.recipes || []).filter(r => !r.archived && (r.ingredients || []).some(i => i.type === 'raw')).length;
+
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
             <h2 style="margin:0; font-size:28px;">Command Center</h2>
@@ -431,6 +436,11 @@ window.renderManagerHub = () => {
             <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Est. Stock Value</h3>
             <div style="font-size:42px; font-weight:bold; color:var(--green); margin:10px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
             <p style="margin:0; color:var(--text-muted); font-size:12px;">Based on Current Buy Units</p>
+        </div>
+        <div class="card" style="border-top:5px solid var(--orange); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; cursor:pointer;" onclick="window.showView('recipes')">
+            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Unlinked Ingredients</h3>
+            <div style="font-size:42px; font-weight:bold; color:${totalRaw > 0 ? 'var(--orange)' : 'var(--green)'}; margin:10px 0;">${totalRaw}</div>
+            <p style="margin:0; color:var(--text-muted); font-size:12px;">${recipesWithRaw} recipe${recipesWithRaw !== 1 ? 's' : ''} with raw ingredients</p>
         </div>
     </div>
 
