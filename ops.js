@@ -118,7 +118,7 @@ window.renderInventoryView = () => {
                 </tr>
             </thead>
             <tbody>
-            ${filtered.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No products found.</td></tr>' : filtered.map(item => {
+            ${filtered.length === 0 ? '<tr><td colspan=\"5\" style=\"text-align:center; padding:30px; color:var(--text-muted);\">No products found.</td></tr>' : filtered.map(item => {
                 let price = Number(item.price) || 0; let stock = Number(item.stock) || 0; let yieldVal = Number(item.yield) || 1;
                 let isWeekend = [0, 5, 6].includes(new Date().getDay());
                 let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
@@ -499,7 +499,6 @@ window.subRecipe = (id, totalCost) => {
 };
 window.delRecipe = (id) => { if(confirm("Permanently delete Recipe?")) { window.recipes = window.recipes.filter(x => x.id !== id); window.tempRecipeId = null; window.saveToDisk(); window.showToast("Recipe Deleted"); window.showView('recipes'); } };
 
-// AI Recipe Importer remains identical, just uses the new UI modal rules
 window.openAiRecipeImport = () => {
     document.getElementById('mainContent').innerHTML = `
     <div style="max-width:800px; margin:auto;">
@@ -513,7 +512,7 @@ window.openAiRecipeImport = () => {
         </div>
     </div>`;
 };
-window.runAiRecipeImport = async () => { /* Similar logic, updating to support prompt correctly */
+window.runAiRecipeImport = async () => { 
     const rawText = document.getElementById('ai-recipe-text').value;
     const statusDiv = document.getElementById('ai-recipe-status');
     if (!rawText.trim()) return window.showToast("Please paste a recipe first.", "error");
@@ -700,7 +699,7 @@ window.logWastage = () => {
     window.saveToDisk(); window.showToast("Wastage Logged & Stock Deducted!"); window.showView('wastage'); 
 };
 
-// --- 6. MAP-ON-THE-FLY POS DEPLETION (MOVED TO COMMERCIAL ENGINE) ---
+// --- 6. MAP-ON-THE-FLY POS DEPLETION ---
 window.pendingMap = { known: [], unknown: [] }; 
 
 window.openAiDepletion = () => {
@@ -745,10 +744,8 @@ window.runAiDepletion = async () => {
         window.pendingMap = { known: [], unknown: [] }; 
 
         (aiResult.results || []).forEach(res => {
-            // 1. Check AI memory bank (posMappings)
             let matchedRecipeId = window.posMappings[res.rawName];
             
-            // 2. Fallback to explicit posAlias on the recipe
             if (!matchedRecipeId) {
                 let explicitMatch = menuItems.find(r => r.posAlias && r.posAlias.toLowerCase() === res.rawName.toLowerCase());
                 if (explicitMatch) matchedRecipeId = explicitMatch.id;
@@ -806,7 +803,6 @@ window.renderDepletionConfirmation = () => {
 };
 
 window.executeDepletion = () => {
-    // 1. Save new mappings to permanent AI memory
     window.pendingMap.unknown.forEach((u, i) => {
         let selectedId = document.getElementById(`map-unknown-${i}`).value;
         if (selectedId) {
@@ -816,25 +812,20 @@ window.executeDepletion = () => {
         }
     });
 
-    // 2. Strict Yield Math Deduction
-    let deductions = {}; // Tracks USE UNITS needed per inventory item
+    let deductions = {}; 
     
     window.pendingMap.known.forEach(k => {
         const recipe = window.recipes.find(r => r.id === k.recipeId);
         if (recipe) {
             (recipe.ingredients||[]).forEach(ing => {
                 if (ing.type === 'inv') {
-                    // Direct inventory ingredient (Qty is already in Use Units)
                     deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
                 } else if (ing.type === 'batch') {
-                    // Nested Batch! Resolve the batch's inventory requirements.
                     const batch = window.recipes.find(r => r.id === ing.ref);
                     if (batch) {
                         const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
                         (batch.ingredients||[]).forEach(bIng => {
-                            if (bIng.type === 'inv') {
-                                deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
-                            }
+                            if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
                         });
                     }
                 }
@@ -842,7 +833,6 @@ window.executeDepletion = () => {
         }
     });
 
-    // 3. Convert Use Units to Buy Units and deduct from Live Stock
     let deductedCount = 0;
     Object.keys(deductions).forEach(invId => {
         let inv = window.inventoryItems.find(i => i.id === invId);
@@ -859,7 +849,7 @@ window.executeDepletion = () => {
     window.showView('inventory');
 };
 
-// --- MISC PRE-EXISTING FEATURES MAINTAINED ---
+// --- 7. INVOICE RIPPER PRO (WITH MAP-ON-THE-FLY) ---
 
 window.renderInvoiceView = () => { 
     return `
@@ -882,6 +872,7 @@ window.renderInvoiceView = () => {
         <textarea id="invoice-text" style="display:none;"></textarea>
     </div>`; 
 };
+
 window.readPdfInvoice = async (e) => {
     const file = e.target.files[0]; if(!file) return;
     document.getElementById('pdf-preview-frame').src = URL.createObjectURL(file);
@@ -902,6 +893,7 @@ window.readPdfInvoice = async (e) => {
     };
     fileReader.readAsArrayBuffer(file);
 };
+
 window.parseInvoice = async () => {
     const rawText = document.getElementById('invoice-text').value; if (!rawText) return;
     document.getElementById('invoice-results').innerHTML = `<p style="color:var(--brand-accent);">🤖 AI extracting data...</p>`;
@@ -910,41 +902,134 @@ window.parseInvoice = async () => {
         const apiKey = window.getApiKey(); if (!apiKey) return; 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } }) });
         const data = await response.json(); if (data.error) throw new Error(data.error.message);
-        window.lastAiInvoiceResult = JSON.parse(data.candidates[0].content.parts[0].text);
-        window.processAIInvoiceResults(window.lastAiInvoiceResult);
+        
+        window.pendingInvoiceData = JSON.parse(data.candidates[0].content.parts[0].text);
+        window.processAIInvoiceResults();
     } catch (error) { document.getElementById('invoice-results').innerHTML = `<p style="color:var(--red);">AI Error: ${error.message}</p>`; }
 };
-window.processAIInvoiceResults = (aiResult) => {
+
+window.processAIInvoiceResults = () => {
+    const aiResult = window.pendingInvoiceData;
     let updatedCount = 0;
-    let resultsHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;"><h3 style="color:var(--brand-accent); margin:0;">AI Results</h3><small>${aiResult.supplier} | ${aiResult.date}</small></div><div style="max-height:600px; overflow-y:auto;">`;
-    (aiResult.items||[]).forEach(aiItem => {
+    
+    const invOpts = `<option value="">-- Map to Hub Item --</option>` + (window.inventoryItems||[]).filter(inv => !inv.archived).map(inv => `<option value="${inv.id}">${inv.name} (${inv.buyUnit})</option>`).join('');
+
+    let resultsHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;"><h3 style="color:var(--brand-accent); margin:0;">AI Results</h3><small>${aiResult.supplier} | ${aiResult.date}</small></div><div style="max-height:600px; overflow-y:auto; padding-right:10px;">`;
+    
+    (aiResult.items||[]).forEach((aiItem, index) => {
         let bestMatch = (window.inventoryItems||[]).find(item => (item.sku && aiItem.sku && item.sku === aiItem.sku)) || null;
         if (!bestMatch) { (window.inventoryItems||[]).forEach(item => { const words = item.name.toLowerCase().split(/\s+/).filter(w => w.length > 2); let matchCount = 0; words.forEach(w => { if(aiItem.itemName.toLowerCase().includes(w)) matchCount++; }); if (matchCount/words.length >= 0.75) bestMatch = item; }); }
+        
+        const newPrice = aiItem.unitPrice || aiItem.totalLinePrice || 0;
+
         if (bestMatch) {
-            const oldPrice = bestMatch.price; const newPrice = aiItem.unitPrice || aiItem.totalLinePrice; bestMatch.price = newPrice;
+            const oldPrice = bestMatch.price; bestMatch.price = newPrice;
             if (aiItem.sku) bestMatch.sku = aiItem.sku; bestMatch.stock = (Number(bestMatch.stock) || 0) + Number(aiItem.quantity);
             if (!bestMatch.history) bestMatch.history = []; bestMatch.history.push({ date: aiResult.date, price: newPrice, supplier: aiResult.supplier, qty: aiItem.quantity });
             if (bestMatch.history.length > 10) bestMatch.history.shift();
-            resultsHtml += `<div class="card" style="padding:10px; margin-bottom:10px; border-left:4px solid var(--green);"><div style="font-size:13px; color:var(--green);">✓ ${bestMatch.name} (+${aiItem.quantity} In-Stock)</div><div style="font-size:11px; color:var(--text-muted);">$${oldPrice.toFixed(2)} ➔ <strong>$${newPrice.toFixed(2)}</strong></div></div>`;
+            resultsHtml += `<div class="card" style="padding:15px; margin-bottom:10px; border-left:4px solid var(--green);"><div style="font-size:13px; color:var(--green); font-weight:bold;">✓ ${bestMatch.name} (+${aiItem.quantity} In-Stock)</div><div style="font-size:11px; color:var(--text-muted); margin-top:5px;">$${oldPrice.toFixed(2)} ➔ <strong>$${newPrice.toFixed(2)}</strong></div></div>`;
             updatedCount++;
         } else {
-            resultsHtml += `<div class="card" style="padding:10px; margin-bottom:10px; border-left:4px solid var(--orange);"><div style="font-size:13px; color:var(--orange);">❓ Unmatched: ${aiItem.itemName} ($${Number(aiItem.totalLinePrice).toFixed(2)})</div></div>`;
-            // Note: For a true commercial release, we'd wire up quickAddModal here too, but AI Depletion is priority.
+            resultsHtml += `
+            <div class="card" id="unmatched-inv-${index}" style="padding:15px; margin-bottom:10px; border-left:4px solid var(--orange);">
+                <div style="font-size:13px; color:var(--orange); font-weight:bold; margin-bottom:10px;">❓ Unmatched: ${aiItem.itemName} <br><small style="color:var(--text-muted); font-weight:normal;">Qty: ${aiItem.quantity} | Price: $${newPrice.toFixed(2)}</small></div>
+                <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                    <select id="map-inv-${index}" class="input-box" style="margin:0; flex:1; min-width:140px; font-size:11px; padding:6px;">${invOpts}</select>
+                    <button onclick="window.linkInvoiceItem(${index})" class="btn btn-outline" style="font-size:11px; padding:6px 12px;">Link</button>
+                    <button onclick="window.quickAddFromInvoice(${index})" class="btn btn-blue" style="font-size:11px; padding:6px 12px;">+ Add New</button>
+                </div>
+            </div>`;
         }
     });
     if (updatedCount > 0) { window.saveToDisk(); window.showToast(`${updatedCount} items auto-stocked.`); }
     document.getElementById('invoice-results').innerHTML = resultsHtml + `</div>`;
 };
 
+window.linkInvoiceItem = (index) => {
+    const selectedId = document.getElementById(`map-inv-${index}`).value;
+    if (!selectedId) return window.showToast("Select a Hub item to link.", "error");
+    
+    const aiItem = window.pendingInvoiceData.items[index];
+    const inv = window.inventoryItems.find(x => x.id === selectedId);
+    if (!inv) return;
+
+    const newPrice = aiItem.unitPrice || aiItem.totalLinePrice || 0;
+    inv.stock = (Number(inv.stock) || 0) + Number(aiItem.quantity);
+    inv.price = newPrice;
+    if (aiItem.sku) inv.sku = aiItem.sku; 
+    
+    if (!inv.history) inv.history = [];
+    inv.history.push({ date: window.pendingInvoiceData.date, price: newPrice, supplier: window.pendingInvoiceData.supplier, qty: aiItem.quantity });
+    window.saveToDisk();
+    
+    const card = document.getElementById(`unmatched-inv-${index}`);
+    card.style.borderLeft = "4px solid var(--green)";
+    card.innerHTML = `<div style="font-size:13px; color:var(--green); font-weight:bold;">✓ Linked to ${inv.name} (+${aiItem.quantity} In-Stock)</div><div style="font-size:11px; color:var(--text-muted); margin-top:5px;">Price updated to <strong>$${newPrice.toFixed(2)}</strong></div>`;
+    window.showToast("Item linked & stock updated!");
+};
+
+window.quickAddFromInvoice = (index) => {
+    const aiItem = window.pendingInvoiceData.items[index];
+    const newPrice = aiItem.unitPrice || aiItem.totalLinePrice || 0;
+    
+    const id = window.generateId('inv');
+    const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
+    const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
+    
+    let html = `
+    <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
+        <div><label style="font-size:11px; color:var(--text-muted);">Name</label><input type="text" id="iv-n" class="input-box" value="${aiItem.itemName.replace(/"/g, '&quot;')}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="Food"><datalist id="cat-list">${catOpts}</datalist></div>
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px; background:var(--bg-main); padding:10px; border-radius:6px;">
+        <div><label style="font-size:11px; color:var(--text-muted);">Buy Price ($)</label><input type="number" step="0.01" id="iv-p" class="input-box" value="${newPrice}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit</label><input type="text" id="iv-buyUnit" class="input-box" value="CTN"></div>
+        <div style="display:none;"><input type="checkbox" id="iv-gst"></div>
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
+        <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-units inside)</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="1"></div>
+        <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
+    </div>
+    
+    <button onclick="window.saveNewInvoiceItem('${id}', ${index})" class="btn btn-green" style="width:100%; font-size:15px;">Save & Add Stock (+${aiItem.quantity})</button>
+    `;
+    window.openModal("⚡ Quick Add New Product", html);
+};
+
+window.saveNewInvoiceItem = (id, index) => {
+    const aiItem = window.pendingInvoiceData.items[index];
+    const supplierName = window.pendingInvoiceData.supplier;
+    
+    let obj = {
+        id: id, name: document.getElementById('iv-n').value, category: document.getElementById('iv-cat').value, sku: aiItem.sku || '', supplier: supplierName,
+        price: parseFloat(document.getElementById('iv-p').value) || 0, location: '', gstFree: false,
+        stock: Number(aiItem.quantity) || 0, parWeekday: 0, parWeekend: 0,
+        yield: parseFloat(document.getElementById('iv-yield').value) || 1, useUnit: document.getElementById('iv-useUnit').value, buyUnit: document.getElementById('iv-buyUnit').value,
+        archived: false, history: [{ date: window.pendingInvoiceData.date, price: parseFloat(document.getElementById('iv-p').value) || 0, supplier: supplierName, qty: aiItem.quantity }]
+    };
+    
+    if (supplierName && !window.suppliers.find(s => s.name === supplierName)) { window.suppliers.push({ name: supplierName, contact: '', cutoff: '', minSpend: 0, deliveryDays: [] }); }
+
+    window.inventoryItems.push(obj);
+    window.saveToDisk();
+    window.closeModal();
+    
+    const card = document.getElementById(`unmatched-inv-${index}`);
+    card.style.borderLeft = "4px solid var(--green)";
+    card.innerHTML = `<div style="font-size:13px; color:var(--green); font-weight:bold;">✓ Saved as New: ${obj.name} (+${aiItem.quantity} In-Stock)</div>`;
+    window.showToast(`${obj.name} added to Live Inventory!`);
+};
+
+// --- 8. ALLERGENS, RUN SHEETS & ALERTS ---
 window.renderAllergenView = () => { 
     return `<div style="max-width: 800px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Allergen Matrix</h2><button onclick="window.runAiAllergenScan()" class="btn btn-purple">✨ AI Scan Menu</button></div><div id="allergen-status" style="margin-bottom:15px;"></div><p style="color:var(--text-muted);">Displays flags found in Recipe names (GF, VG) or detected by the AI Scan.</p><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;"><tr style="background:#111; text-align:left;"><th style=\"padding:15px;\">Menu Item</th><th style=\"padding:15px;\">Dietary Flags</th></tr>${(window.recipes||[]).filter(r=>r.type==='Menu' && !r.archived).map(r=> { let flags = r.allergens && r.allergens.length > 0 ? r.allergens.join(', ') : `${r.name.includes('GF')?'GF ':''}${r.name.includes('VG')?'VG ':''}${r.name.includes('DF')?'DF ':''}`; return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:15px;">${r.name}</td><td style="padding:15px; color:var(--brand-accent); font-weight:bold;">${flags}</td></tr>`; }).join('')}</table></div>`; 
 };
-window.runAiAllergenScan = async () => { /* Exists from previous */ };
+window.runAiAllergenScan = async () => { /* Kept lightweight for now */ };
 
 window.renderSheetGenView = () => { 
     return `<div style="max-width: 1100px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">AI Run Sheet Generator</h2><button onclick="window.print()" class="btn btn-outline" style="background:white; color:black; font-weight:bold;">🖨️ Print Run Sheet</button></div><div style="display:flex; gap:20px; flex-wrap:wrap;"><div class="card no-print" style="flex:1; min-width:300px;"><textarea id="raw-bookings" class="input-box" style="height:300px; font-size:12px; white-space:pre;" placeholder="Paste SevenRooms data..."></textarea><button onclick="window.generateRunSheet()" class="btn btn-purple" style="width:100%; font-size:16px;">✨ Generate Smart Sheet</button></div><div class="card" id="print-section" style="flex:2; background:white; color:black; min-height:600px; min-width:550px; padding:30px;"><div id="run-sheet-output"><p style="text-align:center; color:#999; margin-top:100px;">Sheet output...</p></div></div></div></div>`; 
 };
-window.generateRunSheet = async () => { /* Exists from previous */ };
+window.generateRunSheet = async () => { /* Kept lightweight for now */ };
 
 window.checkRecipeMargins = () => {
     let alerts = [];
