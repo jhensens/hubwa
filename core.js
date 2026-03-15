@@ -27,6 +27,8 @@ window.handoverLogs = [];
 window.knowledgeBase = []; 
 window.shiftRosters = [];
 window.depletionLogs = [];
+window.safeCategories = ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
+window.kbCategories = [];
 window.onboardingTemplates = {
     'FOH (Front of House)': { 'Day 1: Basics': [{id: 'foh1', label: 'Venue Tour & Safety'}], 'Compliance': [{id: 'foh3', label: 'Upload RSA', isUpload: true, cat: 'Staff RSAs'}] },
     'BOH (Back of House)': { 'Day 1: Kitchen': [{id: 'boh1', label: 'Kitchen Safety'}], 'Compliance': [{id: 'boh3', label: 'Upload Food Safety Cert', isUpload: true, cat: 'Food Safety Certs'}] }
@@ -88,7 +90,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories'];
 
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
@@ -107,19 +109,21 @@ window.saveToDisk = () => {
 };
 
 window.loadData = () => {
-    window.saveKeys.forEach(k => { window[k] = JSON.parse(localStorage.getItem(k)) || window[k]; });
-
+    // Manual reload — pull from Firebase and re-render
+    window.saveKeys.forEach(k => { try { window[k] = JSON.parse(localStorage.getItem(k)) || window[k]; } catch(e) {} });
     if (typeof db !== 'undefined') {
         db.collection('venueData').doc('hobartHub').get().then((doc) => {
             if (doc.exists) {
                 let data = doc.data();
-                window.saveKeys.forEach(k => { window[k] = data[k] || window[k]; });
-                if(window.currentView) window.showView(window.currentView);
+                window.saveKeys.forEach(k => { if (data[k] !== undefined) window[k] = data[k]; });
+                window.saveKeys.forEach(k => localStorage.setItem(k, JSON.stringify(window[k])));
                 window.checkLockState();
+                if (window.currentView) window.showView(window.currentView);
             }
         }).catch(err => console.error("Firebase read error:", err));
+    } else {
+        window.checkLockState();
     }
-    window.checkLockState();
 };
 
 window.exportData = () => {
@@ -216,8 +220,7 @@ window.showView = (view) => {
         else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
         else if (view === 'zones' && window.renderZoneManager) content.innerHTML = window.renderZoneManager();
         else if (view === 'margins' && window.renderMarginView) content.innerHTML = window.renderMarginView();
-        else if (view === 'menu-engineering' && window.renderMenuEngineeringView) content.innerHTML = window.renderMenuEngineeringView();
-        else if (view === 'batch-linker' && window.renderAiBatchLinker) content.innerHTML = window.renderAiBatchLinker();
+        else if (view === 'margins' && window.renderMarginView) content.innerHTML = window.renderMarginView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
@@ -227,4 +230,50 @@ window.showView = (view) => {
 
 window.generateId = (prefix) => { return prefix + '_' + Math.random().toString(36).substr(2, 9); };
 
-document.addEventListener('DOMContentLoaded', () => { window.loadData(); window.showView('dashboard'); });
+document.addEventListener('DOMContentLoaded', () => {
+    // Show loading state immediately
+    const content = document.getElementById('mainContent');
+    if (content) content.innerHTML = '<div class="loading-state"><h2>Loading Hub...</h2><p>Connecting to Firebase...</p></div>';
+
+    // Load from localStorage first for instant render
+    window.saveKeys.forEach(k => {
+        const stored = localStorage.getItem(k);
+        if (stored) {
+            try { window[k] = JSON.parse(stored); } catch(e) {}
+        }
+    });
+
+    // Render immediately from localStorage
+    window.checkLockState();
+    window.showView('dashboard');
+
+    // Then sync from Firebase in background and re-render if data differs
+    if (typeof db !== 'undefined') {
+        db.collection('venueData').doc('hobartHub').get().then((doc) => {
+            if (doc.exists) {
+                let data = doc.data();
+                let changed = false;
+                window.saveKeys.forEach(k => {
+                    if (data[k] !== undefined) {
+                        const newLen = Array.isArray(data[k]) ? data[k].length : JSON.stringify(data[k]).length;
+                        const oldLen = Array.isArray(window[k]) ? window[k].length : JSON.stringify(window[k]).length;
+                        if (newLen !== oldLen) changed = true;
+                        window[k] = data[k];
+                    }
+                });
+                // Also save Firebase data back to localStorage for next load
+                window.saveKeys.forEach(k => localStorage.setItem(k, JSON.stringify(window[k])));
+                if (changed) {
+                    window.checkLockState();
+                    window.showView(window.currentView || 'dashboard');
+                }
+                const syncLabel = document.getElementById('sync-status');
+                if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }
+            }
+        }).catch(err => {
+            console.error("Firebase read error:", err);
+            const syncLabel = document.getElementById('sync-status');
+            if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Mode'; syncLabel.style.color = 'var(--orange)'; }
+        });
+    }
+});

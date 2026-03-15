@@ -1,7 +1,6 @@
 // --- 1. TAKINGS & KPI DASHBOARD ---
 window.renderSalesView = () => {
     const recentSales = (window.salesData || []).slice(-14).reverse();
-    const recentDepletions = (window.depletionLogs || []).slice(-10).reverse();
     return `
     <div style="max-width: 1000px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -34,45 +33,6 @@ window.renderSalesView = () => {
                     </table>
                 </div>
             </div>
-        </div>
-
-        <div class="card" style="border-top:5px solid var(--purple);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3 style="margin:0;">EOD Depletion Log</h3>
-                <span style="font-size:12px; color:var(--text-muted);">${recentDepletions.length} recent runs</span>
-            </div>
-            ${recentDepletions.length === 0
-                ? '<p style="color:var(--text-muted); font-size:13px; margin:0;">No depletions run yet. Use ✨ AI EOD Stock Depletion above after each service.</p>'
-                : recentDepletions.map((d, i) => `
-                    <div style="border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 15px; background:var(--bg-main); cursor:pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                            <div>
-                                <strong style="font-size:14px;">${d.date} <span style="color:var(--text-muted); font-weight:normal; font-size:12px;">at ${d.time}</span></strong>
-                                <span style="margin-left:12px; font-size:12px; color:var(--purple);">${d.totalLines} stock lines · ${(d.itemsSold || []).length} recipes</span>
-                                ${(d.skippedUnmapped || 0) > 0 ? `<span style="margin-left:8px; font-size:11px; color:var(--orange);">⚠️ ${d.skippedUnmapped} unmapped</span>` : ''}
-                            </div>
-                            <span style="color:var(--text-muted); font-size:12px;">▼ Details</span>
-                        </div>
-                        <div style="display:none; padding:15px; font-size:12px;">
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                                <div>
-                                    <strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Recipes Sold</strong>
-                                    ${(d.itemsSold || []).map(l => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);">
-                                        <span>${l.recipeName}${l.rawSkipped > 0 ? ` <span style="color:var(--orange);">(${l.rawSkipped} unlinked)</span>` : ''}</span>
-                                        <strong style="color:var(--green);">${l.qtySold}</strong>
-                                    </div>`).join('')}
-                                </div>
-                                <div>
-                                    <strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Stock Deducted</strong>
-                                    ${(d.stockChanges || []).map(s => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);">
-                                        <span style="color:var(--text-muted);">${s.name}</span>
-                                        <span><span style="color:var(--red);">${s.before}</span> → <strong>${s.after}</strong> <small>${s.unit}</small></span>
-                                    </div>`).join('')}
-                                </div>
-                            </div>
-                        </div>
-                    </div>`).join('')
-            }
         </div>
     </div>`;
 };
@@ -347,42 +307,188 @@ window.showContractorForm = () => {
 window.submitContractor = () => { const name = document.getElementById('con-name').value; const company = document.getElementById('con-company').value; const reason = document.getElementById('con-reason').value; if(!name || !company) return window.showToast("Required details missing.", "error"); const now = new Date(); window.contractorLogs.push({ date: now.toLocaleDateString(), timeIn: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), timeOut: null, name, company, reason }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed In!"); }
 window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
 
+
 // --- 6. DIGITAL SAFE ---
+window._safeActiveTab = window._safeActiveTab || 'all';
+
 window.renderSafeView = function() {
-    const groupedDocs = (window.digitalSafe || []).reduce((acc, doc, i) => { const cat = doc.category || 'General / Other'; if (!acc[cat]) acc[cat] = []; acc[cat].push({ ...doc, originalIndex: i }); return acc; }, {});
-    let contentHtml = '';
-    if ((window.digitalSafe || []).length === 0) { contentHtml = '<div class="card"><p style="color:var(--text-muted); margin:0;">Safe is empty.</p></div>'; } 
-    else {
-        const categories = ["Licenses & Permits", "Staff RSAs", "Food Safety Certs", "Maintenance Records", "General / Other"];
-        Object.keys(groupedDocs).forEach(c => { if(!categories.includes(c)) categories.push(c); });
-        categories.forEach(cat => {
-            if (groupedDocs[cat] && groupedDocs[cat].length > 0) {
-                contentHtml += `<div style="margin-top: 30px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;"><h3 style="margin: 0; color: var(--brand-dark);">${cat}</h3></div><div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px;">${groupedDocs[cat].map(d => {
-                        let isExpired = d.expiry && new Date(d.expiry) < new Date();
-                        return `<div class="card" style="border-top:5px solid ${isExpired ? 'var(--red)' : 'var(--green)'}; margin-bottom:0;"><div style="display:flex; justify-content:space-between; align-items:flex-start;"><h4 style="margin:0 0 10px 0; font-size:16px;">${d.name}</h4><button onclick="window.delDoc(${d.originalIndex})" style="background:none; border:none; color:var(--red); cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button></div><p style="margin:0 0 20px 0; font-size:13px; color:var(--text-muted);">Expires: <strong style="color:${isExpired ? 'var(--red)' : 'var(--brand-accent)'};">${d.expiry || 'N/A'}</strong></p>${d.data ? `<a href="${d.data}" download="${d.name}" target="_blank" class="btn btn-outline" style="display:block; text-align:center; text-decoration:none;">Download / View File</a>` : `<a href="${d.link}" target="_blank" class="btn btn-outline" style="display:block; text-align:center; text-decoration:none;">View Link ↗</a>`}</div>`
-                    }).join('')}</div>`;
-            }
-        });
+    const cats = window.safeCategories || ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
+    const docs = window.digitalSafe || [];
+    const activeTab = window._safeActiveTab || 'all';
+
+    const filteredDocs = activeTab === 'all' ? docs.map((d,i) => ({...d, originalIndex:i}))
+        : docs.map((d,i) => ({...d, originalIndex:i})).filter(d => (d.category || 'General / Other') === activeTab);
+
+    // Tab pills
+    const tabPills = [
+        `<span class="tag-pill ${activeTab === 'all' ? 'active' : ''}" onclick="window._safeActiveTab='all'; window.showView('safe');">All (${docs.length})</span>`
+    ].concat(cats.map(c => {
+        const count = docs.filter(d => (d.category || 'General / Other') === c).length;
+        return `<span class="tag-pill ${activeTab === c ? 'active' : ''}" onclick="window._safeActiveTab='${c.replace(/'/g,"\\'")}'; window.showView('safe');">${c} (${count})</span>`;
+    })).join('');
+
+    // Expiry alerts
+    const expiringSoon = docs.filter(d => d.expiry && ((new Date(d.expiry) - new Date()) / (1000*3600*24)) <= 30 && new Date(d.expiry) > new Date());
+    const expired = docs.filter(d => d.expiry && new Date(d.expiry) < new Date());
+    let alertHtml = '';
+    if (expired.length > 0) alertHtml += `<div class="card" style="border-left:4px solid var(--red);padding:10px 15px;margin-bottom:10px;font-size:13px;"><strong style="color:var(--red);">⚠️ ${expired.length} document${expired.length>1?'s':''} expired</strong></div>`;
+    if (expiringSoon.length > 0) alertHtml += `<div class="card" style="border-left:4px solid var(--orange);padding:10px 15px;margin-bottom:10px;font-size:13px;"><strong style="color:var(--orange);">📅 ${expiringSoon.length} document${expiringSoon.length>1?'s':''} expiring within 30 days</strong></div>`;
+
+    // Doc cards
+    const docsHtml = filteredDocs.length === 0
+        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No documents in this category.</p></div>'
+        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filteredDocs.map(d => {
+            const isExpired = d.expiry && new Date(d.expiry) < new Date();
+            const isExpiringSoon = d.expiry && !isExpired && ((new Date(d.expiry) - new Date()) / (1000*3600*24)) <= 30;
+            const borderColor = isExpired ? 'var(--red)' : isExpiringSoon ? 'var(--orange)' : 'var(--green)';
+            return `<div class="card" style="border-top:5px solid ${borderColor};margin-bottom:0;padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                    <div style="flex:1;padding-right:10px;">
+                        <h4 style="margin:0 0 4px 0;font-size:15px;">${d.name}</h4>
+                        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${d.category || 'General'}</span>
+                    </div>
+                    <button onclick="window.delDoc(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">&times;</button>
+                </div>
+                <p style="margin:8px 0 15px 0;font-size:12px;color:${isExpired?'var(--red)':isExpiringSoon?'var(--orange)':'var(--text-muted)'};">
+                    ${d.expiry ? (isExpired ? '⚠️ Expired: ' : isExpiringSoon ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
+                </p>
+                ${d.data ? `<a href="${d.data}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">📄 View / Download</a>` : d.link ? `<a href="${d.link}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
+            </div>`;
+        }).join('')}</div>`;
+
+    return `<div style="max-width:1100px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+            <h2 style="margin:0;">Digital Safe</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window.bulkUploadForm()" class="btn btn-blue">📂 Bulk Upload</button>
+                <button onclick="window.addDocForm()" class="btn btn-green">+ Single Upload</button>
+                <button onclick="window.editSafeCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>
+            </div>
+        </div>
+        ${alertHtml}
+        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
+        ${docsHtml}
+    </div>`;
+};
+
+window.editSafeCategories = () => {
+    const cats = window.safeCategories || [];
+    let html = `<div style="margin-bottom:15px;">
+        ${cats.map((c, i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);">
+            <span style="font-size:14px;">${c}</span>
+            <button onclick="window.delSafeCat(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;">&times;</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;">
+        <input type="text" id="new-safe-cat" class="input-box" placeholder="New category name..." style="margin:0;flex:1;">
+        <button onclick="window.addSafeCat()" class="btn btn-green">Add</button>
+    </div>
+    <button onclick="window.closeModal();window.showView('safe');" class="btn btn-blue" style="width:100%;margin-top:15px;">Done</button>`;
+    window.openModal('⚙️ Manage Safe Categories', html);
+};
+window.addSafeCat = () => {
+    const val = document.getElementById('new-safe-cat').value.trim();
+    if (!val) return;
+    if (!window.safeCategories.includes(val)) { window.safeCategories.push(val); window.saveToDisk(); }
+    window.editSafeCategories();
+};
+window.delSafeCat = (i) => {
+    if (confirm('Delete this category? Documents in it will move to General / Other.')) {
+        const cat = window.safeCategories[i];
+        window.digitalSafe.forEach(d => { if (d.category === cat) d.category = 'General / Other'; });
+        window.safeCategories.splice(i, 1);
+        window.saveToDisk(); window.editSafeCategories();
     }
-    return `<div style="max-width: 1000px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Digital Safe</h2><button onclick="window.addDocForm()" class="btn btn-green">+ Upload Document</button></div>${contentHtml}</div>`;
-}
-
-window.addDocForm = () => { 
-    let html = `<label style="font-size:11px; color:var(--text-muted);">Category</label><select id="d-cat" class="input-box"><option>Staff RSAs</option><option>Food Safety Certs</option><option>Licenses & Permits</option><option>Maintenance Records</option><option>General / Other</option></select><label style="font-size:11px; color:var(--text-muted);">Document Name</label><input type="text" id="d-name" class="input-box" placeholder="e.g. John Smith RSA"><label style="font-size:11px; color:var(--text-muted);">Expiry Date (Optional)</label><input type="date" id="d-expiry" class="input-box"><label style="font-size:11px; color:var(--text-muted);">File (PDF/Image)</label><input type="file" id="d-file" accept="application/pdf,image/*" class="input-box" style="padding: 12px; margin-bottom:20px;"><button onclick="window.subDoc()" class="btn btn-green" style="width:100%;" id="btn-doc-save">Save to Safe</button>`;
-    window.openModal("🔓 Upload to Safe", html); 
 };
 
-window.subDoc = async () => { 
-    const name = document.getElementById('d-name').value; const category = document.getElementById('d-cat').value; const expiry = document.getElementById('d-expiry').value; const fileInput = document.getElementById('d-file'); 
-    if (!name) return window.showToast("Name required.", "error"); if (!fileInput.files.length) return window.showToast("Select a file.", "error"); 
-    const file = fileInput.files[0]; const btn = document.getElementById('btn-doc-save'); btn.innerText = "Uploading... ⏳"; btn.disabled = true;
+window.bulkUploadForm = () => {
+    const cats = (window.safeCategories || []);
+    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const html = `
+        <label style="font-size:11px;color:var(--text-muted);">Category for all files</label>
+        <select id="bulk-cat" class="input-box">${catOpts}</select>
+        <label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional — applies to all)</label>
+        <input type="date" id="bulk-expiry" class="input-box">
+        <label style="font-size:11px;color:var(--text-muted);">Select Files (PDF or images, multiple OK)</label>
+        <input type="file" id="bulk-files" accept="application/pdf,image/*" multiple class="input-box" style="padding:12px;margin-bottom:20px;">
+        <div id="bulk-status"></div>
+        <button onclick="window.runBulkUpload()" class="btn btn-blue" style="width:100%;font-size:15px;" id="btn-bulk-upload">📂 Upload All Files</button>`;
+    window.openModal('📂 Bulk Upload to Safe', html);
+};
+
+window.runBulkUpload = async () => {
+    const fileInput = document.getElementById('bulk-files');
+    const cat = document.getElementById('bulk-cat').value;
+    const expiry = document.getElementById('bulk-expiry').value;
+    const statusDiv = document.getElementById('bulk-status');
+    const btn = document.getElementById('btn-bulk-upload');
+    if (!fileInput.files.length) return window.showToast('Select at least one file.', 'error');
+
+    btn.disabled = true;
+    const files = Array.from(fileInput.files);
+    let uploaded = 0, failed = 0;
+
+    for (const file of files) {
+        statusDiv.innerHTML = `<p style="color:var(--blue);font-size:13px;">⏳ Uploading ${uploaded + 1} of ${files.length}: ${file.name}</p>`;
+        try {
+            const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
+            await fileRef.put(file);
+            const downloadURL = await fileRef.getDownloadURL();
+            window.digitalSafe.push({
+                name: file.name.replace(/\.[^.]+$/, ''),
+                category: cat, expiry: expiry,
+                type: file.type.includes('pdf') ? 'pdf' : 'image',
+                data: downloadURL
+            });
+            uploaded++;
+        } catch(e) { failed++; console.error('Upload failed:', file.name, e); }
+    }
+
+    window.saveToDisk();
+    statusDiv.innerHTML = `<p style="color:var(--green);font-size:13px;">✅ ${uploaded} uploaded${failed > 0 ? ', ' + failed + ' failed' : ''}.</p>`;
+    btn.disabled = false;
+    setTimeout(() => { window.closeModal(); window.showView('safe'); }, 1200);
+};
+
+window.addDocForm = () => {
+    const cats = (window.safeCategories || []);
+    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const html = `
+        <label style="font-size:11px;color:var(--text-muted);">Category</label>
+        <select id="d-cat" class="input-box">${catOpts}</select>
+        <label style="font-size:11px;color:var(--text-muted);">Document Name</label>
+        <input type="text" id="d-name" class="input-box" placeholder="e.g. John Smith RSA">
+        <label style="font-size:11px;color:var(--text-muted);">Expiry Date (Optional)</label>
+        <input type="date" id="d-expiry" class="input-box">
+        <label style="font-size:11px;color:var(--text-muted);">File (PDF/Image)</label>
+        <input type="file" id="d-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
+        <button onclick="window.subDoc()" class="btn btn-green" style="width:100%;" id="btn-doc-save">Save to Safe</button>`;
+    window.openModal('🔓 Upload to Safe', html);
+};
+
+window.subDoc = async () => {
+    const name = document.getElementById('d-name').value;
+    const category = document.getElementById('d-cat').value;
+    const expiry = document.getElementById('d-expiry').value;
+    const fileInput = document.getElementById('d-file');
+    if (!name) return window.showToast('Name required.', 'error');
+    if (!fileInput.files.length) return window.showToast('Select a file.', 'error');
+    const file = fileInput.files[0];
+    const btn = document.getElementById('btn-doc-save');
+    btn.innerText = 'Uploading... ⏳'; btn.disabled = true;
     try {
-        const fileRef = storage.ref().child(`safe_docs/${Date.now()}_${file.name}`); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
-        window.digitalSafe.push({ name: name, category: category, expiry: expiry, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL }); 
-        window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast("Document Secured!");
-    } catch (error) { window.showToast("Upload failed.", "error"); btn.innerText = "Save to Safe"; btn.disabled = false; }
+        const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
+        await fileRef.put(file);
+        const downloadURL = await fileRef.getDownloadURL();
+        window.digitalSafe.push({ name, category, expiry, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL });
+        window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast('Document Secured!');
+    } catch (error) { window.showToast('Upload failed.', 'error'); btn.innerText = 'Save to Safe'; btn.disabled = false; }
 };
-window.delDoc = (i) => { if(confirm("Delete this document?")) { window.digitalSafe.splice(i,1); window.saveToDisk(); window.showView('safe'); } };
+window.delDoc = (i) => {
+    if (confirm('Delete this document?')) { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); }
+};
+
+
 
 // --- 7. PHONEBOOK ---
 window.renderPhoneBookView = function() { 
@@ -423,8 +529,7 @@ window.renderManagerHub = () => {
     let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    const GP_THRESHOLD = 67;
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : `<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>${GP_THRESHOLD}%).</p>`;
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>70%).</p>';
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
@@ -449,10 +554,6 @@ window.renderManagerHub = () => {
     // Simple COGS Estimate metric
     let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
 
-    // Unlinked raw ingredients count
-    const totalRaw = (window.recipes || []).filter(r => !r.archived).reduce((sum, r) => sum + (r.ingredients || []).filter(i => i.type === 'raw').length, 0);
-    const recipesWithRaw = (window.recipes || []).filter(r => !r.archived && (r.ingredients || []).some(i => i.type === 'raw')).length;
-
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
             <h2 style="margin:0; font-size:28px;">Command Center</h2>
@@ -476,11 +577,6 @@ window.renderManagerHub = () => {
             <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Est. Stock Value</h3>
             <div style="font-size:42px; font-weight:bold; color:var(--green); margin:10px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
             <p style="margin:0; color:var(--text-muted); font-size:12px;">Based on Current Buy Units</p>
-        </div>
-        <div class="card" style="border-top:5px solid var(--orange); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; cursor:pointer;" onclick="window.showView('recipes')">
-            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Unlinked Ingredients</h3>
-            <div style="font-size:42px; font-weight:bold; color:${totalRaw > 0 ? 'var(--orange)' : 'var(--green)'}; margin:10px 0;">${totalRaw}</div>
-            <p style="margin:0; color:var(--text-muted); font-size:12px;">${recipesWithRaw} recipe${recipesWithRaw !== 1 ? 's' : ''} with raw ingredients</p>
         </div>
     </div>
 
@@ -534,18 +630,213 @@ window.newHandoverForm = () => {
 };
 window.saveHandover = () => { const mgr = document.getElementById('h-mgr').value; const notes = document.getElementById('h-notes').value; if(!mgr || !notes) return window.showToast("Manager and Notes required.", "error"); window.handoverLogs.push({ date: new Date().toLocaleDateString(), shift: document.getElementById('h-shift').value, manager: mgr, notes: notes, urgent: document.getElementById('h-urgent').value }); window.saveToDisk(); window.closeModal(); window.showView('handover'); window.showToast("Handover Submitted!"); };
 
+
 // --- 11. KNOWLEDGE BASE ---
+window._kbActiveTab = window._kbActiveTab || 'all';
+
 window.renderKnowledgeView = () => {
-    const cats = [...new Set((window.knowledgeBase || []).map(k => k.category))];
-    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; margin-bottom:20px; align-items:center;"><h2 style="margin:0;">Knowledge Base</h2><button onclick="window.newSOPForm()" class="btn btn-blue">+ Add SOP</button></div>${cats.length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No SOPs created yet.</p></div>' : cats.map(c => `<div style="margin-bottom:30px;"><h3 style="color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:10px; text-transform:uppercase; font-size:14px; letter-spacing:1px;">${c}</h3><div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; margin-top:15px;">${window.knowledgeBase.map((k, i) => k.category === c ? `<div class="card" style="margin:0; padding:20px; cursor:pointer; transition:transform 0.2s; border-top:4px solid var(--blue);" onclick="window.viewSOP(${i})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'"><h4 style="margin:0 0 10px 0; font-size:16px;">${k.title}</h4><p style="color:var(--text-muted); font-size:13px; margin:0; line-height:1.4;">${k.content.substring(0, 70)}...</p></div>` : '').join('')}</div></div>`).join('')}</div>`;
+    const kb = window.knowledgeBase || [];
+    const cats = window.kbCategories || [...new Set(kb.map(k => k.category).filter(Boolean))];
+    const activeTab = window._kbActiveTab || 'all';
+
+    const filtered = activeTab === 'all' ? kb.map((k,i) => ({...k, idx:i}))
+        : kb.map((k,i) => ({...k, idx:i})).filter(k => k.category === activeTab);
+
+    const tabPills = [
+        `<span class="tag-pill ${activeTab==='all'?'active':''}" onclick="window._kbActiveTab='all';window.showView('knowledge');">All (${kb.length})</span>`
+    ].concat(cats.map(c => {
+        const count = kb.filter(k => k.category === c).length;
+        return `<span class="tag-pill ${activeTab===c?'active':''}" onclick="window._kbActiveTab='${c.replace(/'/g,"\\'")}';window.showView('knowledge');">${c} (${count})</span>`;
+    })).join('');
+
+    const cardsHtml = filtered.length === 0
+        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No SOPs in this category yet.</p></div>'
+        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filtered.map(k =>
+            `<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(${k.idx})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                    <h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">${k.title}</h4>
+                    ${k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : ''}
+                </div>
+                <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">${k.category || 'General'}</span>
+                ${k.content ? `<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">${k.content.substring(0,80)}${k.content.length>80?'...':''}</p>` : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>'}
+            </div>`
+        ).join('')}</div>`;
+
+    return `<div style="max-width:1000px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+            <h2 style="margin:0;">Knowledge Base</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window.newSOPForm()" class="btn btn-blue">+ New SOP</button>
+                <button onclick="window.editKbCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>
+            </div>
+        </div>
+        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
+        ${cardsHtml}
+    </div>`;
 };
-window.newSOPForm = () => { 
-    let html = `<div style="display:flex; gap:10px; margin-bottom:15px;"><input type="text" id="k-title" class="input-box" placeholder="SOP Title" style="flex:2; margin:0;"><input type="text" id="k-cat" class="input-box" placeholder="Category (e.g. FOH Setup)" style="flex:1; margin:0;"></div><textarea id="k-content" class="input-box" placeholder="Write the SOP details here..." style="height:250px; margin-bottom:20px; line-height:1.5;"></textarea><button onclick="window.saveSOP()" class="btn btn-green" style="width:100%; font-size:16px;">Save SOP</button>`;
-    window.openModal("📚 New SOP", html); 
+
+window.editKbCategories = () => {
+    const cats = window.kbCategories || [];
+    let html = `<div style="margin-bottom:15px;">
+        ${cats.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;">No categories yet.</p>' : cats.map((c, i) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);">
+                <span style="font-size:14px;">${c}</span>
+                <button onclick="window.delKbCat(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;">&times;</button>
+            </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;">
+        <input type="text" id="new-kb-cat" class="input-box" placeholder="New category name..." style="margin:0;flex:1;">
+        <button onclick="window.addKbCat()" class="btn btn-green">Add</button>
+    </div>
+    <button onclick="window.closeModal();window.showView('knowledge');" class="btn btn-blue" style="width:100%;margin-top:15px;">Done</button>`;
+    window.openModal('⚙️ Manage KB Categories', html);
 };
-window.saveSOP = () => { const title = document.getElementById('k-title').value; const content = document.getElementById('k-content').value; if(!title || !content) return window.showToast("Title and Content Required.", "error"); window.knowledgeBase.push({ title: title, category: document.getElementById('k-cat').value || 'General', content: content }); window.saveToDisk(); window.closeModal(); window.showView('knowledge'); window.showToast("SOP Saved!"); };
-window.viewSOP = (i) => { const k = window.knowledgeBase[i]; document.getElementById('mainContent').innerHTML = `<div class="card" style="max-width:800px; margin:auto; padding:40px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;"><h2 style="margin:0;">${k.title}</h2><button onclick="window.deleteSOP(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; text-decoration:underline;">Delete SOP</button></div><span class="tag-pill">${k.category}</span><div style="margin-top:30px; white-space:pre-wrap; line-height:1.8; font-size:15px; color:var(--text-main);">${k.content}</div><button onclick="window.showView('knowledge')" class="btn btn-outline" style="width:100%; margin-top:40px;">Back to Library</button></div>`; };
-window.deleteSOP = (i) => { if(confirm('Delete this SOP?')) { window.knowledgeBase.splice(i,1); window.saveToDisk(); window.showView('knowledge'); window.showToast("SOP Deleted."); } };
+window.addKbCat = () => {
+    const val = document.getElementById('new-kb-cat').value.trim();
+    if (!val) return;
+    if (!window.kbCategories) window.kbCategories = [];
+    if (!window.kbCategories.includes(val)) { window.kbCategories.push(val); window.saveToDisk(); }
+    window.editKbCategories();
+};
+window.delKbCat = (i) => {
+    if (confirm('Delete this category? SOPs in it will move to General.')) {
+        const cat = window.kbCategories[i];
+        (window.knowledgeBase || []).forEach(k => { if (k.category === cat) k.category = 'General'; });
+        window.kbCategories.splice(i, 1);
+        window.saveToDisk(); window.editKbCategories();
+    }
+};
+
+window.newSOPForm = () => {
+    const cats = window.kbCategories || [];
+    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const html = `
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">SOP Title</label>
+            <input type="text" id="k-title" class="input-box" placeholder="e.g. Opening Procedure" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Category</label>
+            <input type="text" id="k-cat" class="input-box" placeholder="e.g. FOH" list="kb-cat-list" style="margin:0;">
+            <datalist id="kb-cat-list">${catOpts}</datalist></div>
+        </div>
+        <label style="font-size:11px;color:var(--text-muted);">Content (optional if uploading a file)</label>
+        <textarea id="k-content" class="input-box" placeholder="Write SOP content here..." style="height:200px;margin-bottom:15px;line-height:1.6;"></textarea>
+        <label style="font-size:11px;color:var(--text-muted);">Attach File — PDF or image (optional)</label>
+        <input type="file" id="k-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
+        <button onclick="window.saveSOP()" class="btn btn-green" style="width:100%;font-size:15px;" id="btn-sop-save">Save SOP</button>`;
+    window.openModal('📚 New SOP / Document', html);
+};
+
+window.saveSOP = async () => {
+    const title = document.getElementById('k-title').value.trim();
+    const content = document.getElementById('k-content').value.trim();
+    const cat = document.getElementById('k-cat').value.trim() || 'General';
+    const fileInput = document.getElementById('k-file');
+    if (!title) return window.showToast('Title is required.', 'error');
+    if (!content && !fileInput.files.length) return window.showToast('Add content or attach a file.', 'error');
+
+    const btn = document.getElementById('btn-sop-save');
+    btn.innerText = 'Saving...'; btn.disabled = true;
+
+    let fileUrl = null;
+    if (fileInput.files.length) {
+        try {
+            const file = fileInput.files[0];
+            const ref = storage.ref().child('knowledge/' + Date.now() + '_' + file.name);
+            await ref.put(file);
+            fileUrl = await ref.getDownloadURL();
+        } catch(e) { window.showToast('File upload failed: ' + e.message, 'error'); btn.innerText = 'Save SOP'; btn.disabled = false; return; }
+    }
+
+    // Auto-add new category if not in list
+    if (!window.kbCategories) window.kbCategories = [];
+    if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
+
+    window.knowledgeBase.push({ title, category: cat, content, fileUrl, lastModified: new Date().toLocaleDateString('en-AU') });
+    window.saveToDisk();
+    window.closeModal();
+    window.showView('knowledge');
+    window.showToast('SOP Saved!');
+};
+
+window.viewSOP = (i) => {
+    const k = window.knowledgeBase[i];
+    if (!k) return;
+    document.getElementById('mainContent').innerHTML = `
+    <div class="card" style="max-width:800px;margin:auto;padding:40px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <button onclick="window.showView('knowledge')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.editSOPForm(${i})" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
+                <button onclick="window.deleteSOP(${i})" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>
+            </div>
+        </div>
+        <h2 style="margin:0 0 8px 0;">${k.title}</h2>
+        <div style="display:flex;gap:8px;margin-bottom:25px;flex-wrap:wrap;">
+            <span class="tag-pill" style="margin:0;">${k.category || 'General'}</span>
+            ${k.lastModified ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Last updated: ${k.lastModified}</span>` : ''}
+        </div>
+        ${k.fileUrl ? `<div style="margin-bottom:20px;padding:15px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:13px;color:var(--text-muted);">📎 Attached file</span>
+            <a href="${k.fileUrl}" target="_blank" download class="btn btn-outline" style="text-decoration:none;font-size:12px;">Download / View</a>
+        </div>` : ''}
+        ${k.content ? `<div style="white-space:pre-wrap;line-height:1.8;font-size:15px;color:var(--text-main);">${k.content}</div>` : '<p style="color:var(--text-muted);font-style:italic;">No written content — see attached file above.</p>'}
+    </div>`;
+};
+
+window.editSOPForm = (i) => {
+    const k = window.knowledgeBase[i];
+    const cats = window.kbCategories || [];
+    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const html = `
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Title</label>
+            <input type="text" id="k-edit-title" class="input-box" value="${k.title.replace(/"/g,'&quot;')}" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Category</label>
+            <input type="text" id="k-edit-cat" class="input-box" value="${k.category||''}" list="kb-edit-cats" style="margin:0;">
+            <datalist id="kb-edit-cats">${catOpts}</datalist></div>
+        </div>
+        <label style="font-size:11px;color:var(--text-muted);">Content</label>
+        <textarea id="k-edit-content" class="input-box" style="height:200px;margin-bottom:15px;line-height:1.6;">${k.content||''}</textarea>
+        ${k.fileUrl ? `<div style="margin-bottom:15px;padding:10px;background:var(--bg-main);border-radius:6px;font-size:13px;display:flex;justify-content:space-between;">
+            <span>📎 Existing file attached</span>
+            <a href="${k.fileUrl}" target="_blank" style="color:var(--blue);text-decoration:none;">View</a>
+        </div>` : ''}
+        <label style="font-size:11px;color:var(--text-muted);">${k.fileUrl ? 'Replace file (optional)' : 'Attach file (optional)'}</label>
+        <input type="file" id="k-edit-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
+        <button onclick="window.updateSOP(${i})" class="btn btn-green" style="width:100%;" id="btn-sop-edit">Save Changes</button>`;
+    window.openModal('✏️ Edit SOP', html);
+};
+
+window.updateSOP = async (i) => {
+    const title = document.getElementById('k-edit-title').value.trim();
+    const cat = document.getElementById('k-edit-cat').value.trim() || 'General';
+    const content = document.getElementById('k-edit-content').value.trim();
+    const fileInput = document.getElementById('k-edit-file');
+    if (!title) return window.showToast('Title required.', 'error');
+    const btn = document.getElementById('btn-sop-edit');
+    btn.innerText = 'Saving...'; btn.disabled = true;
+    let fileUrl = window.knowledgeBase[i].fileUrl || null;
+    if (fileInput.files.length) {
+        try {
+            const file = fileInput.files[0];
+            const ref = storage.ref().child('knowledge/' + Date.now() + '_' + file.name);
+            await ref.put(file); fileUrl = await ref.getDownloadURL();
+        } catch(e) { window.showToast('File upload failed.', 'error'); btn.innerText = 'Save Changes'; btn.disabled = false; return; }
+    }
+    if (!window.kbCategories) window.kbCategories = [];
+    if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
+    window.knowledgeBase[i] = { ...window.knowledgeBase[i], title, category: cat, content, fileUrl, lastModified: new Date().toLocaleDateString('en-AU') };
+    window.saveToDisk(); window.closeModal(); window.viewSOP(i); window.showToast('SOP Updated!');
+};
+
+window.deleteSOP = (i) => {
+    if (confirm('Delete this SOP?')) {
+        window.knowledgeBase.splice(i, 1);
+        window.saveToDisk(); window.showView('knowledge'); window.showToast('SOP Deleted.');
+    }
+};
+
+
 
 // --- 12. ROSTERS ---
 window.renderRosterView = () => {

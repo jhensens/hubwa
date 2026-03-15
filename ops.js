@@ -328,7 +328,7 @@ window.renderInventoryView = () => {
                 </span>
                 <span style="color:var(--blue); font-size:12px;">▼</span>
             </summary>
-            <div style="overflow-x:auto; overflow-y:visible;">
+            <div id="inv-list-container" style="overflow-x:auto; overflow-y:visible;">
                 <table style="width:100%; border-collapse:collapse;">
                     <thead><tr style="background:#0a0a0c; font-size:11px; color:var(--text-muted); text-transform:uppercase;">
                         <th style="padding:8px; width:36px;"></th>
@@ -373,7 +373,7 @@ window.renderInventoryView = () => {
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
         </div>
-        <input type="text" class="search-bar" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window.showView('inventory')">
+        <input type="text" class="search-bar" id="inv-search-box" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window._refreshInvList()">
         <div style="margin-bottom:15px;">${pillsHtml}</div>
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:15px; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted); align-self:center;">Group By:</span>
@@ -496,7 +496,7 @@ window.editInvItem = (id = null) => {
             <button onclick="window.subInvItem('${e.id}', true)" class="btn btn-blue" style="flex:1;">Save & Add Another</button>
             <button onclick="window.subInvItem('${e.id}', false)" class="btn btn-green" style="flex:1;">Save & Close</button>
             ${id ? `<button onclick="window.archiveInv('${e.id}')" class="btn btn-orange" style="flex:0.5;">${e.archived ? 'Restore' : 'Archive'}</button>` : ''}
-            <button onclick="window.showView(\'inventory\')" class="btn btn-outline" style="flex:0.5;">Cancel</button>
+            <button onclick="window.showView('inventory')" class="btn btn-outline" style="flex:0.5;">Cancel</button>
         </div>
     </div>`;
     document.getElementById('mainContent').innerHTML = html;
@@ -578,6 +578,54 @@ window.viewPriceTrend = (id) => {
 const GP_TARGET = 67;
 
 window.recFilters = window.recFilters || { search: '', filter: 'All', station: 'All', status: 'Active' };
+// -----------------------------------------------------------------------
+// SEARCH REFRESH HELPERS — update list only, no full page re-render
+// Fixes the "click per letter" bug in search bars
+// -----------------------------------------------------------------------
+window._refreshInvList = () => {
+    const container = document.getElementById('inv-list-container');
+    if (!container) { window.showView('inventory'); return; }
+    const isWeekend = [0, 5, 6].includes(new Date().getDay());
+    let filtered = (window.inventoryItems || []).filter(item => {
+        let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
+        if (window.invFilters.filter === 'Active' && item.archived) return false;
+        if (window.invFilters.filter === 'Archived' && !item.archived) return false;
+        if (window.invFilters.filter === 'Low Stock' && (item.archived || item.stock >= parTarget)) return false;
+        if (window.invFilters.groupBy !== 'All' && item.category !== window.invFilters.groupBy && window.invFilters.groupBy !== 'Category') {
+            if (item.location !== window.invFilters.groupBy) return false;
+        }
+        if (window.invFilters.search) {
+            const s = window.invFilters.search.toLowerCase();
+            return (item.name && item.name.toLowerCase().includes(s)) ||
+                   (item.sku && item.sku.toLowerCase().includes(s)) ||
+                   (item.supplier && item.supplier.toLowerCase().includes(s));
+        }
+        return true;
+    });
+    // Re-render just the table body rows
+    container.innerHTML = window._buildInvRows(filtered, isWeekend);
+    // Re-attach bulk select
+    window._invSelected = window._invSelected || new Set();
+};
+
+window._refreshRecList = () => {
+    const container = document.getElementById('rec-list-container');
+    if (!container) { window.showView('recipes'); return; }
+    let filtered = (window.recipes || []).filter(r => {
+        if (window.recFilters.status !== 'All' && (r.status || 'Active') !== window.recFilters.status) return false;
+        if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
+        if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
+        if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
+        if (window.recFilters.search) {
+            const s = window.recFilters.search.toLowerCase();
+            return r.name.toLowerCase().includes(s) || (r.posAlias && r.posAlias.toLowerCase().includes(s));
+        }
+        return true;
+    });
+    container.innerHTML = window._buildRecCards(filtered);
+};
+
+
 window.tempIngs = [];
 window.tempRecipeId = null;
 
@@ -616,19 +664,19 @@ window.renderRecipeView = () => {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
             <h2 style="margin:0;">Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button onclick="window.exportRecipeBook()" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">📖 Recipe Book</button>
-                <button onclick="window.showView('batch-linker')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 Link Ingredients</button>
-                <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk Import</button>
+                <button onclick="window.showView('margins')" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Margin Health</button>
+                <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk HTML Import</button>
                 <button onclick="window.openAiRecipeImport()" class="btn btn-outline" style="font-size:12px;">✨ AI Import</button>
+                <button onclick="window.editRecipeForm()" class="btn btn-blue">+ New Recipe</button>
             </div>
         </div>
-        <input type="text" class="search-bar" placeholder="🔍 Search recipes or POS alias..." value="${window.recFilters.search}" oninput="window.recFilters.search=this.value;window.showView('recipes')">
+        <input type="text" class="search-bar" id="rec-search-box" placeholder="🔍 Search recipes or POS alias..." value="${window.recFilters.search}" oninput="window.recFilters.search=this.value; window._refreshRecList()">
         <div style="display:flex;gap:20px;margin-bottom:15px;flex-wrap:wrap;">
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Type</small><div style="margin-top:5px;">${typePills}</div></div>
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Station</small><div style="margin-top:5px;">${stationPills}</div></div>
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:15px;">
+        <div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:15px;">
             ${filtered.length===0?'<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);grid-column:1/-1;">No recipes found.</div>':filtered.map(r=>{
                 const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
                 const station=r.station||'Kitchen';
@@ -672,7 +720,7 @@ window.viewRecipe = (id) => {
     document.getElementById('mainContent').innerHTML = `
     <div style="max-width:900px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-            <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+            <button onclick="window.showView('recipes')" class="btn btn-outline" style="font-size:12px;">← Back</button>
             <div style="display:flex;gap:8px;">
                 <button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>
                 <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
@@ -746,139 +794,6 @@ window.printRecipe = (id) => {
     win.document.close();
 };
 
-window.exportRecipeBook = () => {
-    const stations = ['Kitchen', 'Bar', 'Prep'];
-    const activeRecipes = (window.recipes || []).filter(r => !r.archived && (r.status || 'Active') === 'Active');
-
-    if (activeRecipes.length === 0) return window.showToast('No active recipes to export.', 'error');
-
-    const buildIngList = (r) => {
-        return (r.ingredients || []).map(ing => {
-            if (ing.type === 'raw') return '<li style="color:#666;">' + ing.name + ' <em style="color:#aaa;">(unlinked)</em></li>';
-            const inv = ing.type === 'inv' ? (window.inventoryItems || []).find(i => i.id === ing.ref) : null;
-            const batch = ing.type === 'batch' ? (window.recipes || []).find(x => x.id === ing.ref) : null;
-            if (inv) {
-                const cost = (ing.qty * ((inv.price || 0) / (inv.yield || 1))).toFixed(2);
-                return '<li>' + ing.qty + ' ' + (inv.useUnit || '') + ' <strong>' + inv.name + '</strong> <span style="color:#888;font-size:11px;">($' + cost + ')</span></li>';
-            }
-            if (batch) return '<li>' + ing.qty + ' ' + (batch.yieldUnit || '') + ' <strong>' + batch.name + '</strong> <em style="color:#888;font-size:11px;">(batch)</em></li>';
-            return '<li>' + ing.name + '</li>';
-        }).join('');
-    };
-
-    const stationColor = { 'Kitchen': '#f59e0b', 'Bar': '#3b82f6', 'Prep': '#8b5cf6' };
-    const stationLabel = { 'Kitchen': '👨‍🍳 Kitchen', 'Bar': '🍹 Bar', 'Prep': '⚙️ Prep' };
-
-    // Index page: build table of contents grouped by station
-    let indexHtml = '<div style="page-break-after:always;">' +
-        '<div style="border-bottom:4px solid #111;padding-bottom:20px;margin-bottom:30px;display:flex;justify-content:space-between;align-items:flex-end;">' +
-            '<div><h1 style="margin:0;font-size:32px;letter-spacing:2px;">BAR WA IZAKAYA</h1>' +
-            '<p style="margin:5px 0 0 0;color:#666;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Recipe Book · Active Menu</p></div>' +
-            '<p style="margin:0;color:#aaa;font-size:12px;">Printed ' + new Date().toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'}) + '</p>' +
-        '</div>' +
-        '<h2 style="font-size:16px;text-transform:uppercase;letter-spacing:2px;color:#444;margin:0 0 20px 0;">Table of Contents</h2>';
-
-    let pageNum = 2; // page 1 = index
-    stations.forEach(station => {
-        const stRecipes = activeRecipes.filter(r => (r.station || 'Kitchen') === station);
-        if (stRecipes.length === 0) return;
-        indexHtml += '<div style="margin-bottom:25px;">' +
-            '<h3 style="margin:0 0 10px 0;color:' + stationColor[station] + ';font-size:13px;text-transform:uppercase;letter-spacing:2px;border-left:4px solid ' + stationColor[station] + ';padding-left:10px;">' + stationLabel[station] + '</h3>' +
-            '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        stRecipes.forEach(r => {
-            const gpText = r.type === 'Menu' && r.price > 0 ? r.gp + '% GP' : r.type === 'Batch' ? 'Yields ' + r.yieldQty + ' ' + r.yieldUnit : '';
-            indexHtml += '<tr style="border-bottom:1px solid #eee;">' +
-                '<td style="padding:7px 10px 7px 0;"><strong>' + r.name + '</strong>' + (r.posAlias ? ' <span style="color:#aaa;font-size:11px;">(' + r.posAlias + ')</span>' : '') + '</td>' +
-                '<td style="padding:7px;color:#888;font-size:12px;">' + (r.category || '') + '</td>' +
-                '<td style="padding:7px;color:' + (r.gp >= GP_TARGET ? '#16a34a' : r.gp > 0 ? '#dc2626' : '#888') + ';font-size:12px;text-align:right;">' + gpText + '</td>' +
-                '<td style="padding:7px 0 7px 10px;color:#aaa;font-size:11px;text-align:right;">p.' + pageNum + '</td>' +
-            '</tr>';
-            pageNum++;
-        });
-        indexHtml += '</table></div>';
-    });
-
-    indexHtml += '<div style="margin-top:30px;padding-top:15px;border-top:1px solid #eee;font-size:11px;color:#aaa;text-align:center;">' +
-        activeRecipes.length + ' active recipes · ' + activeRecipes.filter(r => (r.ingredients||[]).some(i=>i.type==='raw')).length + ' with unlinked ingredients · GP Target: ' + GP_TARGET + '%' +
-    '</div></div>';
-
-    // Recipe pages: one per recipe, grouped by station
-    let recipePagesHtml = '';
-    stations.forEach(station => {
-        const stRecipes = activeRecipes.filter(r => (r.station || 'Kitchen') === station);
-        stRecipes.forEach((r, idx) => {
-            const isLast = station === stations[stations.length - 1] || idx < stRecipes.length - 1;
-            const gpColor = r.gp >= GP_TARGET ? '#16a34a' : r.gp > 0 ? '#dc2626' : '#888';
-            const ingList = buildIngList(r);
-            const rawCount = (r.ingredients || []).filter(i => i.type === 'raw').length;
-            const linkedCount = (r.ingredients || []).filter(i => i.type === 'inv' || i.type === 'batch').length;
-
-            recipePagesHtml += '<div style="page-break-after:always;">' +
-                // Station colour bar header
-                '<div style="background:' + stationColor[station] + ';color:white;padding:12px 20px;margin:-30px -30px 20px -30px;display:flex;justify-content:space-between;align-items:center;">' +
-                    '<span style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:0.9;">' + stationLabel[station] + '</span>' +
-                    '<span style="font-size:11px;opacity:0.8;">Bar Wa Izakaya</span>' +
-                '</div>' +
-                // Photo if exists
-                (r.photo ? '<img src="' + r.photo + '" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:15px;">' : '') +
-                // Title + GP badge
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
-                    '<div>' +
-                        '<h1 style="margin:0;font-size:24px;">' + r.name + '</h1>' +
-                        (r.posAlias ? '<p style="margin:4px 0 0 0;font-size:11px;color:#888;">POS: ' + r.posAlias + '</p>' : '') +
-                    '</div>' +
-                    (r.type === 'Menu' && r.price > 0 ?
-                        '<div style="text-align:right;"><div style="font-size:28px;font-weight:bold;color:' + gpColor + ';">' + r.gp + '%</div>' +
-                        '<div style="font-size:11px;color:#888;">GP · Cost $' + Number(r.cost||0).toFixed(2) + ' · Sell $' + Number(r.price||0).toFixed(2) + '</div></div>' :
-                        r.type === 'Batch' ? '<div style="font-size:16px;font-weight:bold;color:#8b5cf6;">Yields ' + r.yieldQty + ' ' + r.yieldUnit + '</div>' : '') +
-                '</div>' +
-                // Meta row
-                '<div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">' +
-                    '<span style="font-size:11px;background:' + stationColor[station] + '22;color:' + stationColor[station] + ';padding:3px 10px;border-radius:10px;border:1px solid ' + stationColor[station] + '44;">' + station + '</span>' +
-                    '<span style="font-size:11px;background:#f3f4f6;color:#666;padding:3px 10px;border-radius:10px;">' + r.type + '</span>' +
-                    (r.allergens && r.allergens.length > 0 ? '<span style="font-size:11px;background:#fff3f3;color:#dc2626;padding:3px 10px;border-radius:10px;border:1px solid #fca5a5;">⚠️ ' + r.allergens.join(', ') + '</span>' : '') +
-                '</div>' +
-                // Two column: ingredients + method
-                '<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:25px;">' +
-                    '<div>' +
-                        '<h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#666;margin:0 0 8px 0;border-bottom:2px solid #eee;padding-bottom:5px;">Ingredients</h2>' +
-                        '<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">' + (ingList || '<li style="color:#aaa;">No ingredients listed</li>') + '</ul>' +
-                        (rawCount > 0 ? '<p style="font-size:10px;color:#f59e0b;margin:8px 0 0 0;">⚠️ ' + rawCount + ' unlinked ingredient' + (rawCount !== 1 ? 's' : '') + '</p>' : '') +
-                    '</div>' +
-                    '<div>' +
-                        '<h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#666;margin:0 0 8px 0;border-bottom:2px solid #eee;padding-bottom:5px;">Method</h2>' +
-                        '<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;color:#333;">' + (r.method || '<span style="color:#aaa;">No method written.</span>') + '</div>' +
-                    '</div>' +
-                '</div>' +
-                // Footer
-                '<div style="margin-top:20px;padding-top:10px;border-top:1px solid #eee;font-size:10px;color:#bbb;display:flex;justify-content:space-between;">' +
-                    '<span>Bar Wa Izakaya · Hobart Hub</span>' +
-                    '<span>' + linkedCount + ' linked · ' + rawCount + ' raw · Last modified: ' + (r.lastModified || 'N/A') + '</span>' +
-                '</div>' +
-            '</div>';
-        });
-    });
-
-    const fullHtml = '<!DOCTYPE html><html><head><title>BWI Recipe Book</title><style>' +
-        'body{font-family:Georgia,serif;font-size:13px;color:#222;max-width:780px;margin:30px auto;line-height:1.6;padding:30px;}' +
-        'h1,h2,h3{font-family:"Helvetica Neue",Arial,sans-serif;}' +
-        'ul{margin:0;padding-left:20px;}li{margin-bottom:3px;}' +
-        '@media print{' +
-            'body{margin:0;padding:20px;max-width:none;}' +
-            '@page{margin:15mm;size:A4;}' +
-        '}' +
-    '</style></head><body>' +
-        indexHtml + recipePagesHtml +
-        '<script>window.onload=()=>{window.print();}<\/script>' +
-    '</body></html>';
-
-    const win = window.open('', '_blank');
-    if (!win) return window.showToast('Pop-up blocked. Allow pop-ups for this site.', 'error');
-    win.document.write(fullHtml);
-    win.document.close();
-    window.showToast('Recipe book opened — ' + activeRecipes.length + ' recipes!');
-};
-
 window.editRecipeForm = (id = null) => {
     const cleanId = id ? String(id).trim() : null;
     let r = cleanId ? window.recipes.find(x => x.id === cleanId) : null;
@@ -933,7 +848,7 @@ window.editRecipeForm = (id = null) => {
                     <div><label style="font-size:11px;color:var(--text-muted);">Status</label><select id="r-status" class="input-box" style="margin:0;"><option ${(r.status||'Active')==='Active'?'selected':''}>Active</option><option ${r.status==="86'd"?'selected':''}>86'd</option><option ${r.status==='Development'?'selected':''}>Development</option></select></div>
                 </div>
                 <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
-                    ${!isBatch?`<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;"><div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${r.posAlias||''}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div><div><label style="font-size:11px;color:var(--text-muted);">Covers/Week (Popularity)</label><input type="number" step="1" id="r-covers" class="input-box" value="${r.coversPerWeek||0}" style="margin:0;"></div></div>`:'<div></div>'}
+                    ${!isBatch?`<div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${r.posAlias||''}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div>`:'<div></div>'}
                     <div style="display:flex;gap:8px;">
                         ${isBatch?`<div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Yield Qty</label><input type="number" step="0.1" id="r-yq" class="input-box" value="${r.yieldQty}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div><div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Unit</label><input type="text" id="r-yu" class="input-box" value="${r.yieldUnit}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div>`:`<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);">Sell Price ($)</label><input type="number" step="0.01" id="r-p" class="input-box" value="${r.price}" oninput="window.refreshRB()" style="margin:0;"></div>`}
                     </div>
@@ -1063,13 +978,11 @@ window.subRecipe = (id, totalCost) => {
     const obj = {
         id, name: document.getElementById('r-n').value,
         posAlias: type!=='Batch'&&document.getElementById('r-pos')?document.getElementById('r-pos').value:'',
-        coversPerWeek: type!=='Batch'&&document.getElementById('r-covers')?parseInt(document.getElementById('r-covers').value)||0:(existingIdx>=0?window.recipes[existingIdx].coversPerWeek||0:0),
         type, station: document.getElementById('r-station').value, status: document.getElementById('r-status').value,
         ingredients: window.tempIngs, cost: totalCost, method: document.getElementById('r-m').value,
         allergens: oldRecipe.allergens||[], photo: oldRecipe.photo||'',
         videoUrl: document.getElementById('r-video')?document.getElementById('r-video').value:(oldRecipe.videoUrl||''),
         archived: false,
-        coversPerWeek: existingIdx >= 0 ? (window.recipes[existingIdx].coversPerWeek || 0) : 0,
         price: type==='Menu'?(parseFloat(document.getElementById('r-p').value)||0):0,
         yieldQty: type==='Batch'?(parseFloat(document.getElementById('r-yq').value)||1):1,
         yieldUnit: type==='Batch'?document.getElementById('r-yu').value:'Portion',
@@ -1119,7 +1032,7 @@ window.renderMarginView = () => {
     <div style="max-width:1100px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
             <div><h2 style="margin:0;">Margin Health</h2><small style="color:var(--text-muted);">Target: ${GP_TARGET}% GP · Active menu recipes · Updates live when invoices processed</small></div>
-            <button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button>
+            <button onclick="window.showView('recipes')" class="btn btn-outline">← Recipes</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">
             <div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">${menuRecipes.length}</div><div style="font-size:12px;color:var(--text-muted);">Active Menu Recipes</div></div>
@@ -1132,335 +1045,6 @@ window.renderMarginView = () => {
     </div>`;
 };
 
-// =============================================================================
-// AI RAW INGREDIENT BATCH LINKER
-// Scans all recipes with raw ingredients, uses Gemini to suggest inventory matches
-// User confirms/skips each suggestion in bulk
-// =============================================================================
-
-window.renderAiBatchLinker = () => {
-    const rawRecipes = (window.recipes || []).filter(r => !r.archived && (r.ingredients || []).some(i => i.type === 'raw'));
-    const totalRaw = rawRecipes.reduce((sum, r) => sum + r.ingredients.filter(i => i.type === 'raw').length, 0);
-
-    return '<div style="max-width:1000px;margin:auto;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-            '<div><h2 style="margin:0;">AI Raw Ingredient Linker</h2>' +
-            '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Scans all unlinked (raw) ingredients and suggests matches from Live Inventory. Confirm or skip each one.</p></div>' +
-            '<button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button>' +
-        '</div>' +
-        '<div class="card" style="border-top:5px solid var(--purple);text-align:center;margin-bottom:20px;">' +
-            '<div style="font-size:42px;font-weight:bold;color:var(--purple);">' + totalRaw + '</div>' +
-            '<div style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">unlinked ingredients across ' + rawRecipes.length + ' recipes</div>' +
-            '<button onclick="window.runAiBatchLink()" class="btn btn-purple" style="font-size:16px;padding:14px 30px;">✨ Run AI Batch Linker</button>' +
-        '</div>' +
-        '<div id="batch-link-status" style="margin-bottom:15px;"></div>' +
-        '<div id="batch-link-results"></div>' +
-    '</div>';
-};
-
-window.runAiBatchLink = async () => {
-    const statusDiv = document.getElementById('batch-link-status');
-    const resultsDiv = document.getElementById('batch-link-results');
-    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 AI is scanning all raw ingredients... this may take a moment.</div>';
-    resultsDiv.innerHTML = '';
-
-    const rawIngredients = [];
-    (window.recipes || []).filter(r => !r.archived).forEach(r => {
-        (r.ingredients || []).forEach((ing, idx) => {
-            if (ing.type === 'raw') {
-                rawIngredients.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, rawName: ing.name });
-            }
-        });
-    });
-
-    if (rawIngredients.length === 0) {
-        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ No raw ingredients found. All linked!</div>';
-        return;
-    }
-
-    const invList = (window.inventoryItems || []).filter(i => !i.archived).map(i => i.id + ':' + i.name + ' (' + (i.useUnit||'unit') + ')').join('; ');
-    const rawList = rawIngredients.map((r, idx) => idx + ': ' + r.rawName + ' [in: ' + r.recipeName + ']').join('\n');
-
-    const prompt = 'You are a culinary AI for Bar Wa Izakaya. Match each raw ingredient to the best inventory item ID from the list, or null if no match.\n' +
-        'INVENTORY: ' + invList + '\n' +
-        'RAW INGREDIENTS (index: name [recipe]):\n' + rawList + '\n' +
-        'Return ONLY JSON array: [{"idx":0,"matchId":"inv_abc123","confidence":"high"},{"idx":1,"matchId":null,"confidence":"none"},...]\n' +
-        'confidence: "high" (clear match), "medium" (probable), "low" (possible), "none" (no match).\n' +
-        'Only suggest matches where you are at least medium confidence.';
-
-    try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim();
-        const aiMatches = JSON.parse(rawJson);
-
-        // Store pending matches globally for confirm actions
-        window._batchLinkQueue = rawIngredients.map((item, idx) => {
-            const match = aiMatches.find(m => m.idx === idx);
-            const invMatch = match && match.matchId ? (window.inventoryItems || []).find(i => i.id === match.matchId) : null;
-            return { ...item, suggestedInvId: invMatch ? invMatch.id : null, suggestedInvName: invMatch ? invMatch.name : null, confidence: match ? match.confidence : 'none', accepted: false, skipped: false };
-        });
-
-        window.renderBatchLinkQueue();
-        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ AI scan complete — ' + aiMatches.filter(m => m.matchId).length + ' matches suggested. Review below.</div>';
-
-    } catch(e) {
-        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">AI Error: ' + e.message + '</div>';
-    }
-};
-
-window.renderBatchLinkQueue = () => {
-    const queue = window._batchLinkQueue || [];
-    const resultsDiv = document.getElementById('batch-link-results');
-    const pending = queue.filter(q => !q.accepted && !q.skipped);
-    const accepted = queue.filter(q => q.accepted);
-
-    if (pending.length === 0 && accepted.length === 0) {
-        resultsDiv.innerHTML = '<div class="card"><p style="color:var(--text-muted);margin:0;">No suggestions to review.</p></div>';
-        return;
-    }
-
-    const acceptAllBtn = pending.filter(q => q.suggestedInvId).length > 0 ?
-        '<button onclick="window.acceptAllBatchLinks()" class="btn btn-green" style="margin-bottom:15px;">✅ Accept All Suggestions (' + pending.filter(q => q.suggestedInvId).length + ')</button>' : '';
-
-    const commitBtn = accepted.length > 0 ?
-        '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="margin-bottom:15px;margin-left:10px;">💾 Commit ' + accepted.length + ' Links to Recipes</button>' : '';
-
-    let html = '<div style="margin-bottom:15px;">' + acceptAllBtn + commitBtn + '</div>';
-
-    // Pending suggestions
-    const withMatch = pending.filter(q => q.suggestedInvId);
-    const noMatch = pending.filter(q => !q.suggestedInvId);
-
-    if (withMatch.length > 0) {
-        html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">🔗 Suggested Matches (' + withMatch.length + ')</h3>';
-        withMatch.forEach((item, i) => {
-            const qIdx = queue.indexOf(item);
-            const confColor = item.confidence === 'high' ? 'var(--green)' : item.confidence === 'medium' ? 'var(--orange)' : 'var(--text-muted)';
-            const inv = (window.inventoryItems || []).find(x => x.id === item.suggestedInvId);
-            const invOpts = (window.inventoryItems || []).filter(x => !x.archived).map(x =>
-                '<option value="' + x.id + '" ' + (x.id === item.suggestedInvId ? 'selected' : '') + '>' + x.name + ' (' + (x.useUnit||'unit') + ')</option>'
-            ).join('');
-            html += '<div class="card" style="border-left:4px solid ' + confColor + ';padding:15px;margin-bottom:10px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
-                    '<div style="flex:1;min-width:200px;">' +
-                        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">' + item.recipeName + '</div>' +
-                        '<strong style="font-size:14px;color:var(--orange);">RAW: ' + item.rawName + '</strong>' +
-                    '</div>' +
-                    '<div style="font-size:20px;color:var(--text-muted);">→</div>' +
-                    '<div style="flex:2;min-width:200px;">' +
-                        '<select id="bl-sel-' + qIdx + '" class="input-box" style="margin:0 0 6px 0;">' +
-                            '<option value="">-- Skip (no match) --</option>' + invOpts +
-                        '</select>' +
-                        '<div style="display:flex;gap:6px;">' +
-                            '<span style="font-size:11px;color:' + confColor + ';border:1px solid ' + confColor + ';padding:2px 6px;border-radius:8px;">' + item.confidence + ' confidence</span>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div style="display:flex;gap:6px;flex-shrink:0;">' +
-                        '<button onclick="window.acceptBatchLink(' + qIdx + ')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
-                        '<button onclick="window.skipBatchLink(' + qIdx + ')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
-        });
-    }
-
-    if (noMatch.length > 0) {
-        html += '<h3 style="color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:15px;">❓ No Match Found (' + noMatch.length + ')</h3>';
-        noMatch.forEach((item) => {
-            const qIdx = queue.indexOf(item);
-            const invOpts = (window.inventoryItems || []).filter(x => !x.archived).map(x =>
-                '<option value="' + x.id + '">' + x.name + ' (' + (x.useUnit||'unit') + ')</option>'
-            ).join('');
-            html += '<div class="card" style="border-left:4px solid var(--border);padding:15px;margin-bottom:10px;opacity:0.8;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-                    '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">' + item.recipeName + '</div>' +
-                    '<strong style="color:var(--orange);">RAW: ' + item.rawName + '</strong></div>' +
-                    '<div style="flex:2;min-width:200px;">' +
-                        '<select id="bl-sel-' + qIdx + '" class="input-box" style="margin:0;">' +
-                            '<option value="">-- Skip (no match) --</option>' + invOpts +
-                        '</select>' +
-                    '</div>' +
-                    '<div style="display:flex;gap:6px;">' +
-                        '<button onclick="window.acceptBatchLink(' + qIdx + ')" class="btn btn-blue" style="font-size:12px;padding:6px 12px;">Link</button>' +
-                        '<button onclick="window.skipBatchLink(' + qIdx + ')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
-                    '</div>' +
-                '</div>' +
-            '</div>';
-        });
-    }
-
-    if (accepted.length > 0) {
-        html += '<h3 style="color:var(--green);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:10px;">✅ Ready to Commit (' + accepted.length + ')</h3>';
-        accepted.forEach(item => {
-            const inv = (window.inventoryItems || []).find(x => x.id === item.suggestedInvId);
-            html += '<div style="padding:8px 12px;font-size:13px;color:var(--green);background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:6px;">' +
-                '<strong>' + item.rawName + '</strong> → <strong>' + (inv ? inv.name : item.suggestedInvId) + '</strong> <small style="color:var(--text-muted);">in ' + item.recipeName + '</small>' +
-            '</div>';
-        });
-        if (pending.length === 0) {
-            html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="width:100%;margin-top:15px;font-size:16px;padding:14px;">💾 Commit All ' + accepted.length + ' Links to Recipes</button>';
-        }
-    }
-
-    resultsDiv.innerHTML = html;
-};
-
-window.acceptBatchLink = (qIdx) => {
-    const sel = document.getElementById('bl-sel-' + qIdx);
-    const selectedId = sel ? sel.value : window._batchLinkQueue[qIdx].suggestedInvId;
-    if (!selectedId) return window.showToast('Select an inventory item first.', 'error');
-    const inv = (window.inventoryItems || []).find(x => x.id === selectedId);
-    window._batchLinkQueue[qIdx].suggestedInvId = selectedId;
-    window._batchLinkQueue[qIdx].suggestedInvName = inv ? inv.name : selectedId;
-    window._batchLinkQueue[qIdx].accepted = true;
-    window.renderBatchLinkQueue();
-};
-
-window.skipBatchLink = (qIdx) => {
-    window._batchLinkQueue[qIdx].skipped = true;
-    window.renderBatchLinkQueue();
-};
-
-window.acceptAllBatchLinks = () => {
-    (window._batchLinkQueue || []).forEach((item, qIdx) => {
-        if (!item.accepted && !item.skipped && item.suggestedInvId) {
-            item.accepted = true;
-        }
-    });
-    window.renderBatchLinkQueue();
-};
-
-window.commitBatchLinks = () => {
-    const accepted = (window._batchLinkQueue || []).filter(q => q.accepted && q.suggestedInvId);
-    if (accepted.length === 0) return window.showToast('Nothing to commit.', 'error');
-    let linkedCount = 0;
-    accepted.forEach(item => {
-        const recipe = window.recipes.find(r => r.id === item.recipeId);
-        if (!recipe) return;
-        const ing = recipe.ingredients[item.ingIdx];
-        if (!ing || ing.type !== 'raw') return;
-        const inv = window.inventoryItems.find(i => i.id === item.suggestedInvId);
-        if (!inv) return;
-        recipe.ingredients[item.ingIdx] = { type: 'inv', ref: inv.id, qty: 1, unit: inv.useUnit || 'unit', name: inv.name };
-        linkedCount++;
-    });
-    window.saveToDisk();
-    window._batchLinkQueue = null;
-    window.showToast(linkedCount + ' ingredients linked to inventory!');
-    window.showView('recipes');
-};
-
-// =============================================================================
-// MENU ENGINEERING MATRIX
-// Star (high GP, high volume), Plow Horse (low GP, high volume),
-// Puzzle (high GP, low volume), Dog (low GP, low volume)
-// Uses coversPerWeek field on each recipe
-// =============================================================================
-
-window.renderMenuEngineeringView = () => {
-    const menuRecipes = (window.recipes || []).filter(r => r.type === 'Menu' && r.price > 0 && (r.status || 'Active') === 'Active' && !r.archived);
-
-    // Recalculate costs/GP live
-    menuRecipes.forEach(r => {
-        let cost = 0;
-        (r.ingredients || []).forEach(ing => {
-            if (ing.type === 'inv') { const inv = window.inventoryItems.find(i => i.id === ing.ref); if (inv) cost += ing.qty * ((inv.price||0) / (inv.yield||1)); }
-            else if (ing.type === 'batch') { const b = window.recipes.find(x => x.id === ing.ref); if (b) cost += ing.qty * ((b.cost||0) / (b.yieldQty||1)); }
-        });
-        r.cost = cost;
-        r.gp = r.price > 0 ? parseFloat(((r.price - cost) / r.price * 100).toFixed(1)) : 0;
-    });
-
-    const avgGp = menuRecipes.length > 0 ? menuRecipes.reduce((s, r) => s + r.gp, 0) / menuRecipes.length : GP_TARGET;
-    const avgCovers = menuRecipes.length > 0 ? menuRecipes.reduce((s, r) => s + (r.coversPerWeek || 0), 0) / menuRecipes.length : 0;
-
-    const classify = (r) => {
-        const highGp = r.gp >= avgGp;
-        const highVol = (r.coversPerWeek || 0) >= avgCovers;
-        if (highGp && highVol) return 'star';
-        if (highGp && !highVol) return 'puzzle';
-        if (!highGp && highVol) return 'plowhorse';
-        return 'dog';
-    };
-
-    const categories = {
-        star:      { label: '⭐ Star',       color: 'var(--green)',  bg: 'rgba(16,185,129,0.08)',  desc: 'High margin + high volume. Protect these.' },
-        puzzle:    { label: '🧩 Puzzle',     color: 'var(--blue)',   bg: 'rgba(59,130,246,0.08)',  desc: 'High margin but low volume. Promote harder.' },
-        plowhorse: { label: '🐴 Plow Horse', color: 'var(--orange)', bg: 'rgba(245,158,11,0.08)',  desc: 'High volume but low margin. Reprice or reformulate.' },
-        dog:       { label: '🐶 Dog',        color: 'var(--red)',    bg: 'rgba(239,68,68,0.08)',   desc: 'Low margin + low volume. Review or remove.' }
-    };
-
-    const stationColor = { 'Kitchen': 'var(--orange)', 'Bar': 'var(--blue)', 'Prep': 'var(--purple)' };
-
-    const noCoverCount = menuRecipes.filter(r => !r.coversPerWeek || r.coversPerWeek === 0).length;
-    const noCoverWarning = noCoverCount > 0 ?
-        '<div class="card" style="border-left:4px solid var(--orange);padding:12px;margin-bottom:20px;font-size:13px;">' +
-            '<strong style="color:var(--orange);">⚠️ ' + noCoverCount + ' recipes have no covers/week set.</strong> ' +
-            'These will show as low-volume. <a onclick="window.showView(\'recipes\')" style="color:var(--blue);cursor:pointer;text-decoration:underline;">Update via Recipe Editor</a>.' +
-        '</div>' : '';
-
-    // Build quadrant cards
-    const quadrantHtml = ['star','puzzle','plowhorse','dog'].map(key => {
-        const cat = categories[key];
-        const items = menuRecipes.filter(r => classify(r) === key);
-        const rows = items.map(r => {
-            const gpColor = r.gp >= GP_TARGET ? 'var(--green)' : r.gp > 0 ? 'var(--orange)' : 'var(--red)';
-            return '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:10px 12px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.editRecipeForm(this.dataset.id)" data-id="' + r.id + '">' + r.name + '</strong>' +
-                    '<br><small style="color:' + (stationColor[r.station||'Kitchen']||'var(--text-muted)') + ';">' + (r.station||'Kitchen') + '</small></td>' +
-                '<td style="padding:10px 12px;color:' + gpColor + ';font-weight:bold;">' + r.gp + '%</td>' +
-                '<td style="padding:10px 12px;color:var(--brand-accent);">$' + Number(r.price||0).toFixed(2) + '</td>' +
-                '<td style="padding:10px 12px;font-weight:bold;">' + (r.coversPerWeek||0) + '/wk</td>' +
-            '</tr>';
-        }).join('');
-        return '<div class="card" style="padding:0;overflow:hidden;border-top:4px solid ' + cat.color + ';background:' + cat.bg + ';">' +
-            '<div style="padding:15px 20px;border-bottom:1px solid var(--border);">' +
-                '<h3 style="margin:0;color:' + cat.color + ';">' + cat.label + ' <span style="font-size:13px;background:' + cat.color + ';color:white;padding:2px 8px;border-radius:10px;font-weight:normal;">' + items.length + '</span></h3>' +
-                '<p style="margin:4px 0 0 0;font-size:12px;color:var(--text-muted);">' + cat.desc + '</p>' +
-            '</div>' +
-            (items.length === 0 ?
-                '<p style="padding:15px 20px;color:var(--text-muted);font-size:13px;margin:0;">No items in this category.</p>' :
-                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);">' +
-                    '<th style="padding:8px 12px;text-align:left;">Recipe</th><th style="padding:8px 12px;text-align:left;">GP%</th><th style="padding:8px 12px;text-align:left;">Sell</th><th style="padding:8px 12px;text-align:left;">Volume</th>' +
-                '</tr></thead><tbody>' + rows + '</tbody></table></div>') +
-        '</div>';
-    }).join('');
-
-    // Summary stats
-    const star = menuRecipes.filter(r => classify(r) === 'star').length;
-    const puzzle = menuRecipes.filter(r => classify(r) === 'puzzle').length;
-    const ph = menuRecipes.filter(r => classify(r) === 'plowhorse').length;
-    const dog = menuRecipes.filter(r => classify(r) === 'dog').length;
-
-    return '<div style="max-width:1100px;margin:auto;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-            '<div><h2 style="margin:0;">Menu Engineering Matrix</h2>' +
-            '<small style="color:var(--text-muted);">Avg GP: ' + avgGp.toFixed(1) + '% · Avg Volume: ' + avgCovers.toFixed(0) + ' covers/wk · ' + menuRecipes.length + ' active menu items</small></div>' +
-            '<div style="display:flex;gap:8px;">' +
-                '<button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:12px;">📊 Margin Health</button>' +
-                '<button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Recipes</button>' +
-            '</div>' +
-        '</div>' +
-        noCoverWarning +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
-            '<div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">' + star + '</div><div style="font-size:12px;color:var(--text-muted);">⭐ Stars</div></div>' +
-            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">' + puzzle + '</div><div style="font-size:12px;color:var(--text-muted);">🧩 Puzzles</div></div>' +
-            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);"><div style="font-size:34px;font-weight:bold;color:var(--orange);">' + ph + '</div><div style="font-size:12px;color:var(--text-muted);">🐴 Plow Horses</div></div>' +
-            '<div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">' + dog + '</div><div style="font-size:12px;color:var(--text-muted);">🐶 Dogs</div></div>' +
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;">' +
-            quadrantHtml +
-        '</div>' +
-    '</div>';
-};
-
-// Add batch-linker nav view to router (handled in core.js)
 // =============================================================================
 // BULK HTML IMPORTER
 // =============================================================================
@@ -1479,7 +1063,7 @@ window.openBulkHtmlImport = () => {
             <button onclick="document.getElementById('html-import-file').click()" class="btn btn-purple" style="width:100%;font-size:16px;padding:14px;">📂 Select Recipe HTML File</button>
             <div id="import-status" style="margin-top:15px;"></div>
         </div>
-        <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+        <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
     </div>`;
 };
 
@@ -1526,8 +1110,8 @@ window.runBulkHtmlImport = (event) => {
                 <h3 style="color:var(--green);margin:0 0 10px 0;">Import Complete!</h3>
                 <div style="font-size:14px;color:var(--text-muted);"><strong style="color:var(--green);">${imported}</strong> recipes imported · <strong style="color:var(--orange);">${duplicates}</strong> duplicates skipped</div>
                 <div style="margin-top:15px;display:flex;gap:10px;justify-content:center;">
-                    <button onclick="window.showView(\'recipes\')" class="btn btn-blue">View Recipes</button>
-                    <button onclick="window.showView(\'margins\')" class="btn btn-purple">Check Margins</button>
+                    <button onclick="window.showView('recipes')" class="btn btn-blue">View Recipes</button>
+                    <button onclick="window.showView('margins')" class="btn btn-purple">Check Margins</button>
                 </div>
             </div>`;
         } catch(err) { statusDiv.innerHTML=`<p style="color:var(--red);">Parse error: ${err.message}</p>`; }
@@ -1546,7 +1130,7 @@ window.openAiRecipeImport = () => {
             <p style="color:var(--text-muted);font-size:14px;margin-top:0;">Paste a single recipe. AI will parse and match ingredients to your Live Inventory.</p>
             <textarea id="ai-recipe-text" class="input-box" style="height:250px;font-family:monospace;font-size:12px;" placeholder="Paste recipe text here..."></textarea>
             <button onclick="window.runAiRecipeImport()" class="btn btn-purple" style="width:100%;font-size:16px;padding:12px;">Parse & Cost Recipe</button>
-            <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+            <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
             <div id="ai-recipe-status" style="margin-top:15px;text-align:center;"></div>
         </div>
     </div>`;
@@ -1605,7 +1189,7 @@ window.renderPrepListView = () => {
                 <h2 style="margin:0;">Auto-Order List</h2>
                 <small style="color:var(--brand-accent);">Targeting <strong style="color:var(--blue);">${isWeekend ? 'WEEKEND' : 'WEEKDAY'}</strong> PAR levels today.</small>
             </div>
-            <button onclick="window.showView(\'inventory\')" class="btn btn-outline">Update Stock Levels</button>
+            <button onclick="window.showView('inventory')" class="btn btn-outline">Update Stock Levels</button>
         </div>
         ${Object.keys(ordersNeeded).length === 0 ? '<div class="card"><p style="color:var(--green); font-weight:bold; font-size:18px;">✅ All inventory is at or above PAR. Nothing to order!</p></div>' : ''}
         ${Object.keys(ordersNeeded).map(supName => {
@@ -1752,21 +1336,7 @@ window.runAiDepletion = async () => {
     const menuItems = (window.recipes || []).filter(r => r.type === 'Menu');
     if (menuItems.length === 0) return statusDiv.innerHTML = `<p style="color:var(--orange);">⚠️ No Menu Recipes built in the Hub yet!</p>`;
     statusDiv.innerHTML = `<p style="color:var(--brand-accent); font-weight:bold;">🤖 AI is translating Lightspeed data...</p>`;
-    const recipeNames = (window.recipes || []).filter(r => r.type === 'Menu').map(r => r.posAlias || r.name).join(', ');
-    const prompt = `You are processing a Lightspeed POS end-of-day Product Mix report for Bar Wa Izakaya.
-Extract ONLY sellable menu items and their quantities sold. 
-
-RULES:
-- Skip modifiers, add-ons, and sub-items (lines indented or prefixed with "--", "Add", "Extra", "No ", "Sub")
-- Skip category headers, totals, voids, refunds, and zero-quantity lines
-- Combine duplicate item names (sum their quantities)
-- Use the exact item name as it appears in the POS report
-- Known menu items for context: ${recipeNames}
-
-Return ONLY valid JSON, no other text: { "results": [ { "rawName": "Exact POS Item Name", "qtySold": 42 } ] }
-
-POS Report:
-${rawText}`;
+    const prompt = `Extract items and Quantity Sold from this POS table. Return ONLY JSON: { "results": [ { "rawName": "Exact POS Item Name", "qtySold": 42 } ] } Text: ${rawText}`;
     try {
         const apiKey = window.getApiKey(); if (!apiKey) return;
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -1810,32 +1380,12 @@ window.renderDepletionConfirmation = () => {
         html += `</div>`;
     }
     if (window.pendingMap.known.length > 0) {
-        // Check for raw ingredient warnings
-        const rawWarnings = [];
-        window.pendingMap.known.forEach(k => {
-            const recipe = window.recipes.find(r => r.id === k.recipeId);
-            if (recipe) {
-                const rawCount = (recipe.ingredients || []).filter(i => i.type === 'raw').length;
-                if (rawCount > 0) rawWarnings.push({ name: recipe.name, rawCount });
-            }
-        });
-        if (rawWarnings.length > 0) {
-            html += `<div style="background:rgba(245,158,11,0.1); border:1px solid var(--orange); padding:12px 15px; border-radius:8px; margin-bottom:15px; font-size:13px;">
-                <strong style="color:var(--orange);">⚠️ Partial depletion warning</strong> — ${rawWarnings.length} matched recipe${rawWarnings.length !== 1 ? 's have' : ' has'} unlinked ingredients that won't be deducted:
-                <ul style="margin:6px 0 0 0; padding-left:18px; color:var(--text-muted);">
-                    ${rawWarnings.map(w => `<li>${w.name} (${w.rawCount} unlinked)</li>`).join('')}
-                </ul>
-                <a onclick="window.showView('batch-linker')" style="color:var(--blue); cursor:pointer; text-decoration:underline; font-size:12px;">Run AI Ingredient Linker to fix this →</a>
-            </div>`;
-        }
         html += `<h4 style="color:var(--green); border-bottom:1px solid var(--border); padding-bottom:5px; margin-top:20px;">✓ Safely Matched Items</h4>
         <div style="max-height:300px; overflow-y:auto; font-size:13px; background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border);">`;
         window.pendingMap.known.forEach(k => {
-            const recipe = window.recipes.find(r => r.id === k.recipeId);
-            const rName = recipe ? recipe.name : k.recipeId;
-            const rawCount = recipe ? (recipe.ingredients || []).filter(i => i.type === 'raw').length : 0;
+            let rName = window.recipes.find(r => r.id === k.recipeId).name;
             html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);">
-                <span><span style="color:var(--text-muted);">${k.posName}</span> ➔ <strong>${rName}</strong>${rawCount > 0 ? ` <span style="color:var(--orange); font-size:11px;">(${rawCount} unlinked)</span>` : ''}</span>
+                <span><span style="color:var(--text-muted);">${k.posName}</span> ➔ <strong>${rName}</strong></span>
                 <span style="color:var(--green); font-weight:bold;">${k.qtySold} sold</span>
             </div>`;
         });
@@ -1849,7 +1399,6 @@ window.renderDepletionConfirmation = () => {
 };
 
 window.executeDepletion = () => {
-    // Commit any newly mapped unknown items
     window.pendingMap.unknown.forEach((u, i) => {
         let selectedId = document.getElementById(`map-unknown-${i}`).value;
         if (selectedId) {
@@ -1858,103 +1407,38 @@ window.executeDepletion = () => {
             window.pendingMap.known.push({ posName: u.posName, recipeId: selectedId, qtySold: u.qtySold });
         }
     });
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-AU');
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    // Build stock deductions
     let deductions = {};
-    const logLines = [];
-
     window.pendingMap.known.forEach(k => {
         const recipe = window.recipes.find(r => r.id === k.recipeId);
-        if (!recipe) return;
-
-        // Increment coversPerWeek — rolling 7-day window using depletionLogs
-        recipe.coversPerWeek = (recipe.coversPerWeek || 0) + k.qtySold;
-
-        const rawCount = (recipe.ingredients || []).filter(i => i.type === 'raw').length;
-        logLines.push({ posName: k.posName, recipeName: recipe.name, qtySold: k.qtySold, rawSkipped: rawCount });
-
-        (recipe.ingredients || []).forEach(ing => {
-            if (ing.type === 'inv') {
-                deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
-            } else if (ing.type === 'batch') {
-                const batch = window.recipes.find(r => r.id === ing.ref);
-                if (batch) {
-                    const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
-                    (batch.ingredients || []).forEach(bIng => {
-                        if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
-                    });
+        if (recipe) {
+            (recipe.ingredients || []).forEach(ing => {
+                if (ing.type === 'inv') {
+                    deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
+                } else if (ing.type === 'batch') {
+                    const batch = window.recipes.find(r => r.id === ing.ref);
+                    if (batch) {
+                        const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
+                        (batch.ingredients || []).forEach(bIng => {
+                            if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
+                        });
+                    }
                 }
-            }
-        });
+            });
+        }
     });
-
-    // Apply deductions to inventory
     let deductedCount = 0;
-    const stockChanges = [];
     Object.keys(deductions).forEach(invId => {
         let inv = window.inventoryItems.find(i => i.id === invId);
         if (inv) {
             const useUnitsToDeduct = deductions[invId];
             const buyUnitsToDeduct = useUnitsToDeduct / (inv.yield || 1);
-            const before = inv.stock || 0;
-            inv.stock = Math.max(0, before - buyUnitsToDeduct);
-            stockChanges.push({ name: inv.name, before: before.toFixed(2), after: inv.stock.toFixed(2), unit: inv.buyUnit || 'unit' });
+            inv.stock = Math.max(0, (inv.stock || 0) - buyUnitsToDeduct);
             deductedCount++;
         }
     });
-
-    // Write depletion log entry
-    if (!window.depletionLogs) window.depletionLogs = [];
-    window.depletionLogs.push({
-        date: dateStr,
-        time: timeStr,
-        itemsSold: logLines,
-        stockChanges: stockChanges,
-        totalLines: deductedCount,
-        skippedUnmapped: window.pendingMap.unknown.filter((u, i) => !document.getElementById(`map-unknown-${i}`) || !document.getElementById(`map-unknown-${i}`).value).length
-    });
-
     window.saveToDisk();
-    window.showToast(`EOD complete — ${deductedCount} stock lines deducted across ${logLines.length} recipes.`);
-
-    // Show summary instead of jumping straight to inventory
-    window.renderDepletionSummary(logLines, stockChanges, deductedCount);
-};
-
-window.renderDepletionSummary = (logLines, stockChanges, deductedCount) => {
-    const html = `<div class="card" style="max-width:800px; margin:auto; border-top:5px solid var(--green);">
-        <div style="text-align:center; padding:20px 0 10px 0;">
-            <div style="font-size:48px; margin-bottom:8px;">✅</div>
-            <h2 style="margin:0; color:var(--green);">EOD Depletion Complete</h2>
-            <p style="color:var(--text-muted); font-size:13px; margin:5px 0 0 0;">${deductedCount} stock lines updated · ${logLines.length} recipes matched</p>
-        </div>
-
-        <h4 style="color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px; margin-top:20px;">Recipes Depleted</h4>
-        <div style="max-height:220px; overflow-y:auto; font-size:13px; background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px;">
-            ${logLines.map(l => `<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--border);">
-                <span><strong>${l.recipeName}</strong>${l.rawSkipped > 0 ? ` <span style="color:var(--orange); font-size:11px;">⚠️ ${l.rawSkipped} unlinked</span>` : ''}</span>
-                <span style="color:var(--green); font-weight:bold;">${l.qtySold} sold</span>
-            </div>`).join('')}
-        </div>
-
-        <h4 style="color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">Stock Changes</h4>
-        <div style="max-height:220px; overflow-y:auto; font-size:12px; background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:20px;">
-            ${stockChanges.map(s => `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px dashed var(--border);">
-                <span style="color:var(--text-muted);">${s.name}</span>
-                <span><strong style="color:var(--red);">${s.before}</strong> → <strong style="color:var(--brand-dark);">${s.after}</strong> <small style="color:var(--text-muted);">${s.unit}</small></span>
-            </div>`).join('')}
-        </div>
-
-        <div style="display:flex; gap:10px;">
-            <button onclick="window.showView('inventory')" class="btn btn-blue" style="flex:1;">📦 View Inventory</button>
-            <button onclick="window.showView('sales')" class="btn btn-outline" style="flex:1;">← Back to Sales</button>
-        </div>
-    </div>`;
-    document.getElementById('mainContent').innerHTML = html;
+    window.showToast(`Success! Deducted ${deductedCount} stock lines.`);
+    window.showView('inventory');
 };
 
 // =============================================================================
@@ -2498,7 +1982,7 @@ window._commitInvoice = () => {
         </div>
         <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
             <button onclick="window.showView('invoice')" class="btn btn-blue">📄 Rip Another Invoice</button>
-            <button onclick="window.showView(\'inventory\')" class="btn btn-outline">📦 View Inventory</button>
+            <button onclick="window.showView('inventory')" class="btn btn-outline">📦 View Inventory</button>
         </div>
     </div>`;
     document.getElementById('invoice-status').innerHTML = '';
