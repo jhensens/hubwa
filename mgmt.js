@@ -266,6 +266,7 @@ window.renderSalesView = () => {
     return '<div style="max-width:1100px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<h2 style="margin:0;">Takings & KPIs</h2>' +
+            '<button onclick="window.showFoodBevSplit()" class="btn btn-outline" style="font-size:12px;">🍱🍶 Food vs Bev Split</button>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
                 '<button onclick="window.openAiDepletion()" class="btn btn-purple">✨ EOD Depletion</button>' +
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
@@ -649,6 +650,143 @@ window._confirmTaskLog = (i, staff, mode) => {
 window.delTask = (i) => { if(confirm('Delete this task?')) { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); }};
 
 // --- 4. COMPLIANCE ---
+
+// =============================================================================
+// SHIFT CHECKLISTS — Opening / Pre-Service / Closing
+// =============================================================================
+window.renderShiftChecklists = () => {
+    const hour = new Date().getHours();
+    const shiftType = hour < 14 ? 'opening' : hour < 20 ? 'preservice' : 'closing';
+    const shiftLabel = { opening:'Opening', preservice:'Pre-Service', closing:'Closing' }[shiftType];
+    const shiftColor = { opening:'var(--blue)', preservice:'var(--orange)', closing:'var(--purple)' }[shiftType];
+
+    const defaultLists = {
+        opening: [
+            'Check & sign fridge/freezer temps',
+            'Check all equipment is operational',
+            'Check bar stock levels against PAR',
+            'Float count and till setup',
+            'Check reservations and covers for service',
+            'Brief FOH team on specials and 86s',
+            'Check cleanliness of all areas',
+            'Check toilets and restock supplies'
+        ],
+        preservice: [
+            'Final mise en place check',
+            'Candles and music levels set',
+            'POS system tested and ready',
+            'Staff briefed on allergens for tonight',
+            'Ice bins filled',
+            'Fridges and speed rails stocked',
+            'Garnishes prepped',
+            'Communication with kitchen confirmed'
+        ],
+        closing: [
+            'All food stored correctly — FIFO checked',
+            'Fridge and freezer temps logged',
+            'Bar cleaned down and restocked',
+            'Till counted and reconciled with takings',
+            'Wastage logged',
+            'All equipment turned off / secured',
+            'Doors and windows locked',
+            'Handover notes completed'
+        ]
+    };
+
+    const allLists = window.shiftChecklistItems || defaultLists;
+    if (!window.shiftChecklistItems) window.shiftChecklistItems = defaultLists;
+
+    const activeList = allLists[shiftType] || [];
+    const stateKey = 'shiftCheck_' + new Date().toLocaleDateString() + '_' + shiftType;
+    window._scStateKey = stateKey;
+    window._scType = shiftType;
+    window._scLabel = shiftLabel;
+    const saved = JSON.parse(localStorage.getItem(stateKey) || '[]');
+
+    const items = activeList.map((item, i) => {
+        const checked = saved.includes(i);
+        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border);">' +
+            '<input type="checkbox" id="sc-' + i + '" ' + (checked?'checked':'') + ' onchange="window.saveShiftCheckItem(' + i + ',window._scStateKey)" style="transform:scale(1.3);flex-shrink:0;">' +
+            '<label for="sc-' + i + '" style="cursor:pointer;font-size:14px;' + (checked?'text-decoration:line-through;color:var(--text-muted);':'') + '">' + item + '</label>' +
+        '</div>';
+    }).join('');
+
+    const doneCount = saved.length;
+    const pct = activeList.length > 0 ? Math.round(doneCount/activeList.length*100) : 0;
+
+    return '<div class="card" style="border-top:5px solid ' + shiftColor + ';margin-top:30px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
+            '<h3 style="margin:0;color:' + shiftColor + ';">' + shiftLabel + ' Checklist</h3>' +
+            '<div style="text-align:right;">' +
+                '<div style="font-size:20px;font-weight:bold;color:' + (pct===100?'var(--green)':shiftColor) + ';">' + pct + '%</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + doneCount + ' / ' + activeList.length + ' done</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="background:var(--bg-main);border-radius:6px;height:6px;margin-bottom:15px;">' +
+            '<div style="background:' + (pct===100?'var(--green)':shiftColor) + ';height:100%;border-radius:6px;width:' + pct + '%;transition:width 0.3s;"></div>' +
+        '</div>' +
+        items +
+        '<div style="margin-top:15px;display:flex;gap:8px;">' +
+            '<input type="text" id="sc-staff" class="input-box" placeholder="Staff initial to sign off..." style="margin:0;flex:1;">' +
+            '<button onclick="window.signOffShiftCheck(window._scType,window._scLabel,window._scStateKey)" class="btn btn-dark" style="flex-shrink:0;">Sign Off</button>' +
+        '</div>' +
+        '<div style="margin-top:8px;display:flex;gap:8px;">' +
+            '<button onclick="window.showView(\'compliance\')" class="btn btn-outline" style="font-size:11px;flex:1;">↻ Refresh</button>' +
+            '<button onclick="window.editShiftChecklist(window._scType)" class="btn btn-outline" style="font-size:11px;flex:1;">⚙️ Edit List</button>' +
+        '</div>' +
+    '</div>';
+};
+
+window.saveShiftCheckItem = (i, key) => {
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+    const idx = saved.indexOf(i);
+    if (idx >= 0) saved.splice(idx,1); else saved.push(i);
+    localStorage.setItem(key, JSON.stringify(saved));
+};
+
+window.signOffShiftCheck = (type, label, stateKey) => {
+    const staff = document.getElementById('sc-staff') ? document.getElementById('sc-staff').value.trim() : '';
+    if (!staff) return window.showToast('Enter staff initial to sign off.','error');
+    const saved = JSON.parse(localStorage.getItem(stateKey) || '[]');
+    const total = (window.shiftChecklistItems || {})[type] ? window.shiftChecklistItems[type].length : 0;
+    window.complianceLogs.push({ type: label + ' Checklist', staff, time: new Date().toLocaleString(), pct: total > 0 ? Math.round(saved.length/total*100) : 0 });
+    window.saveToDisk();
+    window.showToast(label + ' checklist signed off!');
+    window.showView('compliance');
+};
+
+window.editShiftChecklist = (type) => {
+    if (!window.shiftChecklistItems) window.shiftChecklistItems = {};
+    const items = window.shiftChecklistItems[type] || [];
+    const label = { opening:'Opening', preservice:'Pre-Service', closing:'Closing' }[type];
+    const rows = items.map((item, i) =>
+        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);">' +
+        '<span style="font-size:13px;flex:1;">' + item + '</span>' +
+        '<button onclick="window.removeShiftItem(window._scType,' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button>' +
+        '</div>'
+    ).join('');
+    const html = '<div style="max-height:40vh;overflow-y:auto;margin-bottom:15px;">' + (rows||'<p style="color:var(--text-muted);font-size:13px;">No items yet.</p>') + '</div>' +
+        '<div style="display:flex;gap:8px;">' +
+        '<input type="text" id="sc-new-item" class="input-box" placeholder="New checklist item..." style="margin:0;flex:1;">' +
+        '<button onclick="window.addShiftItem(window._scType)" class="btn btn-green">Add</button>' +
+        '</div>';
+    window.openModal('⚙️ Edit ' + label + ' Checklist', html);
+};
+
+window.addShiftItem = (type) => {
+    const val = document.getElementById('sc-new-item').value.trim();
+    if (!val) return;
+    if (!window.shiftChecklistItems) window.shiftChecklistItems = {};
+    if (!window.shiftChecklistItems[type]) window.shiftChecklistItems[type] = [];
+    window.shiftChecklistItems[type].push(val);
+    window.saveToDisk(); window.editShiftChecklist(type);
+};
+
+window.removeShiftItem = (type, i) => {
+    window.shiftChecklistItems[type].splice(i,1);
+    window.saveToDisk(); window.editShiftChecklist(type);
+};
+
 window.renderComplianceView = function() {
     const recentTemps = (window.tempLogs || []).slice(-8).reverse();
     return `<div style="max-width: 900px; margin: auto;">
@@ -689,7 +827,8 @@ window.renderComplianceView = function() {
                 <button onclick="window.editChecklists()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Edit Lists</button>
             </div>
         </div>
-        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;">
+        ${window.renderShiftChecklists()}
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px; margin-top:20px;">
             ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:20px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
         </div>
     </div>`;
@@ -1084,6 +1223,90 @@ window.saveDocEdit = (i) => {
 
 
 // --- 7. PHONEBOOK ---
+
+// =============================================================================
+// STAFF DIRECTORY
+// =============================================================================
+window.renderStaffDirectoryView = () => {
+    const staff = window.staffDirectory || [];
+    return '<div style="max-width:900px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<h2 style="margin:0;">Staff Directory</h2>' +
+            '<button onclick="window.editStaffForm()" class="btn btn-blue">+ Add Staff Member</button>' +
+        '</div>' +
+        (staff.length === 0 ?
+            '<div class="card"><p style="color:var(--text-muted);margin:0;">No staff added yet.</p></div>' :
+            '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+            '<th style="padding:12px 15px;text-align:left;">Name</th>' +
+            '<th style="padding:12px 15px;text-align:left;">Role</th>' +
+            '<th style="padding:12px 15px;text-align:left;">Contact</th>' +
+            '<th style="padding:12px 15px;text-align:left;">Status</th>' +
+            '<th style="padding:12px 15px;"></th>' +
+            '</tr></thead><tbody>' +
+            staff.map((s, i) =>
+                '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:12px 15px;"><strong>' + s.name + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + s.emergency + '</small>' : '') + '</td>' +
+                '<td style="padding:12px 15px;font-size:13px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + (s.role||'Staff') + '</span></td>' +
+                '<td style="padding:12px 15px;font-size:13px;"><a href="tel:' + (s.phone||'') + '" style="color:var(--blue);">' + (s.phone||'No phone') + '</a>' + (s.email ? '<br><a href="mailto:' + s.email + '" style="color:var(--text-muted);font-size:12px;">' + s.email + '</a>' : '') + '</td>' +
+                '<td style="padding:12px 15px;"><span style="font-size:12px;color:' + (s.status==='Active'?'var(--green)':'var(--text-muted)') + ';font-weight:bold;">' + (s.status||'Active') + '</span>' + (s.startDate ? '<br><small style="color:var(--text-muted);font-size:11px;">Since ' + s.startDate + '</small>' : '') + '</td>' +
+                '<td style="padding:12px 15px;text-align:right;">' +
+                    '<button onclick="window.editStaffForm(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;margin-right:4px;">✏️ Edit</button>' +
+                    '<button onclick="window.delStaff(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button>' +
+                '</td>' +
+                '</tr>'
+            ).join('') +
+            '</tbody></table></div>'
+        ) +
+    '</div>';
+};
+
+window.editStaffForm = (idx) => {
+    const s = idx !== undefined ? (window.staffDirectory||[])[idx] : { name:'', role:'FOH', phone:'', email:'', emergency:'', status:'Active', startDate:'', notes:'' };
+    const isEdit = idx !== undefined;
+    const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Full Name</label><input type="text" id="sd-name" class="input-box" value="' + (s.name||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Role</label><select id="sd-role" class="input-box" style="margin:0;"><option ' + (s.role==='FOH'?'selected':'') + '>FOH</option><option ' + (s.role==='BOH'?'selected':'') + '>BOH</option><option ' + (s.role==='Bar'?'selected':'') + '>Bar</option><option ' + (s.role==='Manager'?'selected':'') + '>Manager</option><option ' + (s.role==='Kitchen Hand'?'selected':'') + '>Kitchen Hand</option></select></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Phone</label><input type="text" id="sd-phone" class="input-box" value="' + (s.phone||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Email</label><input type="text" id="sd-email" class="input-box" value="' + (s.email||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Emergency Contact</label><input type="text" id="sd-emerg" class="input-box" value="' + (s.emergency||'') + '" placeholder="Name & number" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Start Date</label><input type="date" id="sd-start" class="input-box" value="' + (s.startDate||'') + '" style="margin:0;"></div>' +
+        '</div>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Status</label>' +
+        '<select id="sd-status" class="input-box"><option ' + (s.status==='Active'?'selected':'') + '>Active</option><option ' + (s.status==='Inactive'?'selected':'') + '>Inactive</option><option ' + (s.status==='Casual'?'selected':'') + '>Casual</option></select>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
+        '<textarea id="sd-notes" class="input-box" style="height:60px;margin-bottom:15px;">' + (s.notes||'') + '</textarea>' +
+        '<button onclick="window.saveStaff(' + (isEdit?idx:'undefined') + ')" class="btn btn-green" style="width:100%;">' + (isEdit?'Save Changes':'Add Staff Member') + '</button>';
+    window.openModal(isEdit ? '✏️ Edit — ' + s.name : '+ New Staff Member', html);
+};
+
+window.saveStaff = (idx) => {
+    const obj = {
+        name: document.getElementById('sd-name').value.trim(),
+        role: document.getElementById('sd-role').value,
+        phone: document.getElementById('sd-phone').value.trim(),
+        email: document.getElementById('sd-email').value.trim(),
+        emergency: document.getElementById('sd-emerg').value.trim(),
+        startDate: document.getElementById('sd-start').value,
+        status: document.getElementById('sd-status').value,
+        notes: document.getElementById('sd-notes').value.trim()
+    };
+    if (!obj.name) return window.showToast('Name required.','error');
+    if (!window.staffDirectory) window.staffDirectory = [];
+    if (idx !== undefined && idx !== 'undefined') window.staffDirectory[idx] = obj;
+    else window.staffDirectory.push(obj);
+    window.saveToDisk(); window.closeModal(); window.showView('staff-directory');
+    window.showToast('Staff member saved!');
+};
+
+window.delStaff = (i) => {
+    if (confirm('Remove this staff member?')) {
+        window.staffDirectory.splice(i,1);
+        window.saveToDisk(); window.showView('staff-directory');
+    }
+};
+
 window.renderPhoneBookView = function() { 
     const mergedContacts = [...(window.phoneBook || []).map((c, i) => ({ ...c, originalIndex: i, isSupplier: false })), ...(window.suppliers || []).map(s => ({ name: s.name, category: 'Supplier', phone: s.contact || 'No email/phone', notes: `Order Cutoff: ${s.cutoff}`, isSupplier: true }))].sort((a, b) => a.name.localeCompare(b.name));
     return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Master Phone Book</h2><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:15px;">Name & Category</th><th style="padding:15px;">Contact Detail</th><th style="padding:15px;">Notes</th><th style="text-align:right; padding-right:15px;">Action</th></tr></thead><tbody>${mergedContacts.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">No contacts.</td></tr>' : mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px;"><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.category}</small></td><td style="padding:15px;">${c.phone.includes('@') ? `<a href="mailto:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>` : `<a href="tel:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>`}</td><td style="padding:15px; color:var(--brand-accent); font-size:13px; white-space:pre-wrap;">${c.notes || ''}</td><td style="text-align:right; padding-right:15px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('')}</tbody></table></div>`; 
@@ -1246,6 +1469,81 @@ window.printWeeklySummary = () => {
     win.document.close(); window.closeModal();
 };
 
+
+// =============================================================================
+// COVERS TRACKER
+// Log covers (guests) per service, calculate spend per head
+// =============================================================================
+window.logCoversForm = () => {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2,'0');
+    const mm = String(today.getMonth()+1).padStart(2,'0');
+    const yyyy = today.getFullYear();
+    const todayStr = dd+'/'+mm+'/'+yyyy;
+    const existing = (window.salesData||[]).find(s=>s.date===todayStr);
+    const html = '<label style="font-size:11px;color:var(--text-muted);">Date</label>' +
+        '<input type="text" id="cov-date" class="input-box" value="'+todayStr+'" placeholder="DD/MM/YYYY">' +
+        '<label style="font-size:11px;color:var(--text-muted);">Service</label>' +
+        '<select id="cov-service" class="input-box"><option>Dinner</option><option>Lunch</option><option>Bar</option><option>Event</option></select>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Number of Covers (Guests)</label>' +
+        '<input type="number" id="cov-count" class="input-box" value="'+(existing&&existing.covers||'')+'" placeholder="e.g. 45">' +
+        '<button onclick="window.saveCovers()" class="btn btn-green" style="width:100%;margin-top:5px;">Save Covers</button>';
+    window.openModal('👥 Log Covers', html);
+};
+
+window.saveCovers = () => {
+    const date = document.getElementById('cov-date').value.trim();
+    const count = parseInt(document.getElementById('cov-count').value) || 0;
+    const service = document.getElementById('cov-service').value;
+    if (!date || !count) return window.showToast('Date and covers required.','error');
+    const idx = (window.salesData||[]).findIndex(s=>s.date===date);
+    if (idx >= 0) {
+        window.salesData[idx].covers = count;
+        window.salesData[idx].service = service;
+    } else {
+        if (!window.salesData) window.salesData = [];
+        window.salesData.push({ date, covers: count, service, total: 0 });
+    }
+    window.saveToDisk(); window.closeModal(); window.showView('sales');
+    window.showToast('Covers logged — '+count+' guests!');
+};
+
+
+// =============================================================================
+// FOOD vs BEVERAGE COST ANALYSIS
+// =============================================================================
+window.showFoodBevSplit = () => {
+    const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&!r.archived);
+    const foodRecipes = recipes.filter(r => {
+        const cat = (r.category||r.station||'').toLowerCase();
+        return !cat.includes('bar') && !cat.includes('cocktail') && !cat.includes('beverage') && !cat.includes('drink');
+    });
+    const bevRecipes = recipes.filter(r => {
+        const cat = (r.category||r.station||'').toLowerCase();
+        return cat.includes('bar') || cat.includes('cocktail') || cat.includes('beverage') || cat.includes('drink');
+    });
+    const avgGp = arr => arr.length > 0 ? (arr.reduce((s,r)=>s+r.gp,0)/arr.length).toFixed(1) : 'N/A';
+    const avgCost = arr => arr.length > 0 ? (arr.reduce((s,r)=>s+(r.cost||0),0)/arr.length).toFixed(2) : 'N/A';
+    const avgPrice = arr => arr.length > 0 ? (arr.reduce((s,r)=>s+(r.price||0),0)/arr.length).toFixed(2) : 'N/A';
+    const fGp = avgGp(foodRecipes), bGp = avgGp(bevRecipes);
+    const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">' +
+        '<div class="card" style="border-top:4px solid var(--orange);text-align:center;">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">🍱 Food</div>' +
+            '<div style="font-size:36px;font-weight:bold;color:' + (fGp>=67?'var(--green)':'var(--red)') + ';">' + fGp + '%</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);">Avg GP · ' + foodRecipes.length + ' recipes</div>' +
+            '<div style="font-size:12px;margin-top:8px;">Avg Cost: <strong>$' + avgCost(foodRecipes) + '</strong> · Avg Sell: <strong>$' + avgPrice(foodRecipes) + '</strong></div>' +
+        '</div>' +
+        '<div class="card" style="border-top:4px solid var(--blue);text-align:center;">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">🍶 Beverage</div>' +
+            '<div style="font-size:36px;font-weight:bold;color:' + (bGp>=67?'var(--green)':'var(--red)') + ';">' + bGp + '%</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);">Avg GP · ' + bevRecipes.length + ' recipes</div>' +
+            '<div style="font-size:12px;margin-top:8px;">Avg Cost: <strong>$' + avgCost(bevRecipes) + '</strong> · Avg Sell: <strong>$' + avgPrice(bevRecipes) + '</strong></div>' +
+        '</div>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--text-muted);margin:0;">Items are categorised by station/category. Assign Bar/Cocktail/Beverage categories for accurate split.</p>';
+    window.openModal('📊 Food vs Beverage Cost Split', html);
+};
+
 window.renderManagerHub = () => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
         .then(res => res.json())
@@ -1293,6 +1591,16 @@ window.renderManagerHub = () => {
     // Simple COGS Estimate metric
     let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
 
+
+    // Today's takings
+    const parseDate = (str) => { const m = str && str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])) : new Date(str); };
+    const todayDateStr = today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
+    const todaySales = (window.salesData||[]).find(s => s.date === todayDateStr);
+    const todayTotal = todaySales ? Number(todaySales.total||0) : null;
+    const todayTakingsStr = todayTotal !== null ? '$' + todayTotal.toLocaleString('en-AU',{minimumFractionDigits:0,maximumFractionDigits:0}) : 'Not logged';
+    const todayTakingsMeta = todayTotal !== null ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">EFTPOS: $'+(todaySales.eftpos||0)+' · Cash: $'+(todaySales.cash||0)+(todaySales.wages?(' · Wages: '+((todaySales.wages/todaySales.total)*100).toFixed(0)+'%'):'')+'</div>' : '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">No takings entry for today</div>';
+    const todayTakingsBtn = todayTotal === null ? '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="width:100%;font-size:13px;padding:8px;">+ Log Today\'s Takings</button>' : '<button onclick="window.manualTakingsForm(todaySales.date)" class="btn btn-outline" style="width:100%;font-size:13px;padding:8px;">✏️ Edit Today\'s Entry</button>';
+
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
             <h2 style="margin:0; font-size:28px;">Command Center</h2>
@@ -1308,15 +1616,25 @@ window.renderManagerHub = () => {
             <button onclick="window.newHandoverForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">📝 Handover</button>
             <button onclick="window.showView('incidents')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--red); color:var(--red);">⚠️ Incident</button>
             <button onclick="window.manualTakingsForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">💰 Takings</button>
+            <button onclick="window.logCoversForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">👥 Covers</button>
             <button onclick="window.openAiDepletion()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">✨ EOD</button>
             <button onclick="window.generateWeeklySummary()" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">📊 Weekly Summary</button>
         </div>
     
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
-        <div class="card" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; border:none; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
-            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.9;">🌤️ Hobart Weather</h3>
-            <div id="hobart-temp" style="font-size:48px; font-weight:bold; margin:10px 0;">Loading...</div>
-            <p id="hobart-desc" style="margin:0; opacity:0.8; font-size:13px;">Connecting to satellite...</p>
+        <div class="card" style="border-top:5px solid var(--green); padding:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">💰 Today's Takings</div>
+                    <div style="font-size:36px;font-weight:bold;color:var(--green);margin-top:4px;">${todayTakingsStr}</div>
+                    ${todayTakingsMeta}
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🌤️ Hobart</div>
+                    <div id="hobart-temp" style="font-size:20px;font-weight:bold;color:var(--blue);margin-top:4px;">--°C</div>
+                </div>
+            </div>
+            ${todayTakingsBtn}
         </div>
         <div class="card" style="background: rgba(139, 92, 246, 0.1); border:1px solid rgba(139, 92, 246, 0.3);">
             <h3 style="margin-top:0; color:var(--purple); display:flex; justify-content:space-between;"><span>🚨 Margin Alerts</span> <span style="font-size:12px; background:var(--purple); color:white; padding:2px 8px; border-radius:10px;">${marginAlerts.length}</span></h3>

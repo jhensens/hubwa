@@ -1373,6 +1373,103 @@ window.delRecipe = (id) => {
 };
 
 // =============================================================================
+
+// =============================================================================
+// PRICE RISE ALERTS
+// Shows items whose price changed in the last invoice run
+// =============================================================================
+window.renderPriceAlertsView = () => {
+    const items = (window.inventoryItems||[]).filter(i => !i.archived && i.history && i.history.length >= 2);
+    const alerts = [];
+
+    items.forEach(inv => {
+        const hist = inv.history.slice().sort((a,b) => new Date(a.date)-new Date(b.date));
+        const latest = hist[hist.length-1];
+        const prev = hist[hist.length-2];
+        if (latest && prev && latest.price > 0 && prev.price > 0 && latest.price !== prev.price) {
+            const changePct = ((latest.price - prev.price) / prev.price * 100);
+            alerts.push({
+                name: inv.name,
+                id: inv.id,
+                prevPrice: prev.price,
+                newPrice: latest.price,
+                changePct,
+                date: latest.date,
+                supplier: latest.supplier || inv.supplier || 'Unknown'
+            });
+        }
+    });
+
+    alerts.sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+
+    // Check affected recipes
+    const getAffectedRecipes = (invId) => {
+        return (window.recipes||[]).filter(r => r.type==='Menu' && !r.archived &&
+            (r.ingredients||[]).some(ing => ing.type==='inv' && ing.ref===invId)
+        ).map(r => r.name).slice(0,3);
+    };
+
+    if (alerts.length === 0) {
+        return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;">' +
+            '<div style="font-size:48px;margin-bottom:10px;">✅</div>' +
+            '<h3 style="color:var(--green);margin:0;">No price changes detected</h3>' +
+            '<p style="color:var(--text-muted);font-size:13px;margin-top:8px;">Run more invoices through the Invoice Ripper to build price history.</p>' +
+        '</div></div>';
+    }
+
+    const rises = alerts.filter(a => a.changePct > 0);
+    const falls = alerts.filter(a => a.changePct < 0);
+
+    const rows = alerts.map(a => {
+        const isRise = a.changePct > 0;
+        const color = isRise ? 'var(--red)' : 'var(--green)';
+        const affected = getAffectedRecipes(a.id);
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:12px 15px;"><strong>' + a.name + '</strong><br><small style="color:var(--text-muted);">' + a.supplier + ' · ' + a.date + '</small></td>' +
+            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Number(a.prevPrice).toFixed(2) + '</td>' +
+            '<td style="padding:12px 15px;font-weight:bold;">$' + Number(a.newPrice).toFixed(2) + '</td>' +
+            '<td style="padding:12px 15px;font-weight:bold;color:' + color + ';">' + (isRise?'▲':'▼') + ' ' + Math.abs(a.changePct).toFixed(1) + '%</td>' +
+            '<td style="padding:12px 15px;font-size:12px;color:var(--text-muted);">' + (affected.length > 0 ? affected.join(', ') + (affected.length===3?'...':'') : 'None') + '</td>' +
+            '<td style="padding:12px 15px;text-align:right;"><button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Check GP</button></td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+            '<div><h2 style="margin:0;">Price Change Alerts</h2>' +
+            '<small style="color:var(--text-muted);">Changes detected from invoice history. Check affected recipes for GP impact.</small></div>' +
+            '<button onclick="window.showView(\'invoice\')" class="btn btn-outline" style="font-size:12px;">🧾 Run Invoice</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:20px;">' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--red);">' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--red);">' + rises.length + '</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);">Price Rises</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--green);">' + falls.length + '</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);">Price Drops</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--orange);">' + alerts.length + '</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);">Total Changes</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                    '<th style="padding:10px 15px;text-align:left;">Item</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Was</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Now</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Change</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Affects Recipes</th>' +
+                    '<th style="padding:10px 15px;"></th>' +
+                '</tr></thead>' +
+                '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+        '</div>' +
+    '</div>';
+};
+
 // MARGIN HEALTH VIEW
 // =============================================================================
 window.renderMarginView = () => {
@@ -1773,7 +1870,10 @@ window.renderWastageView = () => {
     ).join('');
     return `
     <div style="max-width: 800px; margin: auto;">
-        <h2 style="margin-top:0;">Wastage Tracker</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h2 style="margin:0;">Wastage Tracker</h2>
+            <button onclick="window.showWastageReport()" class="btn btn-outline" style="font-size:12px;">📊 Wastage Report</button>
+        </div>
         <div class="card" style="border-top:5px solid var(--orange);">
             <div style="margin-bottom:15px;">
                 <label style="font-size:11px; color:var(--text-muted);">Select Live Inventory Item</label>
@@ -1809,6 +1909,67 @@ window.renderWastageView = () => {
             </div>`
         ).join('')}
     </div>`;
+};
+
+
+// =============================================================================
+// WASTAGE REPORT
+// =============================================================================
+window.showWastageReport = () => {
+    const logs = window.wastageLogs || [];
+    if (logs.length === 0) return window.showToast('No wastage logged yet.','error');
+
+    // Last 30 days
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+    const recent = logs.filter(w => new Date(w.time) >= cutoff);
+    const totalVal = recent.reduce((s,w) => s + Number(w.value||0), 0);
+
+    // By item
+    const byItem = {};
+    recent.forEach(w => {
+        if (!byItem[w.itemName]) byItem[w.itemName] = { count:0, value:0, category: w.category||'Uncategorised' };
+        byItem[w.itemName].count++;
+        byItem[w.itemName].value += Number(w.value||0);
+    });
+    const topItems = Object.entries(byItem).sort((a,b)=>b[1].value-a[1].value).slice(0,10);
+
+    // By category (food vs bev)
+    const byReason = {};
+    recent.forEach(w => {
+        const r = w.reason || 'Unknown';
+        if (!byReason[r]) byReason[r] = 0;
+        byReason[r] += Number(w.value||0);
+    });
+    const topReasons = Object.entries(byReason).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+    const rows = topItems.map(([name, d]) =>
+        '<tr style="border-bottom:1px solid var(--border);">' +
+        '<td style="padding:8px 12px;">' + name + '</td>' +
+        '<td style="padding:8px 12px;text-align:center;">' + d.count + '</td>' +
+        '<td style="padding:8px 12px;text-align:right;color:var(--red);font-weight:bold;">$' + d.value.toFixed(2) + '</td>' +
+        '<td style="padding:8px 12px;"><div style="background:var(--red);height:6px;border-radius:3px;width:' + Math.min(100,(d.value/totalVal*100)).toFixed(0) + '%;opacity:0.7;"></div></td>' +
+        '</tr>'
+    ).join('');
+
+    const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--red);">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Lost (30 days)</div>' +
+            '<div style="font-size:32px;font-weight:bold;color:var(--red);">$' + totalVal.toFixed(2) + '</div>' +
+        '</div>' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Incidents (30 days)</div>' +
+            '<div style="font-size:32px;font-weight:bold;color:var(--orange);">' + recent.length + '</div>' +
+        '</div>' +
+    '</div>' +
+    '<h4 style="margin:0 0 10px 0;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Top Wasted Items</h4>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">' +
+    '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+    '<th style="padding:8px 12px;text-align:left;">Item</th><th style="padding:8px 12px;text-align:center;">Count</th><th style="padding:8px 12px;text-align:right;">Value Lost</th><th style="padding:8px 12px;">Bar</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<h4 style="margin:0 0 10px 0;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Top Reasons</h4>' +
+    topReasons.map(([r,v]) => '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span>' + r + '</span><span style="color:var(--red);font-weight:bold;">$' + v.toFixed(2) + '</span></div>').join('');
+
+    window.openModal('🗑️ Wastage Report — Last 30 Days', html);
 };
 
 window.logWastage = () => {

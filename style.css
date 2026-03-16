@@ -175,14 +175,22 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 }
 
 /* Mobile & Tablet Optimizations */
+.mobile-menu-btn { display: none; }
+
 @media (max-width: 768px) {
     .app-container { flex-direction: column; }
-    .sidebar { width: 100%; max-height: 180px; border-right: none; border-bottom: 1px solid var(--border); padding: 10px; z-index: 20; }
-    .nav-group, .sidebar-footer { display: flex; overflow-x: auto; gap: 8px; padding: 5px; -webkit-overflow-scrolling: touch; border: none; margin: 0; }
-    .sidebar-footer { padding-top: 5px; border-top: 1px solid var(--border); }
-    .nav-item { white-space: nowrap; margin: 0; font-size: 13px; padding: 8px 14px; }
-    .sidebar-category { display: none; }
+    .sidebar { width: 100%; max-height: 60px; border-right: none; border-bottom: 1px solid var(--border); z-index: 20; overflow: hidden; flex-direction: row; align-items: center; padding: 0 10px; }
+    .sidebar.mobile-open { max-height: 100vh; flex-direction: column; align-items: stretch; overflow-y: auto; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 100; }
     .brand-header { display: none; }
+    .sidebar-scroll { display: none; }
+    .sidebar.mobile-open .sidebar-scroll { display: block; }
+    .sidebar-footer { display: none; }
+    .sidebar.mobile-open .sidebar-footer { display: block; }
+    .nav-section-header { padding: 10px 15px; font-size: 12px; }
+    .nav-item { font-size: 14px; padding: 10px 15px; }
+    .mobile-menu-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; color: var(--text-main); cursor: pointer; padding: 10px 0; font-size: 14px; font-weight: 600; }
+    .card { padding: 15px; }
+    table { font-size: 12px; }
     .content-area { padding: 15px; }
     .main-header { padding: 15px; }
     table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
