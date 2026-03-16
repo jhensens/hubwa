@@ -1783,6 +1783,180 @@ window.renderMenuEngineeringView = () => {
 // 5. AUTO-ORDER / PREP LIST
 // =============================================================================
 
+
+// =============================================================================
+// AI ORDER SUGGESTER
+// Smart quantities based on depletion history + PAR + delivery schedule
+// =============================================================================
+window.openAiOrderSuggester = async () => {
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    const statusDiv = document.getElementById('ai-order-status');
+    const resultsDiv = document.getElementById('ai-order-results');
+    if (!statusDiv) return;
+
+    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Analysing stock levels and depletion history...</div>';
+    resultsDiv.innerHTML = '';
+
+    const isWeekend = [0,5,6].includes(new Date().getDay());
+    const today = new Date();
+    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][today.getDay()];
+
+    // Build item context for AI
+    const items = (window.inventoryItems||[]).filter(i => !i.archived);
+    const belowPar = items.filter(i => {
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return i.stock < par;
+    });
+
+    // Analyse depletion history per item
+    const depHistory = window.depletionLogs || [];
+    const getAvgDepletion = (itemId) => {
+        const allDepletes = depHistory.flatMap(log =>
+            (log.changes||[]).filter(c => c.id === itemId).map(c => Math.abs(c.delta||0))
+        );
+        return allDepletes.length > 0 ? allDepletes.reduce((a,b)=>a+b,0)/allDepletes.length : null;
+    };
+
+    // Build supplier context
+    const suppliers = window.suppliers || [];
+    const supContext = suppliers.map(s =>
+        s.name + ': delivers on ' + (s.deliveryDays||[]).join('/') + ', min spend $' + (s.minSpend||0) + ', cutoff ' + (s.cutoff||'no cutoff')
+    ).join(' | ');
+
+    // Build items needing order with depletion context
+    const itemContext = belowPar.map(i => {
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        const deficit = par - i.stock;
+        const avgDep = getAvgDepletion(i.id);
+        return `${i.name} (${i.supplier||'unassigned'}): stock=${Number(i.stock).toFixed(1)} ${i.buyUnit}, PAR=${par}, deficit=${deficit.toFixed(1)}, avg daily depletion=${avgDep ? avgDep.toFixed(2) : 'unknown'}`;
+    }).join('\n');
+
+    if (belowPar.length === 0) {
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ All inventory is at or above PAR. Nothing to order right now.</div>';
+        return;
+    }
+
+    const prompt = `You are a smart ordering assistant for Bar Wa Izakaya, a Japanese izakaya bar in Hobart, Tasmania.
+
+Today is ${today.toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long'})} (${dayName}).
+
+SUPPLIER DELIVERY SCHEDULE:
+${supContext || 'No supplier schedule set'}
+
+ITEMS BELOW PAR (need ordering):
+${itemContext}
+
+For each item, suggest:
+1. How much to order (considering: deficit, avg depletion rate, upcoming deliveries, whether to order extra buffer)
+2. Which day to place the order (based on delivery days)
+3. A brief reason for your recommendation
+
+Return ONLY a JSON array:
+[{
+  "itemName": "string",
+  "supplier": "string",
+  "currentStock": number,
+  "suggestedOrder": number,
+  "unit": "string",
+  "orderDay": "string",
+  "urgency": "high|medium|low",
+  "reason": "string (max 15 words)"
+}]
+
+Only include items that genuinely need ordering. Be practical — don't over-order.`;
+
+    try {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: 'application/json' }
+            })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+        const suggestions = JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim());
+
+        window._aiOrderSuggestions = suggestions;
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ AI analysis complete — ' + suggestions.length + ' items reviewed</div>';
+
+        // Group by supplier
+        const bySup = {};
+        suggestions.forEach(s => {
+            if (!bySup[s.supplier]) bySup[s.supplier] = [];
+            bySup[s.supplier].push(s);
+        });
+
+        const urgencyColor = { high: 'var(--red)', medium: 'var(--orange)', low: 'var(--text-muted)' };
+        const urgencyLabel = { high: '🔴 Urgent', medium: '🟡 Soon', low: '🟢 Low' };
+
+        const html = Object.entries(bySup).map(([sup, items]) => { window._aoSup = sup;
+            const rows = items.map(item =>
+                '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:10px 12px;"><strong>' + item.itemName + '</strong><br>' +
+                    '<small style="color:var(--text-muted);">Currently: ' + Number(item.currentStock).toFixed(1) + ' ' + item.unit + '</small></td>' +
+                '<td style="padding:10px 12px;font-weight:bold;font-size:16px;color:var(--blue);">' + Number(item.suggestedOrder).toFixed(1) + ' <small style="font-size:12px;color:var(--text-muted);">' + item.unit + '</small></td>' +
+                '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);">' + (item.orderDay||'ASAP') + '</td>' +
+                '<td style="padding:10px 12px;"><span style="font-size:11px;color:' + (urgencyColor[item.urgency]||'var(--text-muted)') + ';">' + (urgencyLabel[item.urgency]||'') + '</span></td>' +
+                '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);font-style:italic;">' + item.reason + '</td>' +
+                '</tr>'
+            ).join('');
+
+            return '<div class="card" style="border-top:5px solid var(--purple);margin-bottom:15px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
+                    '<h3 style="margin:0;">' + sup + '</h3>' +
+                    '<button onclick="window.generateAiOrderEmail(window._aoSup)" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
+                '</div>' +
+                '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+                '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                '<th style="padding:8px 12px;text-align:left;">Item</th><th style="padding:8px 12px;">Suggest Order</th><th style="padding:8px 12px;">Order Day</th><th style="padding:8px 12px;">Urgency</th><th style="padding:8px 12px;">Reason</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody></table>' +
+            '</div>';
+        }).join('');
+
+        resultsDiv.innerHTML = html;
+
+    } catch(e) {
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">AI Error: ' + e.message + '</div>';
+    }
+};
+
+window.generateAiOrderEmail = (supName) => {
+    const suggestions = (window._aiOrderSuggestions||[]).filter(s=>s.supplier===supName);
+    if (suggestions.length === 0) return window.showToast('No suggestions for ' + supName, 'error');
+
+    const lines = suggestions.map(s => '- ' + Number(s.suggestedOrder).toFixed(1) + 'x ' + s.unit + ' of ' + s.itemName).join('\n');
+    const text = 'Hi ' + supName + ',\n\nCould I please place an order for the following:\n\n' + lines + '\n\nThanks,\nBar Wa Izakaya';
+
+    // Log the order
+    if (!window.orderHistory) window.orderHistory = [];
+    window.orderHistory.push({
+        date: new Date().toLocaleDateString('en-AU'),
+        supplier: supName,
+        estSpend: suggestions.reduce((sum,s)=>sum+(Number(s.suggestedOrder)*((window.inventoryItems||[]).find(i=>i.name===s.itemName)?.price||0)),0),
+        items: suggestions.map(s=>({ name:s.itemName, qty:s.suggestedOrder, unit:s.unit, price:(window.inventoryItems||[]).find(i=>i.name===s.itemName)?.price||0 })),
+        aiGenerated: true
+    });
+    window.saveToDisk();
+
+    navigator.clipboard.writeText(text).then(() => window.showToast('AI order email copied for ' + supName + '!'));
+};
+
+window.renderAiOrderView = () => {
+    return '<div style="max-width:900px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">✨ AI Order Suggester</h2>' +
+            '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Analyses stock levels, depletion history, and delivery schedules to suggest smart order quantities.</p></div>' +
+            '<button onclick="window.openAiOrderSuggester()" class="btn btn-purple" style="font-size:16px;padding:12px 24px;">✨ Run AI Analysis</button>' +
+        '</div>' +
+        '<div id="ai-order-status" style="margin-bottom:15px;"></div>' +
+        '<div id="ai-order-results"></div>' +
+    '</div>';
+};
+
 window.renderPrepListView = () => {
     const isWeekend = [0, 5, 6].includes(new Date().getDay());
     const currentDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
