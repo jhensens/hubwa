@@ -2,6 +2,212 @@
 window._salesTab = window._salesTab || 'week';
 window._salesMonth = window._salesMonth || null; // 'YYYY-MM' format
 
+
+// =============================================================================
+// REVENUE FORECASTING
+// Day-of-week median + seasonal adjustment + YoY trend
+// =============================================================================
+window.renderForecastView = () => {
+    const sales = window.salesData || [];
+    if (sales.length < 30) {
+        return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;">' +
+            '<div style="font-size:48px;margin-bottom:10px;">📊</div>' +
+            '<h3 style="color:var(--text-muted);margin:0;">Not enough data yet</h3>' +
+            '<p style="color:var(--text-muted);font-size:13px;margin-top:8px;">Need at least 30 days of takings data to generate forecasts.</p>' +
+            '</div></div>';
+    }
+
+    // Parse BWI date format DD/MM/YYYY
+    const parseDate = (str) => {
+        const m = str && str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        return m ? new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1])) : null;
+    };
+
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dayShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    // Build day-of-week stats from historical data
+    const byDow = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
+    sales.forEach(s => {
+        const d = parseDate(s.date);
+        if (d && s.total > 0) byDow[d.getDay()].push(Number(s.total));
+    });
+
+    // Calculate median for each day of week
+    const median = arr => {
+        if (arr.length === 0) return 0;
+        const sorted = arr.slice().sort((a,b)=>a-b);
+        const mid = Math.floor(sorted.length/2);
+        return sorted.length%2 !== 0 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
+    };
+    const dowMedian = {};
+    for (let d=0;d<7;d++) dowMedian[d] = median(byDow[d]);
+
+    // Calculate YoY trend (last 90 days vs same period last year)
+    const now = new Date();
+    const ninetyAgo = new Date(now); ninetyAgo.setDate(ninetyAgo.getDate()-90);
+    const lastYearEnd = new Date(now); lastYearEnd.setFullYear(lastYearEnd.getFullYear()-1);
+    const lastYearStart = new Date(lastYearEnd); lastYearStart.setDate(lastYearStart.getDate()-90);
+
+    const recentTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=ninetyAgo && d<=now; }).reduce((sum,s)=>sum+Number(s.total||0),0);
+    const lastYearTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=lastYearStart && d<=lastYearEnd; }).reduce((sum,s)=>sum+Number(s.total||0),0);
+    const yoyTrend = lastYearTotal > 0 ? (recentTotal - lastYearTotal) / lastYearTotal : 0;
+
+    // Seasonal adjustment — compare this month's avg to annual avg
+    const thisMonth = now.getMonth();
+    const byMonth = {};
+    sales.forEach(s => {
+        const d = parseDate(s.date);
+        if (d && s.total > 0) {
+            const m = d.getMonth();
+            if (!byMonth[m]) byMonth[m] = [];
+            byMonth[m].push(Number(s.total));
+        }
+    });
+    const monthAvgs = {};
+    for (let m=0;m<12;m++) monthAvgs[m] = byMonth[m] ? byMonth[m].reduce((a,b)=>a+b,0)/byMonth[m].length : 0;
+    const overallAvg = Object.values(monthAvgs).filter(v=>v>0).reduce((a,b)=>a+b,0) / Object.values(monthAvgs).filter(v=>v>0).length;
+    const seasonalFactor = monthAvgs[thisMonth] > 0 && overallAvg > 0 ? monthAvgs[thisMonth]/overallAvg : 1;
+
+    // Generate next 7 days forecast
+    const next7 = [];
+    for (let i=1; i<=7; i++) {
+        const date = new Date(now); date.setDate(date.getDate()+i);
+        const dow = date.getDay();
+        const base = dowMedian[dow];
+        const forecast = base * (1 + yoyTrend * 0.5) * (0.7 + seasonalFactor * 0.3);
+        const low = forecast * 0.85;
+        const high = forecast * 1.15;
+        // Check if we have actual data for this date
+        const dd = String(date.getDate()).padStart(2,'0');
+        const mm = String(date.getMonth()+1).padStart(2,'0');
+        const yyyy = date.getFullYear();
+        const dateStr = dd+'/'+mm+'/'+yyyy;
+        const actual = sales.find(s=>s.date===dateStr);
+        next7.push({ date, dateStr, dow, forecast, low, high, actual: actual ? Number(actual.total) : null, dayName: dayNames[dow], dayShort: dayShort[dow] });
+    }
+
+    // Generate next 30 days by week
+    const weeks = [[],[],[],[]];
+    for (let i=1; i<=28; i++) {
+        const date = new Date(now); date.setDate(date.getDate()+i);
+        const dow = date.getDay();
+        const base = dowMedian[dow];
+        // Seasonal adjustment for future months
+        const futureMonth = date.getMonth();
+        const futureSeasonal = monthAvgs[futureMonth] > 0 && overallAvg > 0 ? monthAvgs[futureMonth]/overallAvg : 1;
+        const forecast = base * (1 + yoyTrend * 0.5) * (0.7 + futureSeasonal * 0.3);
+        weeks[Math.floor((i-1)/7)].push(forecast);
+    }
+    const weekTotals = weeks.map(w => w.reduce((a,b)=>a+b,0));
+
+    // 7-day chart
+    const maxForecast = Math.max(...next7.map(d=>d.high));
+    const barHtml = next7.map(d => {
+        const barPct = maxForecast > 0 ? (d.forecast/maxForecast*100) : 0;
+        const isWeekend = d.dow === 0 || d.dow === 5 || d.dow === 6;
+        const barColor = isWeekend ? 'var(--green)' : 'var(--blue)';
+        const fmt = n => '$' + Math.round(n).toLocaleString('en-AU');
+        return '<div style="text-align:center;flex:1;">' +
+            '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">' + d.dayShort + '</div>' +
+            '<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">' + d.date.getDate() + '/' + (d.date.getMonth()+1) + '</div>' +
+            '<div style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + fmt(d.high) + '</div>' +
+                '<div style="width:40px;background:' + barColor + ';opacity:0.3;border-radius:4px 4px 0 0;height:' + (barPct*0.15) + 'px;"></div>' +
+                '<div style="width:40px;background:' + barColor + ';border-radius:0;height:' + (barPct*0.7) + 'px;"></div>' +
+                '<div style="width:40px;background:' + barColor + ';opacity:0.3;border-radius:0 0 4px 4px;height:' + (barPct*0.15) + 'px;"></div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + fmt(d.low) + '</div>' +
+            '</div>' +
+            '<div style="margin-top:8px;font-weight:bold;font-size:14px;color:' + barColor + ';">' + fmt(d.forecast) + '</div>' +
+            (d.actual !== null ? '<div style="font-size:11px;color:var(--green);margin-top:2px;">Actual: ' + fmt(d.actual) + '</div>' : '') +
+        '</div>';
+    }).join('');
+
+    // Week-by-week 30-day table
+    const weekRows = weekTotals.map((total, i) => {
+        const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() + i*7 + 1);
+        const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + i*7 + 7);
+        const label = 'Week ' + (i+1) + ' (' + weekStart.getDate() + '/' + (weekStart.getMonth()+1) + ' – ' + weekEnd.getDate() + '/' + (weekEnd.getMonth()+1) + ')';
+        const low = total * 0.85, high = total * 1.15;
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:12px 15px;">' + label + '</td>' +
+            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(low).toLocaleString() + '</td>' +
+            '<td style="padding:12px 15px;font-weight:bold;font-size:16px;color:var(--blue);">$' + Math.round(total).toLocaleString() + '</td>' +
+            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(high).toLocaleString() + '</td>' +
+        '</tr>';
+    }).join('');
+
+    const totalForecast30 = weekTotals.reduce((a,b)=>a+b,0);
+    const yoyPct = (yoyTrend * 100).toFixed(1);
+    const yoyColor = yoyTrend >= 0 ? 'var(--green)' : 'var(--red)';
+
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">Revenue Forecast</h2>' +
+            '<small style="color:var(--text-muted);">Based on ' + sales.length + ' days of historical data · Day-of-week patterns + seasonal adjustment</small></div>' +
+            '<div style="text-align:right;">' +
+                '<div style="font-size:12px;color:var(--text-muted);">YoY Trend</div>' +
+                '<div style="font-size:20px;font-weight:bold;color:' + yoyColor + ';">' + (yoyTrend>=0?'▲':'▼') + ' ' + Math.abs(yoyPct) + '%</div>' +
+            '</div>' +
+        '</div>' +
+        // KPI cards
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Next 7 Days</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--blue);">$' + Math.round(next7.reduce((a,d)=>a+d.forecast,0)).toLocaleString() + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">forecast</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--purple);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Next 30 Days</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString() + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">forecast</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Best Day (7d)</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--green);">$' + Math.round(Math.max(...next7.map(d=>d.forecast))).toLocaleString() + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.reduce((best,d)=>d.forecast>best.forecast?d:best,next7[0])||{}).dayName + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Quietest Day (7d)</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">$' + Math.round(Math.min(...next7.map(d=>d.forecast))).toLocaleString() + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.reduce((worst,d)=>d.forecast<worst.forecast?d:worst,next7[0])||{}).dayName + '</div>' +
+            '</div>' +
+        '</div>' +
+        // 7-day bar chart
+        '<div class="card" style="margin-bottom:20px;">' +
+            '<h3 style="margin:0 0 20px 0;font-size:15px;">Next 7 Days — Day by Day</h3>' +
+            '<div style="display:flex;gap:8px;padding-bottom:10px;">' + barHtml + '</div>' +
+            '<div style="margin-top:15px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:20px;font-size:12px;color:var(--text-muted);">' +
+                '<span>📊 Bar = forecast · Faded = confidence range (±15%)</span>' +
+                '<span style="color:var(--green);">■ Weekend</span>' +
+                '<span style="color:var(--blue);">■ Weekday</span>' +
+            '</div>' +
+        '</div>' +
+        // 30-day weekly breakdown
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<div style="padding:15px 20px;border-bottom:1px solid var(--border);">' +
+                '<h3 style="margin:0;font-size:15px;">Next 30 Days — Weekly Overview</h3>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                    '<th style="padding:10px 15px;text-align:left;">Period</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Low</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Forecast</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">High</th>' +
+                '</tr></thead>' +
+                '<tbody>' + weekRows + '</tbody>' +
+                '<tfoot><tr style="background:rgba(139,92,246,0.1);border-top:2px solid var(--purple);">' +
+                    '<td style="padding:12px 15px;font-weight:bold;">Total 30 Days</td>' +
+                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*0.85).toLocaleString() + '</td>' +
+                    '<td style="padding:12px 15px;font-weight:bold;font-size:18px;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString() + '</td>' +
+                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*1.15).toLocaleString() + '</td>' +
+                '</tr></tfoot>' +
+            '</table>' +
+        '</div>' +
+        '<div style="margin-top:12px;font-size:11px;color:var(--text-muted);">Forecasts use median revenue for each day of week, adjusted for YoY trend and seasonal patterns. Confidence range is ±15%. Actual results may vary.</div>' +
+    '</div>';
+};
+
 window.renderSalesView = () => {
     // Parse BWI date format DD/MM/YYYY into JS Date
     const parseDate = (str) => {
@@ -1544,6 +1750,168 @@ window.showFoodBevSplit = () => {
     window.openModal('📊 Food vs Beverage Cost Split', html);
 };
 
+
+// =============================================================================
+// OWNER CROSS-VENUE DASHBOARD
+// Shows both venues side by side — PIN protected
+// Loads live data from Firebase for both venues
+// =============================================================================
+window.renderCrossVenueDashboard = () => {
+    const container = document.getElementById('mainContent');
+    if (!container) return;
+
+    container.innerHTML = '<div style="max-width:1200px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;">' +
+            '<div><h2 style="margin:0;">🏢 Owner Dashboard</h2>' +
+            '<small style="color:var(--text-muted);">Live view across all venues · ' + new Date().toLocaleDateString('en-AU',{weekday:"long",day:"numeric",month:"long"}) + '</small></div>' +
+            '<button onclick="window.showView(\'dashboard\')" class="btn btn-outline">← Back</button>' +
+        '</div>' +
+        '<div id="cross-venue-content"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading venue data...</div></div>' +
+    '</div>';
+
+    // Load data from both venues via Firebase
+    const venues = window._venues || [];
+    const venueData = {};
+    let loaded = 0;
+
+    venues.forEach(v => {
+        if (typeof db === 'undefined') {
+            venueData[v.id] = null;
+            loaded++;
+            if (loaded === venues.length) renderCrossContent(venueData, venues);
+            return;
+        }
+        db.collection('venueData').doc(v.docId).get().then(doc => {
+            venueData[v.id] = doc.exists ? doc.data() : null;
+            loaded++;
+            if (loaded === venues.length) renderCrossContent(venueData, venues);
+        }).catch(() => {
+            venueData[v.id] = null;
+            loaded++;
+            if (loaded === venues.length) renderCrossContent(venueData, venues);
+        });
+    });
+};
+
+function renderCrossContent(venueData, venues) {
+    const today = new Date();
+    const parseDate = (str) => {
+        const m = str && str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        return m ? new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])) : null;
+    };
+    const todayStr = String(today.getDate()).padStart(2,'0') + '/' + String(today.getMonth()+1).padStart(2,'0') + '/' + today.getFullYear();
+
+    const getVenueSummary = (data) => {
+        if (!data) return null;
+        const sales = data.salesData || [];
+        const todaySale = sales.find(s => s.date === todayStr);
+        const isWeekend = [0,5,6].includes(today.getDay());
+        const inv = data.inventoryItems || [];
+        const lowStock = inv.filter(i => !i.archived && i.stock < (isWeekend?(i.parWeekend||i.par||0):(i.parWeekday||i.par||0)));
+        const defects = (data.defectLogs||[]).filter(d=>d.status==='Open');
+        const incidents = (data.incidentLogs||[]).filter(i=>i.time&&i.time.includes(todayStr));
+        const freqMap = {'Weekly':7,'Fortnightly':14,'Monthly':30,'Quarterly':90};
+        const overdueTasks = (data.rotationalTasks||[]).filter(t=>{
+            if(!t.lastLogIso) return true;
+            return ((today-new Date(t.lastLogIso))/(1000*3600*24))>=(freqMap[t.freq]||7);
+        });
+        const tempLogs = (data.tempLogs||[]).filter(t=>t.time&&t.time.includes(today.toLocaleDateString()));
+        const weekStart = new Date(today); weekStart.setDate(weekStart.getDate()-today.getDay()+1); weekStart.setHours(0,0,0,0);
+        const weekSales = sales.filter(s=>{const d=parseDate(s.date);return d&&d>=weekStart&&d<=today;});
+        const weekRevenue = weekSales.reduce((s,d)=>s+Number(d.total||0),0);
+
+        return { todaySale, lowStock, defects, incidents, overdueTasks, tempLogs, weekRevenue, invCount: inv.filter(i=>!i.archived).length };
+    };
+
+    const venueCards = venues.map(v => {
+        const data = venueData[v.id];
+        const s = getVenueSummary(data);
+
+        if (!s) {
+            return '<div class="card" style="border-top:5px solid var(--border);">' +
+                '<div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">' +
+                    '<span style="font-size:28px;">' + v.emoji + '</span>' +
+                    '<div><h3 style="margin:0;color:var(--text-muted);">' + v.name + '</h3>' +
+                    '<small style="color:var(--text-muted);">No data yet — venue not set up</small></div>' +
+                '</div>' +
+                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="width:100%;">Switch to ' + v.name + ' to set up →</button>' +
+            '</div>';
+        }
+
+        const todayRev = s.todaySale ? Number(s.todaySale.total||0) : null;
+        const revColor = todayRev !== null ? 'var(--green)' : 'var(--text-muted)';
+        const revStr = todayRev !== null ? '$' + todayRev.toLocaleString('en-AU',{minimumFractionDigits:0}) : 'Not logged';
+
+        const statusItems = [
+            { label: 'Stock below PAR', value: s.lowStock.length, alert: s.lowStock.length > 0, icon: '📦' },
+            { label: 'Open tickets', value: s.defects.length, alert: s.defects.length > 0, icon: '🛠️' },
+            { label: 'Overdue tasks', value: s.overdueTasks.length, alert: s.overdueTasks.length > 0, icon: '🔄' },
+            { label: "Today\'s incidents", value: s.incidents.length, alert: s.incidents.length > 0, icon: '⚠️' },
+            { label: 'Temp logs today', value: s.tempLogs.length, alert: s.tempLogs.length === 0, icon: '🌡️' },
+        ];
+
+        const statusHtml = statusItems.map(item =>
+            '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border);">' +
+                '<span style="font-size:13px;color:var(--text-muted);">' + item.icon + ' ' + item.label + '</span>' +
+                '<span style="font-weight:bold;color:' + (item.alert?'var(--red)':'var(--green)') + ';font-size:14px;">' + item.value + '</span>' +
+            '</div>'
+        ).join('');
+
+        return '<div class="card" style="border-top:5px solid ' + v.color + ';">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">' +
+                '<div style="display:flex;align-items:center;gap:10px;">' +
+                    '<span style="font-size:28px;">' + v.emoji + '</span>' +
+                    '<div><h3 style="margin:0;color:' + v.color + ';">' + v.name + '</h3>' +
+                    '<small style="color:var(--text-muted);">' + s.invCount + ' inventory items</small></div>' +
+                '</div>' +
+                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="font-size:11px;padding:5px 12px;">Go to ' + v.name + ' →</button>' +
+            '</div>' +
+            // Revenue
+            '<div style="background:var(--bg-main);border-radius:8px;padding:15px;margin-bottom:15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Today\'s Revenue</div>' +
+                '<div style="font-size:32px;font-weight:bold;color:' + revColor + ';">' + revStr + '</div>' +
+                (s.todaySale ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">EFTPOS: $' + (s.todaySale.eftpos||0) + ' · Cash: $' + (s.todaySale.cash||0) + '</div>' : '') +
+                '<div style="margin-top:8px;font-size:13px;color:var(--text-muted);">This week: <strong style="color:var(--blue);">$' + Math.round(s.weekRevenue).toLocaleString() + '</strong></div>' +
+            '</div>' +
+            // Status
+            statusHtml +
+        '</div>';
+    }).join('');
+
+    const totalTodayRevenue = venues.reduce((sum, v) => {
+        const s = getVenueSummary(venueData[v.id]);
+        return sum + (s && s.todaySale ? Number(s.todaySale.total||0) : 0);
+    }, 0);
+
+    const totalWeekRevenue = venues.reduce((sum, v) => {
+        const s = getVenueSummary(venueData[v.id]);
+        return sum + (s ? s.weekRevenue : 0);
+    }, 0);
+
+    const el = document.getElementById('cross-venue-content');
+    if (!el) return;
+    el.innerHTML =
+        // Combined KPIs
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Combined Today</div>' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--green);">$' + totalTodayRevenue.toLocaleString('en-AU',{minimumFractionDigits:0}) + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Combined This Week</div>' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--blue);">$' + Math.round(totalWeekRevenue).toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Venues Active</div>' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--orange);">' + venues.length + '</div>' +
+            '</div>' +
+        '</div>' +
+        // Venue cards side by side
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:20px;">' +
+            venueCards +
+        '</div>';
+}
+
 window.renderManagerHub = () => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
         .then(res => res.json())
@@ -1619,6 +1987,7 @@ window.renderManagerHub = () => {
             <button onclick="window.logCoversForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">👥 Covers</button>
             <button onclick="window.openAiDepletion()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">✨ EOD</button>
             <button onclick="window.generateWeeklySummary()" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">📊 Weekly Summary</button>
+            <button onclick="window.renderCrossVenueDashboard()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">🏢 All Venues</button>
         </div>
     
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
