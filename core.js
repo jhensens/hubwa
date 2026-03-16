@@ -95,15 +95,121 @@ window.toggleLock = () => {
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
 window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory'];
 
+
+// =============================================================================
+// MULTI-VENUE FRAMEWORK (LIA)
+// Venue selector persisted in localStorage
+// Each venue has its own Firebase doc + localStorage namespace
+// =============================================================================
+// =============================================================================
+// MULTI-VENUE SYSTEM
+// =============================================================================
+window._venues = [
+    { id: 'bwi', name: 'Bar Wa Izakaya', emoji: '🍶', color: '#7c3aed', docId: 'hobartHub' },
+    { id: 'lia', name: 'LIA', emoji: '🌿', color: '#059669', docId: 'lia' }
+];
+
+window.getCurrentVenue = () => {
+    // Check URL param first (for setup), then localStorage, then default to bwi
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlVenue = urlParams.get('venue');
+    if (urlVenue && window._venues.find(v=>v.id===urlVenue)) {
+        // Set this device's default venue from URL param
+        if (urlParams.get('setup') === 'true') {
+            localStorage.setItem('hubDeviceVenue', urlVenue);
+            // Remove the URL params without reload
+            window.history.replaceState({}, '', window.location.pathname);
+            window.showToast('Device set to ' + urlVenue.toUpperCase() + ' permanently!');
+        }
+    }
+    // Device venue = permanent venue for this device (set during setup)
+    // Active venue = current session venue (can be switched by PIN holders)
+    const deviceVenue = localStorage.getItem('hubDeviceVenue') || 'bwi';
+    const activeVenue = localStorage.getItem('hubActiveVenue') || deviceVenue;
+    return window._venues.find(v=>v.id===activeVenue) || window._venues[0];
+};
+
+window.getVenueDocId = () => window.getCurrentVenue().docId;
+window.getDeviceVenue = () => localStorage.getItem('hubDeviceVenue') || 'bwi';
+
+// localStorage keys are venue-prefixed to avoid cross-contamination on shared devices
+window.getLocalKey = (key) => window.getCurrentVenue().id + '_' + key;
+
+window.renderVenueSwitcher = () => {
+    const current = window.getCurrentVenue();
+    const deviceVenue = window.getDeviceVenue();
+    const venueHtml = window._venues.map(v => {
+        const isActive = current.id === v.id;
+        const isDevice = deviceVenue === v.id;
+        return '<div onclick="window.switchVenue(\'' + v.id + '\')" ' +
+            'style="display:flex;align-items:center;gap:12px;padding:15px;border-radius:10px;cursor:pointer;' +
+            'border:2px solid ' + (isActive?v.color:'var(--border)') + ';' +
+            'background:' + (isActive?'rgba(139,92,246,0.08)':'var(--bg-main)') + ';' +
+            'margin-bottom:10px;transition:all 0.2s;">' +
+            '<div style="font-size:32px;">' + v.emoji + '</div>' +
+            '<div style="flex:1;">' +
+                '<div style="font-weight:bold;font-size:15px;color:' + (isActive?v.color:'var(--text-main)') + ';">' + v.name + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + 
+                    (isActive ? 'Currently active' : 'Click to switch') + 
+                    (isDevice ? ' · <strong>This device</strong>' : '') + 
+                '</div>' +
+            '</div>' +
+            (isActive ? '<div style="color:' + v.color + ';font-size:20px;">✓</div>' : '') +
+        '</div>';
+    }).join('');
+
+    const setupHtml = '<div style="margin-top:20px;padding-top:15px;border-top:1px solid var(--border);">' +
+        '<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px 0;">⚙️ <strong>Device Setup</strong> — Set which venue this device defaults to:</p>' +
+        '<div style="display:flex;gap:8px;">' +
+        window._venues.map(v => 
+            '<button onclick="window.setDeviceVenue(\'' + v.id + '\')" class="btn ' + (deviceVenue===v.id?'btn-dark':'btn-outline') + '" style="flex:1;font-size:13px;">' + v.emoji + ' ' + v.name + '</button>'
+        ).join('') +
+        '</div>' +
+        '<p style="font-size:11px;color:var(--text-muted);margin:8px 0 0 0;">Device venue determines which data loads by default and what staff see.</p>' +
+    '</div>';
+
+    window.openModal('🏢 Venue Management', venueHtml + setupHtml);
+};
+
+window.switchVenue = (id) => {
+    if (id === window.getCurrentVenue().id) { window.closeModal(); return; }
+    localStorage.setItem('hubActiveVenue', id);
+    window.closeModal();
+    window.showToast('Switching to ' + (window._venues.find(v=>v.id===id)||{}).name + '...');
+    setTimeout(() => location.reload(), 600);
+};
+
+window.setDeviceVenue = (id) => {
+    const venue = window._venues.find(v=>v.id===id);
+    if (!venue) return;
+    if (!confirm('Set this device to always default to ' + venue.name + '?\nThis affects what staff see when they open the Hub.')) return;
+    localStorage.setItem('hubDeviceVenue', id);
+    localStorage.setItem('hubActiveVenue', id);
+    window.closeModal();
+    window.showToast('Device set to ' + venue.name + '!');
+    setTimeout(() => location.reload(), 600);
+};
+
+window.updateVenueBadge = () => {
+    const v = window.getCurrentVenue();
+    const badge = document.getElementById('venue-badge');
+    if (badge) {
+        badge.textContent = v.emoji + ' ' + v.name;
+        badge.style.borderColor = v.color;
+        badge.style.color = v.color;
+    }
+};
+
+
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
     if (syncLabel) { syncLabel.innerHTML = '☁️ Saving...'; syncLabel.style.color = 'var(--blue)'; }
 
-    window.saveKeys.forEach(k => localStorage.setItem(k, JSON.stringify(window[k])));
+    const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
     
     if (typeof db !== 'undefined') {
         let payload = {}; window.saveKeys.forEach(k => payload[k] = window[k]);
-        db.collection('venueData').doc('hobartHub').set(payload, { merge: true })
+        db.collection('venueData').doc(window.getVenueDocId()).set(payload, { merge: true })
         .then(() => { if (syncLabel) setTimeout(() => { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }, 800); })
         .catch(err => { console.error("Firebase save error:", err); if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Sync'; syncLabel.style.color = 'var(--orange)'; } });
     } else {
@@ -113,13 +219,13 @@ window.saveToDisk = () => {
 
 window.loadData = () => {
     // Manual reload — pull from Firebase and re-render
-    window.saveKeys.forEach(k => { try { window[k] = JSON.parse(localStorage.getItem(k)) || window[k]; } catch(e) {} });
+    const _vidLD = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => { try { window[k] = JSON.parse(localStorage.getItem(_vidLD+'_'+k) || localStorage.getItem(k)) || window[k]; } catch(e) {} });
     if (typeof db !== 'undefined') {
-        db.collection('venueData').doc('hobartHub').get().then((doc) => {
+        db.collection('venueData').doc(window.getVenueDocId()).get().then((doc) => {
             if (doc.exists) {
                 let data = doc.data();
                 window.saveKeys.forEach(k => { if (data[k] !== undefined) window[k] = data[k]; });
-                window.saveKeys.forEach(k => localStorage.setItem(k, JSON.stringify(window[k])));
+                const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
                 window.checkLockState();
                 if (window.currentView) window.showView(window.currentView);
             }
@@ -229,6 +335,9 @@ window.showView = (view) => {
         else if (view === 'sell-price-editor' && window.renderSellPriceEditor) content.innerHTML = window.renderSellPriceEditor();
         else if (view === 'price-alerts' && window.renderPriceAlertsView) content.innerHTML = window.renderPriceAlertsView();
         else if (view === 'staff-directory' && window.renderStaffDirectoryView) content.innerHTML = window.renderStaffDirectoryView();
+        else if (view === 'forecast' && window.renderForecastView) content.innerHTML = window.renderForecastView();
+        else if (view === 'cross-venue') { if (window.renderCrossVenueDashboard) window.renderCrossVenueDashboard(); }
+        else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
@@ -247,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load from localStorage first for instant render
     window.saveKeys.forEach(k => {
-        const stored = localStorage.getItem(k);
+        const _vid2 = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; const stored = localStorage.getItem(_vid2+'_'+k) || localStorage.getItem(k);
         if (stored) {
             try { window[k] = JSON.parse(stored); } catch(e) {}
         }
@@ -255,11 +364,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render immediately from localStorage
     window.checkLockState();
+    window.updateVenueBadge();
     window.showView('dashboard');
 
     // Then sync from Firebase in background and re-render if data differs
     if (typeof db !== 'undefined') {
-        db.collection('venueData').doc('hobartHub').get().then((doc) => {
+        db.collection('venueData').doc(window.getVenueDocId()).get().then((doc) => {
             if (doc.exists) {
                 let data = doc.data();
                 let changed = false;
@@ -272,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
                 // Also save Firebase data back to localStorage for next load
-                window.saveKeys.forEach(k => localStorage.setItem(k, JSON.stringify(window[k])));
+                const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
                 if (changed) {
                     window.checkLockState();
                     window.showView(window.currentView || 'dashboard');
