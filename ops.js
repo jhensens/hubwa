@@ -368,6 +368,7 @@ window.renderInventoryView = () => {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
             <h2 style="margin:0;">Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
@@ -496,7 +497,7 @@ window.editInvItem = (id = null) => {
             <button onclick="window.subInvItem('${e.id}', true)" class="btn btn-blue" style="flex:1;">Save & Add Another</button>
             <button onclick="window.subInvItem('${e.id}', false)" class="btn btn-green" style="flex:1;">Save & Close</button>
             ${id ? `<button onclick="window.archiveInv('${e.id}')" class="btn btn-orange" style="flex:0.5;">${e.archived ? 'Restore' : 'Archive'}</button>` : ''}
-            <button onclick="window.showView('inventory')" class="btn btn-outline" style="flex:0.5;">Cancel</button>
+            <button onclick="window.showView(\'inventory\')" class="btn btn-outline" style="flex:0.5;">Cancel</button>
         </div>
     </div>`;
     document.getElementById('mainContent').innerHTML = html;
@@ -533,6 +534,107 @@ window.subInvItem = (id, addAnother, isModal = false) => {
         return;
     }
     if (addAnother) { window.editInvItem(); } else { window.showView('inventory'); }
+};
+
+
+// =============================================================================
+// BULK PAR EDITOR
+// All items in a tabbed table grouped by category — tab through fields
+// One save commits everything to Firebase
+// =============================================================================
+
+window.renderParEditor = () => {
+    const items = (window.inventoryItems || []).filter(i => !i.archived);
+    const cats = [...new Set(items.map(i => i.category || 'Uncategorised'))].sort();
+    const isWeekend = [0, 5, 6].includes(new Date().getDay());
+
+    if (items.length === 0) {
+        return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No inventory items yet.</h3><button onclick="window.showView(\'inventory\')" class="btn btn-blue" style="margin-top:10px;">← Back to Inventory</button></div></div>';
+    }
+
+    const groupsHtml = cats.map(cat => {
+        const catItems = items.filter(i => (i.category || 'Uncategorised') === cat);
+        const rows = catItems.map((item, idx) => {
+            const parWd = item.parWeekday || item.par || 0;
+            const parWe = item.parWeekend || item.par || 0;
+            const stock = Number(item.stock) || 0;
+            const parTarget = isWeekend ? parWe : parWd;
+            const stockColor = stock < parTarget ? 'var(--red)' : 'var(--green)';
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + item.name + '</strong>' +
+                '<br><small style="color:var(--text-muted);">' + (item.supplier || 'No supplier') + ' · ' + (item.buyUnit || 'unit') + '</small></td>' +
+                '<td style="padding:10px 12px;text-align:center;"><span style="color:' + stockColor + ';font-weight:bold;">' + stock.toFixed(1) + '</span></td>' +
+                '<td style="padding:8px;"><input type="number" step="0.5" min="0" ' +
+                'id="par-wd-' + item.id + '" ' +
+                'value="' + parWd + '" ' +
+                'class="input-box" style="margin:0;padding:6px 8px;text-align:center;width:80px;" ' +
+                'onkeydown="if(event.key==="Enter"||event.key==="Tab"){event.preventDefault();var next=document.getElementById("par-we-" + item.id);if(next)next.focus();}"></td>' +
+                '<td style="padding:8px;"><input type="number" step="0.5" min="0" ' +
+                'id="par-we-' + item.id + '" ' +
+                'value="' + parWe + '" ' +
+                'class="input-box" style="margin:0;padding:6px 8px;text-align:center;width:80px;" ' +
+                'onkeydown="if(event.key==="Enter"||event.key==="Tab"){event.preventDefault();var rows=document.querySelectorAll("[id^=par-wd-]");var arr=Array.from(rows);var cur=arr.findIndex(el=>el.id==="par-wd-"+item.id);if(arr[cur+1])arr[cur+1].focus();}"></td>' +
+            '</tr>';
+        }).join('');
+
+        return '<details class="card" style="padding:0;overflow:hidden;margin-bottom:12px;" open>' +
+            '<summary style="padding:12px 18px;background:#111;cursor:pointer;font-weight:bold;color:var(--brand-dark);display:flex;justify-content:space-between;align-items:center;outline:none;border-radius:10px 10px 0 0;">' +
+                '<span>' + cat + ' <span style="color:var(--text-muted);font-size:12px;font-weight:normal;">(' + catItems.length + ' items)</span></span>' +
+                '<span style="color:var(--blue);font-size:12px;">▼</span>' +
+            '</summary>' +
+            '<div style="overflow-x:auto;">' +
+                '<table style="width:100%;border-collapse:collapse;">' +
+                    '<thead><tr style="background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                        '<th style="padding:10px 12px;text-align:left;">Item</th>' +
+                        '<th style="padding:10px 12px;text-align:center;">Stock</th>' +
+                        '<th style="padding:10px 12px;text-align:center;color:var(--blue);">Weekday PAR</th>' +
+                        '<th style="padding:10px 12px;text-align:center;color:var(--orange);">Weekend PAR</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + rows + '</tbody>' +
+                '</table>' +
+            '</div>' +
+        '</details>';
+    }).join('');
+
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">PAR Level Editor</h2>' +
+            '<small style="color:var(--text-muted);">Set weekday and weekend PAR levels for all items. Tab between fields. Save all when done.</small></div>' +
+            '<div style="display:flex;gap:8px;">' +
+                '<button onclick="window.saveAllPars()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All PARs</button>' +
+                '<button onclick="window.showView(\'inventory\')" class="btn btn-outline">← Inventory</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="padding:12px 18px;margin-bottom:20px;border-left:4px solid var(--blue);font-size:13px;">' +
+            '<strong style="color:var(--blue);">💡 Tips:</strong> ' +
+            'Tab moves to Weekend PAR. Enter/Tab from Weekend moves to next item\'s Weekday PAR. ' +
+            'Today is targeting <strong style="color:' + (isWeekend ? 'var(--orange)' : 'var(--blue)') + ';">' + (isWeekend ? 'WEEKEND' : 'WEEKDAY') + '</strong> PARs — stock in red is currently below target.' +
+        '</div>' +
+        groupsHtml +
+        '<div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;">' +
+            '<span style="color:var(--text-muted);font-size:13px;">' + items.length + ' items across ' + cats.length + ' categories</span>' +
+            '<button onclick="window.saveAllPars()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All PARs</button>' +
+        '</div>' +
+    '</div>';
+};
+
+window.saveAllPars = () => {
+    let count = 0;
+    (window.inventoryItems || []).filter(i => !i.archived).forEach(item => {
+        const wdEl = document.getElementById('par-wd-' + item.id);
+        const weEl = document.getElementById('par-we-' + item.id);
+        if (wdEl && weEl) {
+            const wd = parseFloat(wdEl.value) || 0;
+            const we = parseFloat(weEl.value) || 0;
+            item.parWeekday = wd;
+            item.parWeekend = we;
+            item.par = wd; // keep legacy par field in sync
+            count++;
+        }
+    });
+    window.saveToDisk();
+    window.showToast(count + ' PAR levels saved!');
+    window.showView('inventory');
 };
 
 window.archiveInv = (id) => {
@@ -1189,7 +1291,7 @@ window.renderPrepListView = () => {
                 <h2 style="margin:0;">Auto-Order List</h2>
                 <small style="color:var(--brand-accent);">Targeting <strong style="color:var(--blue);">${isWeekend ? 'WEEKEND' : 'WEEKDAY'}</strong> PAR levels today.</small>
             </div>
-            <button onclick="window.showView('inventory')" class="btn btn-outline">Update Stock Levels</button>
+            <button onclick="window.showView(\'inventory\')" class="btn btn-outline">Update Stock Levels</button>
         </div>
         ${Object.keys(ordersNeeded).length === 0 ? '<div class="card"><p style="color:var(--green); font-weight:bold; font-size:18px;">✅ All inventory is at or above PAR. Nothing to order!</p></div>' : ''}
         ${Object.keys(ordersNeeded).map(supName => {
@@ -1982,7 +2084,7 @@ window._commitInvoice = () => {
         </div>
         <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
             <button onclick="window.showView('invoice')" class="btn btn-blue">📄 Rip Another Invoice</button>
-            <button onclick="window.showView('inventory')" class="btn btn-outline">📦 View Inventory</button>
+            <button onclick="window.showView(\'inventory\')" class="btn btn-outline">📦 View Inventory</button>
         </div>
     </div>`;
     document.getElementById('invoice-status').innerHTML = '';

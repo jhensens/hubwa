@@ -1,47 +1,262 @@
 // --- 1. TAKINGS & KPI DASHBOARD ---
+window._salesTab = window._salesTab || 'week';
+
 window.renderSalesView = () => {
-    const recentSales = (window.salesData || []).slice(-14).reverse();
-    return `
-    <div style="max-width: 1000px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;">Takings & KPI Dashboard</h2>
-            <div style="display:flex; gap:10px;">
-                <button onclick="window.openAiDepletion()" class="btn btn-purple">✨ AI EOD Stock Depletion</button>
-                <button onclick="document.getElementById('csv-upload').click()" class="btn btn-blue">📈 Upload Takings CSV</button>
-                <input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">
-            </div>
-        </div>
-        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:20px; margin-bottom:30px;">
-            <div class="card" style="border-top:5px solid var(--green);">
-                <h3 style="margin-top:0;">Revenue Goals</h3>
-                <label style="font-size:12px; color:var(--text-muted);">Wage Target %</label>
-                <input type="number" id="wage-target" class="input-box" value="${(window.salesTargets || {}).wageTarget || 30}" onchange="window.updateWageTarget(this.value)">
-                <p style="font-size:13px; color:var(--text-muted); margin-top:10px;">Setting this helps managers stay within budget based on trade volume.</p>
-            </div>
-            <div class="card">
-                <h3 style="margin-top:0;">Recent Daily Trade</h3>
-                <div style="max-height:300px; overflow-y:auto;">
-                    <table style="width:100%; font-size:13px; border-collapse:collapse;">
-                        <thead>
-                            <tr style="text-align:left; border-bottom:1px solid var(--border);">
-                                <th style="padding:10px;">Date</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Total Revenue</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${recentSales.length === 0 ? '<tr><td colspan="4" style="padding:10px; color:var(--text-muted);">No sales data uploaded yet.</td></tr>' : recentSales.map(s => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:10px;">${s.date}</td><td style="padding:10px;">$${Number(s.eftpos).toFixed(2)}</td><td style="padding:10px;">$${Number(s.cash).toFixed(2)}</td><td style="padding:10px; font-weight:bold; color:var(--green);">$${Number(s.total).toFixed(2)}</td></tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>`;
+    const allSales = (window.salesData || []).slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    const today = new Date();
+
+    // Date range helpers
+    const getWeekStart = (offset = 0) => {
+        const d = new Date(today);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - (offset * 7);
+        d.setDate(diff); d.setHours(0,0,0,0); return d;
+    };
+
+    const thisWeekStart = getWeekStart(0);
+    const lastWeekStart = getWeekStart(1);
+    const last7Start = new Date(today); last7Start.setDate(today.getDate() - 6); last7Start.setHours(0,0,0,0);
+    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const filterByRange = (start, end) => allSales.filter(s => {
+        const d = new Date(s.date); return d >= start && d <= (end || today);
+    });
+
+    const tab = window._salesTab || 'week';
+    let periodData, periodLabel, compareData, compareLabel;
+    if (tab === 'week') {
+        periodData = filterByRange(thisWeekStart);
+        periodLabel = 'This Week';
+        compareData = filterByRange(lastWeekStart, new Date(thisWeekStart - 1));
+        compareLabel = 'Last Week';
+    } else if (tab === 'lastweek') {
+        periodData = filterByRange(lastWeekStart, new Date(thisWeekStart - 1));
+        periodLabel = 'Last Week';
+        compareData = filterByRange(getWeekStart(2), new Date(lastWeekStart - 1));
+        compareLabel = 'Week Before';
+    } else if (tab === 'days7') {
+        periodData = filterByRange(last7Start);
+        periodLabel = 'Last 7 Days';
+        compareData = filterByRange(new Date(last7Start.getTime() - 7*24*3600*1000), new Date(last7Start - 1));
+        compareLabel = 'Prior 7 Days';
+    } else {
+        periodData = filterByRange(thisMonthStart);
+        periodLabel = new Date().toLocaleString('en-AU', { month: 'long' });
+        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        compareData = filterByRange(lastMonthStart, new Date(thisMonthStart - 1));
+        compareLabel = new Date(today.getFullYear(), today.getMonth() - 1, 1).toLocaleString('en-AU', { month: 'long' });
+    }
+
+    const sum = arr => arr.reduce((s, d) => s + Number(d.total || 0), 0);
+    const avg = arr => arr.length > 0 ? sum(arr) / arr.length : 0;
+    const best = arr => arr.length > 0 ? arr.reduce((b, d) => Number(d.total) > Number(b.total) ? d : b) : null;
+    const worst = arr => arr.length > 0 ? arr.reduce((w, d) => Number(d.total) < Number(w.total) ? d : w) : null;
+
+    const totalRev = sum(periodData);
+    const avgDaily = avg(periodData);
+    const bestDay = best(periodData);
+    const worstDay = worst(periodData);
+    const prevTotal = sum(compareData);
+    const revChange = prevTotal > 0 ? (((totalRev - prevTotal) / prevTotal) * 100).toFixed(1) : null;
+    const revChangeHtml = revChange !== null
+        ? '<span style="font-size:12px;color:' + (revChange >= 0 ? 'var(--green)' : 'var(--red)') + ';margin-left:6px;">' + (revChange >= 0 ? '▲' : '▼') + ' ' + Math.abs(revChange) + '% vs ' + compareLabel + '</span>'
+        : '';
+
+    // Wage cost %
+    const wageTarget = Number((window.salesTargets || {}).wageTarget || 30);
+    // Food cost % estimate — use wastage logs value as proxy if no better data
+    const wastageValue = (window.wastageLogs || []).reduce((s, w) => s + Number(w.value || 0), 0);
+    const foodCostPct = totalRev > 0 ? ((wastageValue / totalRev) * 100).toFixed(1) : 0;
+
+    // Tab pills
+    const tabs = [
+        { id: 'week', label: 'This Week' },
+        { id: 'lastweek', label: 'Last Week' },
+        { id: 'days7', label: 'Last 7 Days' },
+        { id: 'month', label: 'This Month' }
+    ];
+    const tabHtml = tabs.map(t =>
+        '<button onclick="window._salesTab=\'' + t.id + '\'; window.showView(\'sales\')" class="btn ' + (tab === t.id ? 'btn-dark' : 'btn-outline') + '" style="font-size:12px;padding:7px 14px;">' + t.label + '</button>'
+    ).join('');
+
+    // KPI stat cards
+    const statCard = (label, value, sub, color) =>
+        '<div class="card" style="text-align:center;border-top:4px solid ' + color + ';padding:20px 15px;">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">' + label + '</div>' +
+            '<div style="font-size:28px;font-weight:bold;color:' + color + ';line-height:1.1;">' + value + '</div>' +
+            (sub ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + sub + '</div>' : '') +
+        '</div>';
+
+    const statsHtml =
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:20px;">' +
+            statCard('Total Revenue', '$' + totalRev.toLocaleString('en-AU', {minimumFractionDigits:0, maximumFractionDigits:0}), periodData.length + ' days traded' + (revChangeHtml ? '' : ''), 'var(--green)') +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Total Revenue</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--green);line-height:1.1;">$' + totalRev.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
+                '<div style="font-size:11px;margin-top:4px;">' + periodData.length + ' days ' + revChangeHtml + '</div>' +
+            '</div>' +
+            statCard('Avg Daily', '$' + avgDaily.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}), periodLabel, 'var(--blue)') +
+            statCard('Best Day', bestDay ? '$' + Number(bestDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—', bestDay ? bestDay.date : 'No data', 'var(--green)') +
+            statCard('Worst Day', worstDay ? '$' + Number(worstDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—', worstDay ? worstDay.date : 'No data', 'var(--orange)') +
+        '</div>';
+
+    // Remove the duplicate statCard from above — rewrite stats properly
+    const kpiCardsHtml =
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:20px;">' +
+            // Revenue
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Total Revenue</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:var(--green);">$' + totalRev.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">' + periodData.length + ' days' + (revChange !== null ? ' · <span style="color:' + (revChange >= 0 ? 'var(--green)' : 'var(--red)') + ';">' + (revChange >= 0 ? '▲' : '▼') + Math.abs(revChange) + '%</span>' : '') + '</div>' +
+            '</div>' +
+            // Avg Daily
+            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Avg Daily</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:var(--blue);">$' + avgDaily.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">' + periodLabel + '</div>' +
+            '</div>' +
+            // Best Day
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Best Day</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:var(--green);">' + (bestDay ? '$' + Number(bestDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—') + '</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">' + (bestDay ? bestDay.date : 'No data') + '</div>' +
+            '</div>' +
+            // Worst Day
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Worst Day</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:var(--orange);">' + (worstDay ? '$' + Number(worstDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—') + '</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">' + (worstDay ? worstDay.date : 'No data') + '</div>' +
+            '</div>' +
+            // Wage Cost %
+            '<div class="card" style="text-align:center;border-top:4px solid ' + (wageTarget <= 30 ? 'var(--green)' : 'var(--orange)') + ';padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Wage Target</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:' + (wageTarget <= 30 ? 'var(--green)' : 'var(--orange)') + ';">' + wageTarget + '%</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">Wage budget of $' + (totalRev * wageTarget / 100).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
+            '</div>' +
+            // Food Cost %
+            '<div class="card" style="text-align:center;border-top:4px solid var(--purple);padding:20px 15px;">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Food Cost %</div>' +
+                '<div style="font-size:26px;font-weight:bold;color:var(--purple);">' + foodCostPct + '%</div>' +
+                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">Est. from wastage logs</div>' +
+            '</div>' +
+        '</div>';
+
+    // Revenue bar chart — inline SVG
+    const chartData = periodData.slice(-14); // last 14 days max
+    let chartHtml = '';
+    if (chartData.length > 0) {
+        const maxVal = Math.max(...chartData.map(d => Number(d.total)));
+        const chartW = 100; // percentage width per bar slot
+        const barW = Math.max(10, Math.floor(600 / chartData.length) - 4);
+        const svgH = 120;
+        const bars = chartData.map((d, i) => {
+            const barH = maxVal > 0 ? Math.max(4, Math.round((Number(d.total) / maxVal) * svgH)) : 4;
+            const x = i * (barW + 4);
+            const isToday = d.date === today.toLocaleDateString('en-AU');
+            const color = isToday ? '#3b82f6' : '#10b981';
+            return '<rect x="' + x + '" y="' + (svgH - barH) + '" width="' + barW + '" height="' + barH + '" fill="' + color + '" rx="2" opacity="0.85">' +
+                '<title>' + d.date + ': $' + Number(d.total).toFixed(0) + '</title></rect>';
+        }).join('');
+        const totalW = chartData.length * (barW + 4);
+        chartHtml = '<div class="card" style="margin-bottom:20px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                '<h3 style="margin:0;font-size:15px;">Revenue Trend</h3>' +
+                '<span style="font-size:11px;color:var(--text-muted);">' + chartData.length + ' days · hover bars for detail</span>' +
+            '</div>' +
+            '<div style="overflow-x:auto;">' +
+                '<svg width="' + totalW + '" height="' + (svgH + 20) + '" xmlns="http://www.w3.org/2000/svg">' + bars + '</svg>' +
+            '</div>' +
+            '<div style="display:flex;gap:15px;margin-top:8px;font-size:11px;color:var(--text-muted);">' +
+                '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#10b981;border-radius:2px;display:inline-block;"></span> Revenue</span>' +
+                '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#3b82f6;border-radius:2px;display:inline-block;"></span> Today</span>' +
+            '</div>' +
+        '</div>';
+    } else {
+        chartHtml = '<div class="card" style="text-align:center;padding:30px;margin-bottom:20px;"><p style="color:var(--text-muted);margin:0;">No sales data for this period. Upload a takings CSV to see trends.</p></div>';
+    }
+
+    // Recent daily trade table
+    const tableRows = periodData.slice().reverse().map(s =>
+        '<tr style="border-bottom:1px solid var(--bg-main);">' +
+            '<td style="padding:10px;">' + s.date + '</td>' +
+            '<td style="padding:10px;">$' + Number(s.eftpos||0).toFixed(2) + '</td>' +
+            '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
+            '<td style="padding:10px;">' + (s.meandu > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
+        '</tr>'
+    ).join('');
+
+    // EOD depletion log
+    const recentDepletions = (window.depletionLogs || []).slice(-10).reverse();
+    const depletionHtml = '<div class="card" style="border-top:5px solid var(--purple);margin-top:20px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
+            '<h3 style="margin:0;">EOD Depletion Log</h3>' +
+            '<span style="font-size:12px;color:var(--text-muted);">' + recentDepletions.length + ' recent runs</span>' +
+        '</div>' +
+        (recentDepletions.length === 0
+            ? '<p style="color:var(--text-muted);font-size:13px;margin:0;">No depletions run yet.</p>'
+            : recentDepletions.map(d =>
+                '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 15px;background:var(--bg-main);cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'">' +
+                        '<div><strong style="font-size:14px;">' + d.date + ' <span style="color:var(--text-muted);font-weight:normal;font-size:12px;">at ' + d.time + '</span></strong>' +
+                        '<span style="margin-left:12px;font-size:12px;color:var(--purple);">' + d.totalLines + ' stock lines · ' + (d.itemsSold||[]).length + ' recipes</span>' +
+                        ((d.skippedUnmapped||0) > 0 ? '<span style="margin-left:8px;font-size:11px;color:var(--orange);">⚠️ ' + d.skippedUnmapped + ' unmapped</span>' : '') + '</div>' +
+                        '<span style="color:var(--text-muted);font-size:12px;">▼ Details</span>' +
+                    '</div>' +
+                    '<div style="display:none;padding:15px;font-size:12px;">' +
+                        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">' +
+                            '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Recipes Sold</strong>' +
+                            (d.itemsSold||[]).map(l => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span>' + l.recipeName + '</span><strong style="color:var(--green);">' + l.qtySold + '</strong></div>').join('') + '</div>' +
+                            '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Stock Deducted</strong>' +
+                            (d.stockChanges||[]).map(s => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + s.name + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + s.unit + '</small></span></div>').join('') + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>'
+            ).join('')) +
+    '</div>';
+
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<h2 style="margin:0;">Takings & KPIs</h2>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button onclick="window.openAiDepletion()" class="btn btn-purple">✨ EOD Depletion</button>' +
+                '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
+                '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
+            '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">' + tabHtml + '</div>' +
+        kpiCardsHtml +
+        chartHtml +
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<div style="padding:12px 20px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+                '<h3 style="margin:0;font-size:15px;">Daily Breakdown — ' + periodLabel + '</h3>' +
+                '<span style="font-size:12px;color:var(--text-muted);">' + periodData.length + ' days</span>' +
+            '</div>' +
+            '<div style="max-height:300px;overflow-y:auto;">' +
+                '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
+                    '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                        '<th style="padding:10px;">Date</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Me&u</th><th style="padding:10px;">Total</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + (tableRows || '<tr><td colspan="5" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
+                '</table>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="margin-top:20px;border-left:4px solid var(--blue);padding:12px 18px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+                '<div><label style="font-size:12px;color:var(--text-muted);">Wage Target %</label>' +
+                '<input type="number" id="wage-target" class="input-box" value="' + wageTarget + '" onchange="window.updateWageTarget(this.value)" style="width:80px;display:inline-block;margin:0 0 0 10px;padding:6px 10px;"></div>' +
+                '<span style="font-size:12px;color:var(--text-muted);">Wage budget this period: <strong style="color:var(--green);">$' + (totalRev * wageTarget / 100).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</strong></span>' +
+            '</div>' +
+        '</div>' +
+        depletionHtml +
+    '</div>';
 };
 
 window.updateWageTarget = (val) => { window.salesTargets.wageTarget = val; window.saveToDisk(); window.showToast("Wage Target Saved"); };
 window.handleSalesCSV = (event) => {
     const file = event.target.files[0]; const reader = new FileReader();
     reader.onload = (e) => {
-        e.target.result.split('\n').slice(1).forEach(row => {
+        e.target.result.split('\\n').slice(1).forEach(row => {
             const cols = row.split(',');
             if(cols.length > 8) {
                 const date = cols[0]; const eftpos = parseFloat(cols[2]) || 0; const meandu = parseFloat(cols[5]) || 0; const cash = parseFloat(cols[7]) || 0; const total = parseFloat(cols[8]) || 0;
@@ -52,6 +267,7 @@ window.handleSalesCSV = (event) => {
     };
     reader.readAsText(file);
 };
+
 
 // --- 2. ORIENTATION & TRAINING ---
 window.renderOrientationView = function(showCompleted = false) {
