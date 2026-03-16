@@ -409,6 +409,7 @@ window.renderInventoryView = () => {
             <h2 style="margin:0;">Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
+                <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
@@ -582,6 +583,71 @@ window.subInvItem = (id, addAnother, isModal = false) => {
 // All items in a tabbed table grouped by category — tab through fields
 // One save commits everything to Firebase
 // =============================================================================
+
+
+// =============================================================================
+// STOCK COUNT SHEET — Print-friendly for physical stocktakes
+// =============================================================================
+window.openStockCountSheet = () => {
+    const items = (window.inventoryItems||[]).filter(i=>!i.archived);
+    if (items.length===0) return window.showToast('No inventory items yet.','error');
+
+    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Print a blank count sheet to fill in during your stocktake.</p>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Group By</label>' +
+        '<select id="cs-group" class="input-box">' +
+            '<option value="zone">Zone (Walk-in, Bar Fridge etc)</option>' +
+            '<option value="category">Category (Food, Beverage etc)</option>' +
+        '</select>' +
+        '<button onclick="window.printCountSheet()" class="btn btn-blue" style="width:100%;margin-top:5px;">🖨️ Print Count Sheet</button>';
+    window.openModal('📋 Stock Count Sheet', html);
+};
+
+window.printCountSheet = () => {
+    const groupBy = document.getElementById('cs-group') ? document.getElementById('cs-group').value : 'zone';
+    const items = (window.inventoryItems||[]).filter(i=>!i.archived).sort((a,b)=>a.name.localeCompare(b.name));
+
+    const grouped = {};
+    items.forEach(item => {
+        const key = groupBy === 'zone' ? (item.location||'Unassigned') : (item.category||'Uncategorised');
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(item);
+    });
+
+    const groupKeys = Object.keys(grouped).sort();
+    let tableHtml = '';
+    groupKeys.forEach(group => {
+        tableHtml += '<tr><td colspan="4" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;border-top:2px solid #ccc;">'+group+'</td></tr>';
+        grouped[group].forEach(item => {
+            const isWeekend = [0,5,6].includes(new Date().getDay());
+            const par = isWeekend ? (item.parWeekend||item.par||0) : (item.parWeekday||item.par||0);
+            tableHtml += '<tr>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">'+item.name+'</td>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">'+( item.buyUnit||'unit')+'</td>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">PAR: '+par+'</td>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;"><div style="width:80px;border-bottom:2px solid #333;height:22px;"></div></td>' +
+            '</tr>';
+        });
+    });
+
+    const win = window.open('','_blank');
+    if (!win) return window.showToast('Pop-up blocked.','error');
+    win.document.write('<!DOCTYPE html><html><head><title>Stock Count Sheet</title>' +
+        '<style>body{font-family:sans-serif;font-size:13px;max-width:900px;margin:20px auto;}' +
+        'h1{font-size:20px;margin-bottom:4px;}' +
+        '.meta{color:#888;font-size:12px;margin-bottom:20px;display:flex;justify-content:space-between;}' +
+        'table{width:100%;border-collapse:collapse;}' +
+        'th{padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:2px solid #333;background:#f9fafb;}' +
+        'th:last-child{text-align:right;}' +
+        '@media print{body{margin:10px;max-width:none;}@page{margin:10mm;size:A4;}}' +
+        '</style></head><body>');
+    win.document.write('<h1>📦 Stock Count Sheet — Bar Wa Izakaya</h1>');
+    win.document.write('<div class="meta"><span>Grouped by: '+( groupBy==='zone'?'Zone':'Category')+'</span><span>Date: _____________ &nbsp;&nbsp; Staff: _____________</span></div>');
+    win.document.write('<table><thead><tr><th>Item</th><th>Unit</th><th>PAR</th><th style="text-align:right;">Count</th></tr></thead><tbody>'+tableHtml+'</tbody></table>');
+    win.document.write('<div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">'+items.length+' items · Bar Wa Izakaya · Hobart Hub</div>');
+    win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
+    win.document.close();
+    window.closeModal();
+};
 
 window.renderParEditor = () => {
     const items = (window.inventoryItems || []).filter(i => !i.archived);
@@ -807,9 +873,11 @@ window.renderRecipeView = () => {
             <h2 style="margin:0;">Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button onclick="window.showView('sell-price-editor')" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">💰 Sell Prices</button>
+                <button onclick="window.showView('bulk-category-editor')" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">🏷️ Categories</button>
+                <button onclick="window.showView('pos-alias-editor')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 POS Aliases</button>
                 <button onclick="window.openCostingReport()" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Costing Report</button>
-                <button onclick="window.exportRecipeBook()" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">📖 Recipe Book</button>
-                <button onclick="window.showView('batch-linker')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 Link Ingredients</button>
+                <button onclick="window.exportRecipeBook()" class="btn btn-outline" style="font-size:12px;">📖 Recipe Book</button>
+                <button onclick="window.showView('batch-linker')" class="btn btn-outline" style="font-size:12px;">🔗 Link Ingredients</button>
                 <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk Import</button>
                 <button onclick="window.editRecipeForm()" class="btn btn-blue">+ New Recipe</button>
             </div>
@@ -1030,6 +1098,37 @@ window.openCostingReport = () => {
     win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
     win.document.close();
 };
+
+// =============================================================================
+// RECIPE BULK CATEGORY EDITOR
+// =============================================================================
+window.renderBulkCategoryEditor = () => {
+    const recipes = (window.recipes||[]).filter(r=>!r.archived);
+    if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No recipes yet.</h3></div></div>';
+    const existingCats = [...new Set(recipes.map(r=>r.category||'').filter(Boolean))].sort();
+    const baseCats = ['','Food','Beverage','Cocktails','Mocktails','Starters','Mains','Desserts','Snacks','Sides','Batch Prep','Sauce','Other'];
+    const allCats = [...new Set([...baseCats,...existingCats])];
+    const rows = recipes.map(r => {
+        const opts = allCats.map(c=>'<option value="'+c+'" '+(c===(r.category||'')?'selected':'')+'>'+( c||'-- No Category --')+'</option>').join('');
+        return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+r.name+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+' · '+(r.type||'Menu')+'</small></td><td style="padding:8px;"><select id="bcat-'+r.id+'" class="input-box" style="margin:0;padding:5px 8px;">'+opts+'</select></td></tr>';
+    }).join('');
+    return '<div style="max-width:900px;margin:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><div><h2 style="margin:0;">Bulk Category Editor</h2><small style="color:var(--text-muted);">Assign categories to all recipes at once.</small></div><div style="display:flex;gap:8px;"><button onclick="window.saveAllCategories()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;color:var(--blue);">Category</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;"><span style="color:var(--text-muted);font-size:13px;">'+recipes.length+' recipes</span><button onclick="window.saveAllCategories()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
+};
+window.saveAllCategories = () => { let count=0; (window.recipes||[]).filter(r=>!r.archived).forEach(r=>{ const el=document.getElementById('bcat-'+r.id); if(el){r.category=el.value;count++;} }); window.saveToDisk(); window.showToast(count+' categories saved!'); window.showView('recipes'); };
+
+// =============================================================================
+// POS ALIAS BULK EDITOR
+// =============================================================================
+window.renderPosAliasEditor = () => {
+    const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
+    if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3></div></div>';
+    const rows = recipes.map(r =>
+        '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+r.name+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+'</small></td><td style="padding:8px;"><input type="text" id="pos-'+r.id+'" class="input-box" value="'+(r.posAlias||'')+'" placeholder="Exact Lightspeed name..." style="margin:0;padding:5px 8px;"></td></tr>'
+    ).join('');
+    return '<div style="max-width:900px;margin:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><div><h2 style="margin:0;">POS Alias Editor</h2><small style="color:var(--text-muted);">Set Lightspeed POS names. Must match exactly for EOD depletion.</small></div><div style="display:flex;gap:8px;"><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;color:var(--blue);">Lightspeed POS Alias</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;"><span style="color:var(--text-muted);font-size:13px;">'+recipes.length+' menu recipes</span><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
+};
+window.saveAllPosAliases = () => { let count=0; (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived).forEach(r=>{ const el=document.getElementById('pos-'+r.id); if(el){r.posAlias=el.value.trim();count++;} }); window.saveToDisk(); window.showToast(count+' POS aliases saved!'); window.showView('recipes'); };
+
 
 window.printRecipe = (id) => {
     const r = window.recipes.find(x => x.id === id);

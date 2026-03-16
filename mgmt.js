@@ -682,7 +682,13 @@ window.renderComplianceView = function() {
             </div>` : ''}
         </div>
         
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; margin-top:30px;"><h3 style="margin:0;">Venue Checklists</h3><button onclick="window.editChecklists()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Edit Lists</button></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; margin-top:30px;">
+            <h3 style="margin:0;">Venue Checklists</h3>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.renderChecklistHistory()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">📋 History</button>
+                <button onclick="window.editChecklists()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Edit Lists</button>
+            </div>
+        </div>
         <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;">
             ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:20px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
         </div>
@@ -704,7 +710,47 @@ window.logAllTemps = () => {
     if(logsToAdd.length === 0) return window.showToast("Enter at least one temp.", "error");
     window.tempLogs.push(...logsToAdd); window.saveToDisk(); window.showToast("Temps Logged!"); window.showView('compliance'); 
 };
-window.signCheck = (l) => { if(!document.getElementById(`s-${l.replace(/\s/g,'')}`).value) return window.showToast("Please sign name", "error"); window.complianceLogs.push({ type: l, staff: document.getElementById(`s-${l.replace(/\s/g,'')}`).value, time: new Date().toLocaleString() }); window.saveToDisk(); window.showToast(l + " Signed Off"); window.showView('compliance'); };
+window.signCheck = (l) => {
+    const staffEl = document.getElementById('s-' + l.replace(/\s/g,''));
+    if (!staffEl || !staffEl.value) return window.showToast('Please sign name', 'error');
+    window.complianceLogs.push({ type: l, staff: staffEl.value, time: new Date().toLocaleString() });
+    window.saveToDisk(); window.showToast(l + ' Signed Off'); window.showView('compliance');
+};
+
+window.renderChecklistHistory = () => {
+    const logs = (window.complianceLogs || []).slice().reverse();
+    const types = [...new Set((window.complianceLogs||[]).map(l=>l.type))].sort();
+    const filterType = window._checkHistFilter || '';
+    const filtered = filterType ? logs.filter(l=>l.type===filterType) : logs;
+    const typeOpts = '<option value="">All Checklists</option>' + types.map(t=>'<option value="'+t+'" '+(filterType===t?'selected':'')+'>'+t+'</option>').join('');
+    const rows = filtered.map(l =>
+        '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:10px;font-size:12px;color:var(--text-muted);">'+l.time+'</td>'+
+        '<td style="padding:10px;font-weight:bold;">'+l.type+'</td>'+
+        '<td style="padding:10px;">'+l.staff+'</td>'+
+        '</tr>'
+    ).join('');
+    const html = '<div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+        '<select class="input-box" style="margin:0;flex:1;" onchange="window._checkHistFilter=this.value;window.renderChecklistHistory()">'+typeOpts+'</select>' +
+        '<button onclick="window.exportChecklistHistory()" class="btn btn-outline" style="font-size:12px;">📊 Export CSV</button>' +
+        '<span style="font-size:12px;color:var(--text-muted);">'+filtered.length+' sign-offs</span>' +
+        '</div>' +
+        '<div style="max-height:55vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;position:sticky;top:0;">' +
+        '<th style="padding:10px;text-align:left;">Time</th><th style="padding:10px;text-align:left;">Checklist</th><th style="padding:10px;text-align:left;">Staff</th>' +
+        '</tr></thead><tbody>'+(rows||'<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--text-muted);">No sign-offs yet.</td></tr>')+'</tbody></table></div>';
+    window.openModal('📋 Checklist Sign-Off History ('+logs.length+' total)', html);
+};
+
+window.exportChecklistHistory = () => {
+    const logs = (window.complianceLogs||[]).slice().reverse();
+    const rows = logs.map(l => ['"'+l.time+'"','"'+l.type+'"','"'+l.staff+'"'].join(','));
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('Time,Checklist,Staff\n' + rows.join('\n'));
+    a.download = 'ChecklistHistory_BWI_' + new Date().toISOString().split('T')[0] + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    window.showToast('Checklist history exported!');
+};
 
 window.editFridges = () => { 
     let html = `<div style="margin-bottom:20px;">${(window.fridgeUnits || []).map((f, i) => `<div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid var(--border); align-items:center;"><span style="font-size:14px;">${f}</span> <button onclick="window.delFridge(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div>`).join('')}</div><div style="display:flex; gap:10px;"><input type="text" id="new-fridge" class="input-box" placeholder="New Unit Name" style="margin:0;"><button onclick="window.addFridge()" class="btn btn-green">Add Unit</button></div>`;
@@ -819,8 +865,24 @@ window.renderSafeView = function() {
     const docs = window.digitalSafe || [];
     const activeTab = window._safeActiveTab || 'all';
 
-    const filteredDocs = activeTab === 'all' ? docs.map((d,i) => ({...d, originalIndex:i}))
+    const sortDocs = (arr) => arr.slice().sort((a, b) => {
+        const now = new Date();
+        const da = a.expiry ? new Date(a.expiry) : null;
+        const db = b.expiry ? new Date(b.expiry) : null;
+        // Expired first, then expiring soonest, then no expiry last
+        const aExpired = da && da < now;
+        const bExpired = db && db < now;
+        if (aExpired && !bExpired) return -1;
+        if (!aExpired && bExpired) return 1;
+        if (da && db) return da - db;
+        if (da && !db) return -1;
+        if (!da && db) return 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    const rawFiltered = activeTab === 'all' ? docs.map((d,i) => ({...d, originalIndex:i}))
         : docs.map((d,i) => ({...d, originalIndex:i})).filter(d => (d.category || 'General / Other') === activeTab);
+    const filteredDocs = sortDocs(rawFiltered);
 
     // Tab pills
     const tabPills = [
