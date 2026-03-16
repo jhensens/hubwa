@@ -399,7 +399,7 @@ window.renderInventoryView = () => {
             <button onclick="window._invBulkAction('category')" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">🏷️ Category</button>
             <button onclick="window._invBulkAction('archive')" class="btn btn-orange" style="font-size:12px; padding:6px 12px;">📦 Archive</button>
             <button onclick="window._invBulkAction('delete')" class="btn btn-red" style="font-size:12px; padding:6px 12px;">🗑️ Delete</button>
-            <button onclick="window._invSelected=new Set(); window.showView('inventory')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; color:var(--text-muted);">✕ Clear</button>
+            <button onclick="window._invSelected=new Set(); window.showView(\'inventory\')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; color:var(--text-muted);">✕ Clear</button>
         </div>
     </div>` : '';
 
@@ -418,8 +418,8 @@ window.renderInventoryView = () => {
         <div style="margin-bottom:15px;">${pillsHtml}</div>
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:15px; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted); align-self:center;">Group By:</span>
-            <button onclick="window.invFilters.groupBy='Category'; window.showView('inventory')" class="btn ${window.invFilters.groupBy==='Category'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Category</button>
-            <button onclick="window.invFilters.groupBy='Zone'; window.showView('inventory')" class="btn ${window.invFilters.groupBy==='Zone'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Zone</button>
+            <button onclick="window.invFilters.groupBy='Category'; window.showView(\'inventory\')" class="btn ${window.invFilters.groupBy==='Category'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Category</button>
+            <button onclick="window.invFilters.groupBy='Zone'; window.showView(\'inventory\')" class="btn ${window.invFilters.groupBy==='Zone'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Zone</button>
         </div>
         ${accordionHtml}
         ${bulkBar}
@@ -798,9 +798,9 @@ window.renderRecipeView = () => {
         }
         return true;
     });
-    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView('recipes')">${c}</div>`).join('');
-    const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView('recipes')">${s}</div>`).join('');
-    const statusPills = ['Active',"86'd",'Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView('recipes')">${s}</div>`).join('');
+    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('');
+    const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
+    const statusPills = ['Active',"86'd",'Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
     return `
     <div style="max-width:1200px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
@@ -864,7 +864,7 @@ window.viewRecipe = (id) => {
     document.getElementById('mainContent').innerHTML = `
     <div style="max-width:900px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-            <button onclick="window.showView('recipes')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+            <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
             <div style="display:flex;gap:8px;">
                 <button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>
                 <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
@@ -1106,7 +1106,7 @@ window.editRecipeForm = (id = null) => {
         document.getElementById('mainContent').innerHTML = `
         <div style="max-width:880px;margin:auto;padding-bottom:80px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                <button onclick="window.tempRecipeId=null;window.showView('recipes')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+                <button onclick="window.tempRecipeId=null;window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
                 <div style="display:flex;gap:8px;">
                     ${cleanId?`<button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>`:''}
                     ${cleanId?`<button onclick="window.delRecipe('${r.id}')" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>`:''}
@@ -1163,7 +1163,7 @@ window.editRecipeForm = (id = null) => {
             </div>
             <div class="sticky-footer">
                 <button onclick="window.subRecipe('${r.id}',${totalCost})" class="btn btn-green" style="flex:2;font-size:15px;">💾 Save Recipe</button>
-                <button onclick="window.tempRecipeId=null;window.showView('recipes')" class="btn btn-outline" style="flex:1;">Cancel</button>
+                <button onclick="window.tempRecipeId=null;window.showView(\'recipes\')" class="btn btn-outline" style="flex:1;">Cancel</button>
             </div>
         </div>`;
         window.updateUnitHint();
@@ -1305,7 +1305,7 @@ window.renderMarginView = () => {
     <div style="max-width:1100px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
             <div><h2 style="margin:0;">Margin Health</h2><small style="color:var(--text-muted);">Target: ${GP_TARGET}% GP · Active menu recipes · Updates live when invoices processed</small></div>
-            <button onclick="window.showView('recipes')" class="btn btn-outline">← Recipes</button>
+            <button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">
             <div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">${menuRecipes.length}</div><div style="font-size:12px;color:var(--text-muted);">Active Menu Recipes</div></div>
@@ -1336,7 +1336,7 @@ window.openBulkHtmlImport = () => {
             <button onclick="document.getElementById('html-import-file').click()" class="btn btn-purple" style="width:100%;font-size:16px;padding:14px;">📂 Select Recipe HTML File</button>
             <div id="import-status" style="margin-top:15px;"></div>
         </div>
-        <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+        <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
     </div>`;
 };
 
@@ -1383,8 +1383,8 @@ window.runBulkHtmlImport = (event) => {
                 <h3 style="color:var(--green);margin:0 0 10px 0;">Import Complete!</h3>
                 <div style="font-size:14px;color:var(--text-muted);"><strong style="color:var(--green);">${imported}</strong> recipes imported · <strong style="color:var(--orange);">${duplicates}</strong> duplicates skipped</div>
                 <div style="margin-top:15px;display:flex;gap:10px;justify-content:center;">
-                    <button onclick="window.showView('recipes')" class="btn btn-blue">View Recipes</button>
-                    <button onclick="window.showView('margins')" class="btn btn-purple">Check Margins</button>
+                    <button onclick="window.showView(\'recipes\')" class="btn btn-blue">View Recipes</button>
+                    <button onclick="window.showView(\'margins\')" class="btn btn-purple">Check Margins</button>
                 </div>
             </div>`;
         } catch(err) { statusDiv.innerHTML=`<p style="color:var(--red);">Parse error: ${err.message}</p>`; }
@@ -1403,7 +1403,7 @@ window.openAiRecipeImport = () => {
             <p style="color:var(--text-muted);font-size:14px;margin-top:0;">Paste a single recipe. AI will parse and match ingredients to your Live Inventory.</p>
             <textarea id="ai-recipe-text" class="input-box" style="height:250px;font-family:monospace;font-size:12px;" placeholder="Paste recipe text here..."></textarea>
             <button onclick="window.runAiRecipeImport()" class="btn btn-purple" style="width:100%;font-size:16px;padding:12px;">Parse & Cost Recipe</button>
-            <button onclick="window.showView('recipes')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
+            <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="width:100%;margin-top:10px;">Cancel</button>
             <div id="ai-recipe-status" style="margin-top:15px;text-align:center;"></div>
         </div>
     </div>`;
@@ -1432,6 +1432,155 @@ Recipe: ${rawText}`;
         const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
         window.recipes.push(newObj); window.editRecipeForm(newObj.id); window.showToast("AI Parsing Complete!");
     } catch(e) { statusDiv.innerHTML=`<p style="color:var(--red);">API Error: ${e.message}</p>`; }
+};
+
+
+// =============================================================================
+// AI RAW INGREDIENT BATCH LINKER
+// =============================================================================
+window.renderAiBatchLinker = () => {
+    const rawRecipes = (window.recipes || []).filter(r => !r.archived && (r.ingredients || []).some(i => i.type === 'raw'));
+    const totalRaw = rawRecipes.reduce((sum, r) => sum + r.ingredients.filter(i => i.type === 'raw').length, 0);
+    return '<div style="max-width:1000px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+            '<div><h2 style="margin:0;">AI Ingredient Linker</h2>' +
+            '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Scans unlinked raw ingredients and suggests inventory matches.</p></div>' +
+            '<button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button>' +
+        '</div>' +
+        '<div class="card" style="border-top:5px solid var(--purple);text-align:center;margin-bottom:20px;">' +
+            '<div style="font-size:42px;font-weight:bold;color:var(--purple);">' + totalRaw + '</div>' +
+            '<div style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">' + rawRecipes.length + ' recipes with unlinked ingredients</div>' +
+            '<button onclick="window.runAiBatchLink()" class="btn btn-purple" style="font-size:16px;padding:14px 30px;">✨ Run AI Batch Linker</button>' +
+        '</div>' +
+        '<div id="batch-link-status" style="margin-bottom:15px;"></div>' +
+        '<div id="batch-link-results"></div>' +
+    '</div>';
+};
+
+window.runAiBatchLink = async () => {
+    const statusDiv = document.getElementById('batch-link-status');
+    const resultsDiv = document.getElementById('batch-link-results');
+    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Scanning all raw ingredients...</div>';
+    resultsDiv.innerHTML = '';
+    const rawIngredients = [];
+    (window.recipes || []).filter(r => !r.archived).forEach(r => {
+        (r.ingredients || []).forEach((ing, idx) => {
+            if (ing.type === 'raw') rawIngredients.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, rawName: ing.name });
+        });
+    });
+    if (rawIngredients.length === 0) {
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ All ingredients linked!</div>';
+        return;
+    }
+    const invList = (window.inventoryItems||[]).filter(i=>!i.archived).map(i=>i.id+':'+i.name+' ('+( i.useUnit||'unit')+')').join('; ');
+    const rawList = rawIngredients.map((r,idx)=>idx+': '+r.rawName+' [in: '+r.recipeName+']').join('\n');
+    const prompt = 'Match each raw ingredient to the best inventory ID or null.\nINVENTORY: '+invList+'\nRAW:\n'+rawList+'\nReturn ONLY JSON array: [{"idx":0,"matchId":"id","confidence":"high"},...]. confidence: high/medium/low/none. Only suggest medium+ confidence.';
+    try {
+        const apiKey = window.getApiKey(); if (!apiKey) return;
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+apiKey, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+        const aiMatches = JSON.parse(data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim());
+        window._batchLinkQueue = rawIngredients.map((item,idx) => {
+            const match = aiMatches.find(m=>m.idx===idx);
+            const inv = match && match.matchId ? (window.inventoryItems||[]).find(i=>i.id===match.matchId) : null;
+            return {...item, suggestedInvId:inv?inv.id:null, suggestedInvName:inv?inv.name:null, confidence:match?match.confidence:'none', accepted:false, skipped:false};
+        });
+        window.renderBatchLinkQueue();
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ Done — '+aiMatches.filter(m=>m.matchId).length+' matches suggested.</div>';
+    } catch(e) { statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">Error: '+e.message+'</div>'; }
+};
+
+window.renderBatchLinkQueue = () => {
+    const queue = window._batchLinkQueue || [];
+    const resultsDiv = document.getElementById('batch-link-results');
+    const pending = queue.filter(q => !q.accepted && !q.skipped);
+    const accepted = queue.filter(q => q.accepted);
+    if (pending.length === 0 && accepted.length === 0) { resultsDiv.innerHTML = ''; return; }
+    const cc = {high:'var(--green)',medium:'var(--orange)',low:'var(--text-muted)',none:'var(--border)'};
+    const withMatch = pending.filter(q=>q.suggestedInvId);
+    const noMatch = pending.filter(q=>!q.suggestedInvId);
+    let html = '<div style="margin-bottom:15px;">';
+    if (withMatch.length>0) html += '<button onclick="window.acceptAllBatchLinks()" class="btn btn-green" style="margin-right:8px;">✅ Accept All ('+withMatch.length+')</button>';
+    if (accepted.length>0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple">💾 Commit '+accepted.length+' Links</button>';
+    html += '</div>';
+    const buildRow = (item) => {
+        const qIdx = queue.indexOf(item);
+        const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+x.name+' ('+(x.useUnit||'unit')+')</option>').join('');
+        return '<div class="card" style="border-left:4px solid '+(cc[item.confidence]||'var(--border)')+';padding:15px;margin-bottom:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
+            '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+item.recipeName+'</div><strong style="color:var(--orange);">'+item.rawName+'</strong>' +
+            (item.confidence!=='none'?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
+            '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
+            '<div style="display:flex;gap:6px;">' +
+            '<button onclick="window.acceptBatchLink('+qIdx+')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
+            '<button onclick="window.skipBatchLink('+qIdx+')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
+            '</div></div></div>';
+    };
+    if (withMatch.length>0) { html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">🔗 Suggested ('+withMatch.length+')</h3>'; withMatch.forEach(i=>{html+=buildRow(i);}); }
+    if (noMatch.length>0) { html += '<h3 style="color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:15px;">❓ No Match ('+noMatch.length+')</h3>'; noMatch.forEach(i=>{html+=buildRow(i);}); }
+    if (accepted.length>0) {
+        html += '<h3 style="color:var(--green);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:10px;">✅ Ready to Commit ('+accepted.length+')</h3>';
+        accepted.forEach(item=>{ const inv=(window.inventoryItems||[]).find(x=>x.id===item.suggestedInvId); html+='<div style="padding:8px 12px;font-size:13px;color:var(--green);background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:6px;"><strong>'+item.rawName+'</strong> → <strong>'+(inv?inv.name:item.suggestedInvId)+'</strong> <small style="color:var(--text-muted);">in '+item.recipeName+'</small></div>'; });
+        if (pending.length===0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="width:100%;margin-top:15px;font-size:16px;padding:14px;">💾 Commit All '+accepted.length+' Links</button>';
+    }
+    resultsDiv.innerHTML = html;
+};
+window.acceptBatchLink = (qIdx) => { const sel=document.getElementById('bl-sel-'+qIdx); const id=sel?sel.value:window._batchLinkQueue[qIdx].suggestedInvId; if(!id) return window.showToast('Select an item first.','error'); const inv=(window.inventoryItems||[]).find(x=>x.id===id); window._batchLinkQueue[qIdx].suggestedInvId=id; window._batchLinkQueue[qIdx].suggestedInvName=inv?inv.name:id; window._batchLinkQueue[qIdx].accepted=true; window.renderBatchLinkQueue(); };
+window.skipBatchLink = (qIdx) => { window._batchLinkQueue[qIdx].skipped=true; window.renderBatchLinkQueue(); };
+window.acceptAllBatchLinks = () => { (window._batchLinkQueue||[]).forEach(item=>{ if(!item.accepted&&!item.skipped&&item.suggestedInvId) item.accepted=true; }); window.renderBatchLinkQueue(); };
+window.commitBatchLinks = () => {
+    const accepted=(window._batchLinkQueue||[]).filter(q=>q.accepted&&q.suggestedInvId);
+    if(accepted.length===0) return window.showToast('Nothing to commit.','error');
+    let count=0;
+    accepted.forEach(item=>{ const recipe=window.recipes.find(r=>r.id===item.recipeId); if(!recipe) return; const ing=recipe.ingredients[item.ingIdx]; if(!ing||ing.type!=='raw') return; const inv=window.inventoryItems.find(i=>i.id===item.suggestedInvId); if(!inv) return; recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:1,unit:inv.useUnit||'unit',name:inv.name}; count++; });
+    window.saveToDisk(); window._batchLinkQueue=null; window.showToast(count+' ingredients linked!'); window.showView('recipes');
+};
+
+// =============================================================================
+// MENU ENGINEERING MATRIX
+// =============================================================================
+window.renderMenuEngineeringView = () => {
+    const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active'&&!r.archived);
+    menuRecipes.forEach(r => {
+        let cost=0;
+        (r.ingredients||[]).forEach(ing=>{ if(ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));} else if(ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}});
+        r.cost=cost; r.gp=r.price>0?parseFloat(((r.price-cost)/r.price*100).toFixed(1)):0;
+    });
+    const avgGp=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length:GP_TARGET;
+    const avgCovers=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+(r.coversPerWeek||0),0)/menuRecipes.length:0;
+    const classify = r => { const hi=r.gp>=avgGp,hv=(r.coversPerWeek||0)>=avgCovers; return hi&&hv?'star':hi&&!hv?'puzzle':!hi&&hv?'plowhorse':'dog'; };
+    const cats = { star:{label:'⭐ Star',color:'var(--green)',bg:'rgba(16,185,129,0.08)',desc:'High GP + high volume. Protect.'}, puzzle:{label:'🧩 Puzzle',color:'var(--blue)',bg:'rgba(59,130,246,0.08)',desc:'High GP, low volume. Promote.'}, plowhorse:{label:'🐴 Plow Horse',color:'var(--orange)',bg:'rgba(245,158,11,0.08)',desc:'High volume, low GP. Reprice.'}, dog:{label:'🐶 Dog',color:'var(--red)',bg:'rgba(239,68,68,0.08)',desc:'Low GP + low volume. Review.'} };
+    const sc={Kitchen:'var(--orange)',Bar:'var(--blue)',Prep:'var(--purple)'};
+    const nw=menuRecipes.filter(r=>!r.coversPerWeek||r.coversPerWeek===0).length;
+    const warnHtml=nw>0?'<div class="card" style="border-left:4px solid var(--orange);padding:12px;margin-bottom:20px;font-size:13px;"><strong style="color:var(--orange);">⚠️ '+nw+' recipes have no covers/week set.</strong> Edit each recipe to add covers, or use the Sell Price Editor.</div>':'';
+    const counts={star:0,puzzle:0,plowhorse:0,dog:0};
+    menuRecipes.forEach(r=>counts[classify(r)]++);
+    const quadHtml=['star','puzzle','plowhorse','dog'].map(key=>{
+        const cat=cats[key]; const items=menuRecipes.filter(r=>classify(r)===key);
+        const rows=items.map(r=>{
+            const gc=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--orange)':'var(--red)';
+            return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 12px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.editRecipeForm(this.dataset.id)" data-id="'+r.id+'">'+r.name+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td><td style="padding:10px 12px;color:'+gc+';font-weight:bold;">'+r.gp+'%</td><td style="padding:10px 12px;color:var(--brand-accent);">$'+Number(r.price||0).toFixed(2)+'</td><td style="padding:10px 12px;font-weight:bold;">'+(r.coversPerWeek||0)+'/wk</td></tr>';
+        }).join('');
+        return '<div class="card" style="padding:0;overflow:hidden;border-top:4px solid '+cat.color+';background:'+cat.bg+';">' +
+            '<div style="padding:15px 20px;border-bottom:1px solid var(--border);"><h3 style="margin:0;color:'+cat.color+';">'+cat.label+' <span style="font-size:13px;background:'+cat.color+';color:white;padding:2px 8px;border-radius:10px;font-weight:normal;">'+items.length+'</span></h3><p style="margin:4px 0 0 0;font-size:12px;color:var(--text-muted);">'+cat.desc+'</p></div>' +
+            (items.length===0?'<p style="padding:15px 20px;color:var(--text-muted);font-size:13px;margin:0;">No items.</p>':'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);"><th style="padding:8px 12px;text-align:left;">Recipe</th><th style="padding:8px 12px;">GP%</th><th style="padding:8px 12px;">Sell</th><th style="padding:8px 12px;">Covers</th></tr></thead><tbody>'+rows+'</tbody></table></div>') +
+        '</div>';
+    }).join('');
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+        '<div><h2 style="margin:0;">Menu Engineering Matrix</h2><small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+' covers/wk · '+menuRecipes.length+' active items</small></div>' +
+        '<div style="display:flex;gap:8px;"><button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:12px;">📊 Margins</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Recipes</button></div></div>' +
+        warnHtml +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:25px;">' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">'+counts.star+'</div><div style="font-size:12px;color:var(--text-muted);">⭐ Stars</div></div>' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">'+counts.puzzle+'</div><div style="font-size:12px;color:var(--text-muted);">🧩 Puzzles</div></div>' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--orange);"><div style="font-size:34px;font-weight:bold;color:var(--orange);">'+counts.plowhorse+'</div><div style="font-size:12px;color:var(--text-muted);">🐴 Plow Horses</div></div>' +
+        '<div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">'+counts.dog+'</div><div style="font-size:12px;color:var(--text-muted);">🐶 Dogs</div></div></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;">'+quadHtml+'</div></div>';
 };
 
 // =============================================================================
