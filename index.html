@@ -33,11 +33,13 @@
                 </div>
                 <div class="nav-section-items" id="sec-ops">
                     <div class="nav-item restricted" onclick="window.showView('sales')">📈 Takings & KPIs</div>
+                    <div class="nav-item restricted" onclick="window.showView('forecast')">🔮 Revenue Forecast</div>
                     <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
                     <div class="nav-item" onclick="window.showView('inventory')">📦 Live Inventory</div>
                     <div class="nav-item" onclick="window.showView('zones')">🗄️ Storage Zones</div>
                     <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers & Ordering</div>
                     <div class="nav-item" onclick="window.showView('prep-list')">📝 Auto-Order List</div>
+                    <div class="nav-item" onclick="window.showView('ai-order')">✨ AI Order Suggester</div>
                     <div class="nav-item" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
                     <div class="nav-item" onclick="window.showView('allergens')">🧪 Allergen Matrix</div>
                 </div>
@@ -115,7 +117,7 @@
 
     <div class="main-wrapper">
         <div class="main-header no-print">
-            <div id="sync-status" class="sync-badge">🟢 Live Sync</div>
+            <button id="venue-badge" onclick="window.renderVenueSwitcher()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:10px;">🏢 Loading...</button><div id="sync-status" class="sync-badge">🟢 Live Sync</div>
         </div>
         
         <div class="content-area" id="mainContent">
