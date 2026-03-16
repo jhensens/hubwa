@@ -912,7 +912,10 @@ window.renderSafeView = function() {
                         <h4 style="margin:0 0 4px 0;font-size:15px;">${d.name}</h4>
                         <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${d.category || 'General'}</span>
                     </div>
-                    <button onclick="window.delDoc(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">&times;</button>
+                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                        <button onclick="window.editDocForm(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;" title="Edit">✏️</button>
+                        <button onclick="window.delDoc(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;" title="Delete">&times;</button>
+                    </div>
                 </div>
                 <p style="margin:8px 0 15px 0;font-size:12px;color:${isExpired?'var(--red)':isExpiringSoon?'var(--orange)':'var(--text-muted)'};">
                     ${d.expiry ? (isExpired ? '⚠️ Expired: ' : isExpiringSoon ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
@@ -1051,6 +1054,31 @@ window.subDoc = async () => {
 };
 window.delDoc = (i) => {
     if (confirm('Delete this document?')) { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); }
+};
+
+window.editDocForm = (i) => {
+    const doc = window.digitalSafe[i];
+    if (!doc) return;
+    const cats = (window.safeCategories || []);
+    const catOpts = cats.map(c => '<option value="' + c + '" ' + (c === doc.category ? 'selected' : '') + '>' + c + '</option>').join('');
+    const html = '<label style="font-size:11px;color:var(--text-muted);">Document Name</label>' +
+        '<input type="text" id="edit-doc-name" class="input-box" value="' + (doc.name||'').replace(/"/g, '&quot;') + '" placeholder="e.g. John Smith RSA Certificate">' +
+        '<label style="font-size:11px;color:var(--text-muted);">Category</label>' +
+        '<select id="edit-doc-cat" class="input-box"><option value="">-- Select Category --</option>' + catOpts + '</select>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional)</label>' +
+        '<input type="date" id="edit-doc-expiry" class="input-box" value="' + (doc.expiry||'') + '">' +
+        '<button onclick="window.saveDocEdit(' + i + ')" class="btn btn-green" style="width:100%;margin-top:5px;">Save Changes</button>';
+    window.openModal('✏️ Edit Document — ' + (doc.name||'Untitled'), html);
+};
+
+window.saveDocEdit = (i) => {
+    const name = document.getElementById('edit-doc-name').value.trim();
+    if (!name) return window.showToast('Name is required.', 'error');
+    window.digitalSafe[i].name = name;
+    window.digitalSafe[i].category = document.getElementById('edit-doc-cat').value;
+    window.digitalSafe[i].expiry = document.getElementById('edit-doc-expiry').value;
+    window.saveToDisk(); window.closeModal(); window.showView('safe');
+    window.showToast('Document updated!');
 };
 
 
