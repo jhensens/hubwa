@@ -270,6 +270,7 @@ window.renderSalesView = () => {
                 '<button onclick="window.openAiDepletion()" class="btn btn-purple">✨ EOD Depletion</button>' +
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
+                '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +
                 '<button onclick="window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
@@ -308,6 +309,52 @@ window.clearTakingsData = () => {
     window.saveToDisk();
     window.showToast('Takings data cleared. Re-upload your CSVs.');
     window.showView('sales');
+};
+
+window.manualTakingsForm = (editDate) => {
+    const existing = editDate ? (window.salesData || []).find(s => s.date === editDate) : null;
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2,'0');
+    const mm = String(today.getMonth()+1).padStart(2,'0');
+    const yyyy = today.getFullYear();
+    const todayStr = dd + '/' + mm + '/' + yyyy;
+    const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Date (DD/MM/YYYY)</label>' +
+        '<input type="text" id="mt-date" class="input-box" value="' + (existing ? existing.date : todayStr) + '" placeholder="DD/MM/YYYY" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Day</label>' +
+        '<input type="text" id="mt-day" class="input-box" value="' + (existing ? (existing.day||'') : '') + '" placeholder="e.g. Monday" style="margin:0;"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:15px;">' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">EFTPOS ($)</label><input type="number" step="0.01" id="mt-eft" class="input-box" value="' + (existing ? existing.eftpos||'' : '') + '" placeholder="0.00" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Cash ($)</label><input type="number" step="0.01" id="mt-cash" class="input-box" value="' + (existing ? existing.cash||'' : '') + '" placeholder="0.00" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Me&u ($)</label><input type="number" step="0.01" id="mt-meandu" class="input-box" value="' + (existing ? existing.meandu||'' : '') + '" placeholder="0.00" style="margin:0;"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Total ($)</label><input type="number" step="0.01" id="mt-total" class="input-box" value="' + (existing ? existing.total||'' : '') + '" placeholder="0.00" style="margin:0;border-color:var(--green);"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Wages ($)</label><input type="number" step="0.01" id="mt-wages" class="input-box" value="' + (existing ? existing.wages||'' : '') + '" placeholder="0.00" style="margin:0;"></div></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
+        '<input type="text" id="mt-notes" class="input-box" value="' + (existing ? existing.notes||'' : '') + '" placeholder="e.g. Public holiday, private event..." style="margin-bottom:20px;"></div>' +
+        '<button onclick="window.saveManualTakings(window._mtEditDate)" class="btn btn-green" style="width:100%;font-size:15px;">Save Takings Entry</button>';
+    window._mtEditDate = editDate || null;
+    window.openModal(editDate ? 'Edit Takings — ' + editDate : '+ Manual Takings Entry', html);
+};
+
+window.saveManualTakings = (editDate) => {
+    const date = document.getElementById('mt-date').value.trim();
+    const total = parseFloat(document.getElementById('mt-total').value) || 0;
+    if (!date) return window.showToast('Date is required.', 'error');
+    if (!total) return window.showToast('Total is required.', 'error');
+    const entry = {
+        date, day: document.getElementById('mt-day').value.trim(),
+        eftpos: parseFloat(document.getElementById('mt-eft').value) || 0,
+        cash: parseFloat(document.getElementById('mt-cash').value) || 0,
+        meandu: parseFloat(document.getElementById('mt-meandu').value) || 0,
+        total, wages: parseFloat(document.getElementById('mt-wages').value) || 0,
+        notes: document.getElementById('mt-notes').value.trim()
+    };
+    const idx = (window.salesData || []).findIndex(s => s.date === date);
+    if (idx >= 0) { window.salesData[idx] = { ...window.salesData[idx], ...entry }; }
+    else { window.salesData.push(entry); }
+    window.saveToDisk(); window.closeModal(); window.showView('sales');
+    window.showToast('Takings entry saved!');
 };
 window.handleSalesCSV = (event) => {
     const file = event.target.files[0];
@@ -495,6 +542,7 @@ window.renderComplianceView = function() {
                         ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:8px 0;">${t.unit}</td><td style="color:${t.value > 5 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${t.staff}</td><td>${t.action ? `<span style="color:var(--red); font-size:11px;">Action: ${t.action}</span><br>` : ''}<span style="color:var(--text-muted); font-size:11px;">${t.time}</span></td></tr>`).join('')}
                     </tbody>
                 </table>
+                <button onclick="window.showTempHistory()" class="btn btn-outline" style="width:100%;margin-top:12px;font-size:12px;">📋 View Full History</button>
             </div>` : ''}
         </div>
         
@@ -543,9 +591,11 @@ window.delChecklistItem = (cat, idx) => { window.masterChecklists[cat].splice(id
 // --- 5. MAINTENANCE & ASSETS ---
 window.renderMaintenanceView = function(activeTab = 'fixit') {
     let content = '', btnF = 'btn-outline', btnA = 'btn-outline', btnC = 'btn-outline', actionBtn = '';
+    let btnCal = 'btn-outline';
     if (activeTab === 'fixit') { content = window.renderFixItBoard(); btnF = 'btn-dark'; } 
     else if (activeTab === 'assets') { content = window.renderAssetRegister(); btnA = 'btn-dark'; actionBtn = `<button onclick="window.editEq()" class="btn btn-blue">+ Add Asset</button>`; } 
     else if (activeTab === 'contractors') { content = window.renderContractorBoard(); btnC = 'btn-dark'; actionBtn = `<button onclick="window.showContractorForm()" class="btn btn-green">+ Sign In Contractor</button>`; }
+    else if (activeTab === 'calendar') { content = window.renderServiceCalendar(); btnCal = 'btn-dark'; }
 
     return `<div style="max-width: 900px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
@@ -553,6 +603,7 @@ window.renderMaintenanceView = function(activeTab = 'fixit') {
                 <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit')" class="btn ${btnF}">🛠️ Fix-It Board</button>
                 <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets')" class="btn ${btnA}">⚙️ Asset Register</button>
                 <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors')" class="btn ${btnC}">📋 Contractor Log</button>
+                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('calendar')" class="btn ${btnCal}">📅 Service Calendar</button>
             </div>
             ${actionBtn}
         </div>
@@ -819,10 +870,156 @@ window.subContact = () => { window.phoneBook.push({ name: document.getElementByI
 window.delContact = (i) => { if(confirm("Delete this contact?")) { window.phoneBook.splice(i,1); window.saveToDisk(); window.showView('phonebook'); } };
 
 // --- 8. INCIDENT LOG ---
-window.renderIncidentView = function() { return `<div style="max-width: 800px; margin: auto;"><h2 style="margin-top:0; margin-bottom:20px;">Incident Log</h2><div class="card" style="border-top:5px solid var(--red);"><textarea id="inc-desc" class="input-box" style="height:100px;" placeholder="Describe the incident in detail..."></textarea><input type="text" id="inc-staff" class="input-box" placeholder="Staff Name Logging Incident" style="margin-bottom:20px;"><button onclick="window.saveIncident()" class="btn btn-red" style="width:100%; font-size:16px;">Log Incident to Permanent Record</button></div>${(window.incidentLogs || []).slice().reverse().map(l => `<div class="card" style="margin-top:15px; padding:20px; border-left:4px solid var(--red);"><div><strong style="font-size:16px;">${l.staff}</strong><span style="color:var(--text-muted); float:right; font-size:12px;">${l.time}</span></div><p style="margin:10px 0 0 0; color:var(--text-main); font-size:14px; white-space:pre-wrap;">${l.desc}</p></div>`).join('')}</div>`; }
-window.saveIncident = function() { window.incidentLogs.push({ staff: document.getElementById('inc-staff').value, desc: document.getElementById('inc-desc').value, time: new Date().toLocaleString() }); window.saveToDisk(); window.showToast("Incident Logged Permanently", "error"); window.showView('incidents'); };
+window.renderIncidentView = function() {
+    const logs = (window.incidentLogs || []).slice().reverse();
+    return '<div style="max-width:800px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<h2 style="margin:0;">Incident Log</h2>' +
+            '<button onclick="window.exportIncidentLog()" class="btn btn-outline" style="font-size:12px;">🖨️ Export / Print</button>' +
+        '</div>' +
+        '<div class="card" style="border-top:5px solid var(--red);margin-bottom:20px;">' +
+            '<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">' +
+                '<textarea id="inc-desc" class="input-box" style="height:90px;margin:0;" placeholder="Describe the incident in detail..."></textarea>' +
+                '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                    '<input type="text" id="inc-staff" class="input-box" placeholder="Staff Name" style="margin:0;">' +
+                    '<input type="text" id="inc-type" class="input-box" placeholder="Type (e.g. Injury, Spill)" style="margin:0;">' +
+                '</div>' +
+            '</div>' +
+            '<button onclick="window.saveIncident()" class="btn btn-red" style="width:100%;font-size:15px;">Log Incident to Permanent Record</button>' +
+        '</div>' +
+        (logs.length === 0 ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No incidents logged.</p></div>' :
+        logs.map(l => '<div class="card" style="margin-bottom:12px;padding:20px;border-left:4px solid var(--red);">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
+                '<div><strong style="font-size:15px;">' + l.staff + '</strong>' + (l.type ? ' <span style="font-size:11px;color:var(--red);background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:8px;margin-left:8px;">' + l.type + '</span>' : '') + '</div>' +
+                '<span style="color:var(--text-muted);font-size:12px;">' + l.time + '</span>' +
+            '</div>' +
+            '<p style="margin:0;font-size:14px;white-space:pre-wrap;">' + l.desc + '</p>' +
+        '</div>').join('')) +
+    '</div>';
+};
+window.saveIncident = function() {
+    const staff = document.getElementById('inc-staff').value;
+    const desc = document.getElementById('inc-desc').value;
+    const type = document.getElementById('inc-type') ? document.getElementById('inc-type').value : '';
+    if (!staff || !desc) return window.showToast('Staff name and description required.', 'error');
+    window.incidentLogs.push({ staff, desc, type, time: new Date().toLocaleString() });
+    window.saveToDisk(); window.showToast('Incident Logged', 'error'); window.showView('incidents');
+};
+
+window.exportIncidentLog = () => {
+    const allLogs = (window.incidentLogs || []).slice().reverse();
+    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Select a date range or leave blank to export all (' + allLogs.length + ' total).</p>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">' +
+            '<div><label style="font-size:11px;color:var(--text-muted);">From</label><input type="date" id="inc-from" class="input-box" style="margin:0;"></div>' +
+            '<div><label style="font-size:11px;color:var(--text-muted);">To</label><input type="date" id="inc-to" class="input-box" style="margin:0;"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;">' +
+            '<button onclick="window.runIncidentExport(\'print\')" class="btn btn-blue" style="flex:1;">🖨️ Print / PDF</button>' +
+            '<button onclick="window.runIncidentExport(\'csv\')" class="btn btn-outline" style="flex:1;">📊 CSV</button>' +
+        '</div>';
+    window.openModal('🖨️ Export Incident Log', html);
+};
+
+window.runIncidentExport = (format) => {
+    const fromVal = document.getElementById('inc-from') ? document.getElementById('inc-from').value : '';
+    const toVal = document.getElementById('inc-to') ? document.getElementById('inc-to').value : '';
+    const from = fromVal ? new Date(fromVal) : null;
+    const to = toVal ? new Date(toVal + 'T23:59:59') : null;
+    let logs = (window.incidentLogs || []).slice().reverse();
+    if (from || to) logs = logs.filter(l => { const d = new Date(l.time); return (!from||d>=from) && (!to||d<=to); });
+    const periodLabel = (from||to) ? ((from?from.toLocaleDateString('en-AU'):'All') + ' to ' + (to?to.toLocaleDateString('en-AU'):'Present')) : 'Full History';
+    if (format === 'csv') {
+        const rows = logs.map(l => ['"'+l.time+'"','"'+(l.staff||'')+'"','"'+(l.type||'')+'"','"'+(l.desc||'').replace(/"/g,"''")+'"'].join(','));
+        const a = document.createElement('a');
+        a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('Date/Time,Staff,Type,Description\n' + rows.join('\n'));
+        a.download = 'IncidentLog_BWI_' + new Date().toISOString().split('T')[0] + '.csv';
+        document.body.appendChild(a); a.click(); a.remove();
+        window.closeModal(); window.showToast(logs.length + ' incidents exported.');
+        return;
+    }
+    const win = window.open('', '_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Incident Log</title><style>body{font-family:sans-serif;font-size:13px;max-width:750px;margin:30px auto;}.h{font-size:20px;font-weight:bold;border-bottom:3px solid #dc2626;padding-bottom:8px;margin-bottom:5px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.inc{border-left:4px solid #dc2626;padding:12px 15px;margin-bottom:12px;background:#fff5f5;border-radius:0 6px 6px 0;}.row{display:flex;justify-content:space-between;margin-bottom:6px;}.name{font-weight:bold;}.time{color:#888;font-size:11px;}.type{font-size:11px;background:#fca5a5;color:#dc2626;padding:2px 8px;border-radius:8px;margin-left:8px;}.desc{white-space:pre-wrap;line-height:1.6;}@media print{body{margin:15px;}}</style></head><body>');
+    win.document.write('<div class="h">⚠️ Incident Log — Bar Wa Izakaya</div><div class="meta">Period: ' + periodLabel + ' · ' + logs.length + ' incident(s) · Printed ' + new Date().toLocaleDateString('en-AU') + '</div>');
+    logs.forEach(l => { win.document.write('<div class="inc"><div class="row"><span><span class="name">' + l.staff + '</span>' + (l.type ? '<span class="type">' + l.type + '</span>' : '') + '</span><span class="time">' + l.time + '</span></div><div class="desc">' + l.desc + '</div></div>'); });
+    win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
+    win.document.close(); window.closeModal();
+};
 
 // --- 9. COMMAND CENTER (DASHBOARD) ---
+
+window.generateWeeklySummary = () => {
+    const today = new Date();
+    const weekStart = new Date(today);
+    const day = weekStart.getDay();
+    weekStart.setDate(weekStart.getDate() - day + (day === 0 ? -6 : 1));
+    weekStart.setHours(0,0,0,0);
+    const parseDate = (str) => {
+        const m = str && str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        return m ? new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1])) : new Date(str);
+    };
+    const weekSales = (window.salesData||[]).filter(s => { const d = parseDate(s.date); return d >= weekStart && d <= today; });
+    const totalRev = weekSales.reduce((s,d) => s + Number(d.total||0), 0);
+    const totalWages = weekSales.reduce((s,d) => s + Number(d.wages||0), 0);
+    const wagePct = totalRev > 0 && totalWages > 0 ? ((totalWages/totalRev)*100).toFixed(1) : null;
+    const avgDaily = weekSales.length > 0 ? (totalRev/weekSales.length).toFixed(0) : 0;
+    const bestDay = weekSales.length > 0 ? weekSales.reduce((b,d) => Number(d.total)>Number(b.total)?d:b) : null;
+    const isWeekend = [0,5,6].includes(today.getDay());
+    const lowStock = (window.inventoryItems||[]).filter(i => { if(i.archived) return false; const par = isWeekend?(i.parWeekend||i.par||0):(i.parWeekday||i.par||0); return i.stock < par; });
+    const openTickets = (window.defectLogs||[]).filter(d => d.status === 'Open');
+    const weekWastage = (window.wastageLogs||[]).filter(w => { const d = new Date(w.time); return d >= weekStart && d <= today; });
+    const wastageVal = weekWastage.reduce((s,w) => s + Number(w.value||0), 0);
+    const weekIncidents = (window.incidentLogs||[]).filter(i => { const d = new Date(i.time); return d >= weekStart && d <= today; });
+    const freqMap = {'Weekly':7,'Fortnightly':14,'Monthly':30,'Quarterly':90};
+    const overdueTasks = (window.rotationalTasks||[]).filter(t => { if(!t.lastLogIso) return true; return ((today-new Date(t.lastLogIso))/(1000*3600*24)) >= freqMap[t.freq]; });
+    const weekLabel = weekStart.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + today.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+    const fmt = (n) => Number(n).toLocaleString('en-AU',{minimumFractionDigits:0,maximumFractionDigits:0});
+    const lines = [
+        'BAR WA IZAKAYA — WEEKLY SUMMARY',
+        weekLabel,
+        '─────────────────────────────',
+        '',
+        '💰 REVENUE',
+        'Total: $' + fmt(totalRev),
+        'Avg Daily: $' + fmt(avgDaily),
+        bestDay ? 'Best Day: ' + bestDay.date + ' ($' + fmt(bestDay.total) + ')' : '',
+        '',
+        '💼 WAGES',
+        totalWages > 0 ? 'Total: $' + fmt(totalWages) + (wagePct ? ' (' + wagePct + '%)' : '') : 'No wages data',
+        '',
+        '🗑️ WASTAGE',
+        weekWastage.length > 0 ? weekWastage.length + ' items · $' + wastageVal.toFixed(2) + ' lost' : 'None logged',
+        '',
+        '📦 INVENTORY',
+        lowStock.length > 0 ? lowStock.length + ' below PAR: ' + lowStock.slice(0,5).map(i=>i.name).join(', ') + (lowStock.length>5?'...':'') : 'All at or above PAR',
+        '',
+        '🛠️ MAINTENANCE',
+        openTickets.length > 0 ? openTickets.length + ' open: ' + openTickets.map(t=>t.item).join(', ') : 'No open tickets',
+        '',
+        '⚠️ INCIDENTS',
+        weekIncidents.length > 0 ? weekIncidents.length + ' incident(s) this week' : 'None',
+        '',
+        '🔄 OVERDUE TASKS',
+        overdueTasks.length > 0 ? overdueTasks.map(t => '• ' + t.name + ' (' + t.freq + ')').join('\n') : 'All current',
+        '',
+        '─────────────────────────────',
+        'Generated by Hobart Hub · ' + today.toLocaleDateString('en-AU')
+    ];
+    window._weeklySummaryText = lines.filter(l => l !== null).join('\n');
+    const html = '<div style="background:var(--bg-main);padding:15px;border-radius:8px;margin-bottom:15px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:50vh;overflow-y:auto;line-height:1.7;">' + window._weeklySummaryText + '</div>' +
+        '<div style="display:flex;gap:10px;">' +
+            '<button onclick="navigator.clipboard.writeText(window._weeklySummaryText).then(()=>window.showToast(\'Copied!\'))" class="btn btn-blue" style="flex:1;">📋 Copy</button>' +
+            '<button onclick="window.printWeeklySummary()" class="btn btn-outline" style="flex:1;">🖨️ Print</button>' +
+        '</div>';
+    window.openModal('📊 Weekly Summary — ' + weekLabel, html);
+};
+
+window.printWeeklySummary = () => {
+    const text = window._weeklySummaryText || '';
+    const win = window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Weekly Summary</title><style>body{font-family:monospace;font-size:13px;max-width:650px;margin:30px auto;white-space:pre-wrap;line-height:1.7;}@media print{body{margin:15px;}}</style></head><body>' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '<script>window.onload=()=>{window.print();}<\/script></body></html>');
+    win.document.close(); window.closeModal();
+};
+
 window.renderManagerHub = () => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
         .then(res => res.json())
@@ -877,6 +1074,16 @@ window.renderManagerHub = () => {
                 <div style="color:var(--brand-dark); font-size:16px; font-weight:bold;">${today.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                 <div style="color:var(--brand-accent); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin-top:2px;">Targeting ${isWeekend ? 'WEEKEND' : 'WEEKDAY'} Pars</div>
             </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; background:var(--card-bg); padding:12px 15px; border-radius:10px; border:1px solid var(--border);">
+            <span style="font-size:11px; color:var(--text-muted); align-self:center; margin-right:4px; text-transform:uppercase; letter-spacing:1px;">Quick Log:</span>
+            <button onclick="window.showView('compliance')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">🌡️ Temps</button>
+            <button onclick="window.showView('wastage')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--orange); color:var(--orange);">🗑️ Wastage</button>
+            <button onclick="window.newHandoverForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">📝 Handover</button>
+            <button onclick="window.showView('incidents')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--red); color:var(--red);">⚠️ Incident</button>
+            <button onclick="window.manualTakingsForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">💰 Takings</button>
+            <button onclick="window.openAiDepletion()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">✨ EOD</button>
+            <button onclick="window.generateWeeklySummary()" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">📊 Weekly Summary</button>
         </div>
     
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">

@@ -27,6 +27,7 @@ window.handoverLogs = [];
 window.knowledgeBase = []; 
 window.shiftRosters = [];
 window.depletionLogs = [];
+window.orderHistory = [];
 window.safeCategories = ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
 window.kbCategories = [];
 window.onboardingTemplates = {
@@ -90,7 +91,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory'];
 
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
@@ -223,6 +224,7 @@ window.showView = (view) => {
         else if (view === 'menu-engineering' && window.renderMenuEngineeringView) content.innerHTML = window.renderMenuEngineeringView();
         else if (view === 'batch-linker' && window.renderAiBatchLinker) content.innerHTML = window.renderAiBatchLinker();
         else if (view === 'par-editor' && window.renderParEditor) content.innerHTML = window.renderParEditor();
+        else if (view === 'sell-price-editor' && window.renderSellPriceEditor) content.innerHTML = window.renderSellPriceEditor();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);

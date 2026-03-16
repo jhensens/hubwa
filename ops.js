@@ -145,12 +145,10 @@ window.deleteZone = (i) => {
 // =============================================================================
 
 window.renderSupplierView = () => {
-    return `
-    <div style="max-width: 1000px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;">Supplier Management</h2>
-            <button onclick="window.editSupplierForm()" class="btn btn-blue">+ Add Supplier</button>
-        </div>
+    const activeTab = window._supTab || 'suppliers';
+    const btnS = activeTab === 'suppliers' ? 'btn-dark' : 'btn-outline';
+    const btnH = activeTab === 'history' ? 'btn-dark' : 'btn-outline';
+    let content = activeTab === 'history' ? window.renderOrderHistory() : `
         <table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse; overflow:hidden;">
             <thead>
                 <tr style="text-align:left; border-bottom:1px solid var(--border); background:#111; font-size:13px;">
@@ -178,9 +176,51 @@ window.renderSupplierView = () => {
                         </td>
                     </tr>`).join('')}
             </tbody>
-        </table>
+        </table>`;
+    return `
+    <div style="max-width: 1000px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+            <h2 style="margin:0;">Suppliers & Ordering</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window._supTab='suppliers';window.showView('suppliers')" class="btn ${btnS}">Suppliers</button>
+                <button onclick="window._supTab='history';window.showView('suppliers')" class="btn ${btnH}">📋 Order History</button>
+                ${activeTab === 'suppliers' ? '<button onclick="window.editSupplierForm()" class="btn btn-blue">+ Add Supplier</button>' : ''}
+            </div>
+        </div>
+        ${content}
     </div>`;
 };
+
+window.renderOrderHistory = () => {
+    const history = (window.orderHistory || []).slice().reverse();
+    if (history.length === 0) {
+        return '<div class="card" style="text-align:center;padding:30px;">' +
+            '<p style="color:var(--text-muted);margin:0;">No orders logged yet.</p>' +
+            '<p style="color:var(--text-muted);font-size:13px;margin-top:8px;">Orders are automatically logged when you use Copy Order Text in the Auto-Order List.</p>' +
+        '</div>';
+    }
+    return history.map(o =>
+        '<div class="card" style="margin-bottom:15px;border-top:4px solid var(--blue);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">' +
+            '<div><strong style="font-size:16px;">' + o.supplier + '</strong><span style="color:var(--text-muted);font-size:12px;margin-left:10px;">' + o.date + '</span></div>' +
+            '<div style="text-align:right;"><strong style="color:var(--green);font-size:18px;">$' + Number(o.estSpend||0).toFixed(2) + '</strong><div style="font-size:11px;color:var(--text-muted);">Est. · ' + (o.items||[]).length + ' items</div></div>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border);">' +
+        '<th style="padding:6px 0;text-align:left;">Item</th><th style="padding:6px 0;text-align:right;">Qty</th><th style="padding:6px 0;text-align:right;">Price</th><th style="padding:6px 0;text-align:right;">Total</th>' +
+        '</tr></thead><tbody>' +
+        (o.items||[]).map(item =>
+            '<tr style="border-bottom:1px dashed var(--border);">' +
+            '<td style="padding:7px 0;">' + item.name + (item.sku ? ' <small style="color:var(--text-muted);">[' + item.sku + ']</small>' : '') + '</td>' +
+            '<td style="padding:7px 0;text-align:right;">' + item.qty + ' ' + (item.unit||'') + '</td>' +
+            '<td style="padding:7px 0;text-align:right;color:var(--brand-accent);">$' + Number(item.price||0).toFixed(2) + '</td>' +
+            '<td style="padding:7px 0;text-align:right;font-weight:bold;">$' + (Number(item.qty||0)*Number(item.price||0)).toFixed(2) + '</td>' +
+            '</tr>'
+        ).join('') +
+        '</tbody></table></div>'
+    ).join('');
+};
+
 
 window.editSupplierForm = (i = null) => {
     let s = i !== null ? window.suppliers[i] : { name:'', contact:'', cutoff:'', minSpend: 0, deliveryDays: [] };
@@ -766,9 +806,11 @@ window.renderRecipeView = () => {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
             <h2 style="margin:0;">Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button onclick="window.showView('margins')" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Margin Health</button>
-                <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk HTML Import</button>
-                <button onclick="window.openAiRecipeImport()" class="btn btn-outline" style="font-size:12px;">✨ AI Import</button>
+                <button onclick="window.showView('sell-price-editor')" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">💰 Sell Prices</button>
+                <button onclick="window.openCostingReport()" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Costing Report</button>
+                <button onclick="window.exportRecipeBook()" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">📖 Recipe Book</button>
+                <button onclick="window.showView('batch-linker')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 Link Ingredients</button>
+                <button onclick="window.openBulkHtmlImport()" class="btn btn-purple">📥 Bulk Import</button>
                 <button onclick="window.editRecipeForm()" class="btn btn-blue">+ New Recipe</button>
             </div>
         </div>
@@ -858,6 +900,135 @@ window.viewRecipe = (id) => {
             ${r.allergens&&r.allergens.length>0?`<div style="margin-top:15px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);padding:12px 15px;border-radius:8px;"><strong style="font-size:12px;color:var(--red);">⚠️ Allergens:</strong> <span style="font-size:13px;color:var(--red);">${r.allergens.join(', ')}</span></div>`:''}
         </div>
     </div>`;
+};
+
+
+// =============================================================================
+// BATCH RECIPE COST CASCADE
+// =============================================================================
+window.cascadeRecipeCosts = (changedInvIds) => {
+    if (!changedInvIds || changedInvIds.length === 0) return { updatedBatches:0, updatedMenus:0, gpAlerts:[] };
+    let updatedBatches = 0, updatedMenus = 0;
+    const batchRecipes = (window.recipes || []).filter(r => r.type === 'Batch' && !r.archived);
+    batchRecipes.forEach(batch => {
+        if ((batch.ingredients||[]).some(ing => ing.type==='inv' && changedInvIds.includes(ing.ref))) {
+            let cost = 0;
+            (batch.ingredients||[]).forEach(ing => { if (ing.type==='inv') { const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref); if(inv) cost+=ing.qty*((inv.price||0)/(inv.yield||1)); }});
+            batch.cost = cost; updatedBatches++;
+        }
+    });
+    const updatedBatchIds = batchRecipes.filter(b => (b.ingredients||[]).some(ing=>ing.type==='inv'&&changedInvIds.includes(ing.ref))).map(b=>b.id);
+    const gpAlerts = [];
+    (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived).forEach(menu => {
+        if ((menu.ingredients||[]).some(ing=>(ing.type==='inv'&&changedInvIds.includes(ing.ref))||(ing.type==='batch'&&updatedBatchIds.includes(ing.ref)))) {
+            let cost = 0;
+            (menu.ingredients||[]).forEach(ing => {
+                if (ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
+                else if (ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
+            });
+            menu.cost=cost; menu.gp=menu.price>0?parseFloat(((menu.price-cost)/menu.price*100).toFixed(1)):0;
+            if (menu.price>0 && menu.gp<GP_TARGET) gpAlerts.push({name:menu.name,gp:menu.gp,cost:cost.toFixed(2)});
+            updatedMenus++;
+        }
+    });
+    if (updatedBatches>0||updatedMenus>0) window.saveToDisk();
+    return { updatedBatches, updatedMenus, gpAlerts };
+};
+
+// =============================================================================
+// SELL PRICE BULK EDITOR
+// =============================================================================
+window.renderSellPriceEditor = () => {
+    const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
+    const stations = [...new Set(recipes.map(r=>r.station||'Kitchen'))].sort();
+    if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3><button onclick="window.showView(\'recipes\')" class="btn btn-blue" style="margin-top:10px;">← Back</button></div></div>';
+    const sc = {Kitchen:'var(--orange)',Bar:'var(--blue)',Prep:'var(--purple)'};
+    const groups = stations.map(station => {
+        const sr = recipes.filter(r=>(r.station||'Kitchen')===station);
+        const rows = sr.map(r => {
+            const cost=Number(r.cost||0), price=Number(r.price||0);
+            const gp=price>0?((price-cost)/price*100).toFixed(1):0;
+            const gpColor=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)';
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + r.name + '</strong>' + (r.posAlias?'<br><small style="color:var(--text-muted);">'+r.posAlias+'</small>':'') + '</td>' +
+                '<td style="padding:10px 12px;color:var(--brand-accent);font-size:13px;">$' + cost.toFixed(2) + '</td>' +
+                '<td style="padding:10px 8px;"><div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--text-muted);">$</span>' +
+                '<input type="number" step="0.50" min="0" id="sp-' + r.id + '" value="' + price.toFixed(2) + '" class="input-box" style="margin:0;padding:6px 8px;width:90px;" data-id="' + r.id + '" data-cost="' + cost.toFixed(4) + '" oninput="window._updateSpGp(this.dataset.id,this.dataset.cost,this.value)"></div></td>' +
+                '<td style="padding:10px 12px;"><strong id="gp-' + r.id + '" style="font-size:16px;color:' + gpColor + ';">' + gp + '%</strong></td>' +
+            '</tr>';
+        }).join('');
+        return '<details class="card" style="padding:0;overflow:hidden;margin-bottom:12px;" open>' +
+            '<summary style="padding:12px 18px;background:#111;cursor:pointer;font-weight:bold;color:' + (sc[station]||'var(--text-muted)') + ';display:flex;justify-content:space-between;align-items:center;outline:none;border-radius:10px 10px 0 0;">' +
+            station + ' <span style="color:var(--text-muted);font-size:12px;font-weight:normal;">(' + sr.length + ')</span><span style="color:var(--blue);font-size:12px;">▼</span></summary>' +
+            '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+            '<th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;">Cost</th><th style="padding:10px 12px;text-align:left;color:var(--green);">Sell Price</th><th style="padding:10px 12px;text-align:left;">GP%</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table></div></details>';
+    }).join('');
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+        '<div><h2 style="margin:0;">Sell Price Editor</h2><small style="color:var(--text-muted);">Set sell prices for all menu recipes. GP% updates live. Target: ' + GP_TARGET + '%.</small></div>' +
+        '<div style="display:flex;gap:8px;"><button onclick="window.saveAllSellPrices()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button>' +
+        '<button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div>' +
+        groups +
+        '<div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;">' +
+        '<span style="color:var(--text-muted);font-size:13px;">' + recipes.length + ' menu recipes</span>' +
+        '<button onclick="window.saveAllSellPrices()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
+};
+window._updateSpGp = (id, cost, priceVal) => {
+    const price = parseFloat(priceVal)||0;
+    const gp = price>0?((price-cost)/price*100).toFixed(1):0;
+    const el = document.getElementById('gp-'+id);
+    if (el) { el.innerText=gp+'%'; el.style.color=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)'; }
+};
+window.saveAllSellPrices = () => {
+    let count=0;
+    (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived).forEach(r => {
+        const el=document.getElementById('sp-'+r.id);
+        if (el) { r.price=parseFloat(el.value)||0; r.gp=r.price>0?parseFloat(((r.price-r.cost)/r.price*100).toFixed(1)):0; count++; }
+    });
+    window.saveToDisk(); window.showToast(count+' prices saved!'); window.showView('recipes');
+};
+
+// =============================================================================
+// RECIPE COSTING REPORT
+// =============================================================================
+window.openCostingReport = () => {
+    const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
+    menuRecipes.forEach(r => {
+        let cost=0;
+        (r.ingredients||[]).forEach(ing=>{
+            if(ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
+            else if(ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
+        });
+        r.cost=cost; r.gp=r.price>0?parseFloat(((r.price-cost)/r.price*100).toFixed(1)):0;
+    });
+    const stations=[...new Set(menuRecipes.map(r=>r.station||'Kitchen'))].sort();
+    const avgGp=menuRecipes.length>0?(menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length).toFixed(1):0;
+    const below=menuRecipes.filter(r=>r.gp<GP_TARGET).length;
+    const win=window.open('','_blank');
+    if(!win) return window.showToast('Pop-up blocked.','error');
+    let rows='';
+    stations.forEach(st=>{
+        const sr=menuRecipes.filter(r=>(r.station||'Kitchen')===st).sort((a,b)=>a.name.localeCompare(b.name));
+        rows+='<tr><td colspan="5" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;">'+st+' ('+sr.length+')</td></tr>';
+        sr.forEach(r=>{
+            const gc=r.gp>=GP_TARGET?'#16a34a':r.gp>0?'#dc2626':'#888';
+            const raw=(r.ingredients||[]).filter(i=>i.type==='raw').length;
+            rows+='<tr><td style="padding:9px 12px;">'+r.name+(r.posAlias?' <span style="color:#888;font-size:11px;">('+r.posAlias+')</span>':'')+(raw>0?' <span style="color:#f59e0b;font-size:10px;">⚠️ '+raw+' unlinked</span>':'')+'</td>'+
+                '<td style="padding:9px 12px;text-align:right;">$'+Number(r.cost||0).toFixed(2)+'</td>'+
+                '<td style="padding:9px 12px;text-align:right;">$'+Number(r.price||0).toFixed(2)+'</td>'+
+                '<td style="padding:9px 12px;text-align:right;font-weight:bold;color:'+gc+';">'+r.gp+'%</td>'+
+                '<td style="padding:9px 12px;text-align:right;"><div style="width:60px;background:#e5e7eb;border-radius:4px;height:6px;display:inline-block;"><div style="width:'+Math.min(100,Math.max(0,r.gp))+'%;background:'+gc+';height:100%;border-radius:4px;"></div></div></td></tr>';
+        });
+    });
+    win.document.write('<!DOCTYPE html><html><head><title>Recipe Costing Report</title><style>body{font-family:sans-serif;font-size:13px;max-width:900px;margin:30px auto;}h1{font-size:22px;margin-bottom:4px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.stats{display:flex;gap:20px;margin-bottom:25px;}.stat{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center;}.stat-val{font-size:24px;font-weight:bold;}.stat-lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;}table{width:100%;border-collapse:collapse;}th{padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:2px solid #e5e7eb;background:#f9fafb;}th:nth-child(n+2),td:nth-child(n+2){text-align:right;}tr:nth-child(even)td{background:#fafafa;}@media print{body{margin:15px;max-width:none;}}</style></head><body>');
+    win.document.write('<h1>📊 Recipe Costing Report — Bar Wa Izakaya</h1><div class="meta">GP Target: '+GP_TARGET+'% · Generated '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div>');
+    win.document.write('<div class="stats"><div class="stat"><div class="stat-val">'+menuRecipes.length+'</div><div class="stat-lbl">Recipes</div></div><div class="stat"><div class="stat-val" style="color:'+(avgGp>=GP_TARGET?'#16a34a':'#dc2626')+';">'+avgGp+'%</div><div class="stat-lbl">Avg GP</div></div><div class="stat"><div class="stat-val" style="color:#dc2626;">'+below+'</div><div class="stat-lbl">Below '+GP_TARGET+'%</div></div><div class="stat"><div class="stat-val" style="color:#16a34a;">'+(menuRecipes.length-below)+'</div><div class="stat-lbl">On Target</div></div></div>');
+    win.document.write('<table><thead><tr><th>Recipe</th><th>Cost</th><th>Sell</th><th>GP%</th><th>Bar</th></tr></thead><tbody>'+rows+'</tbody></table>');
+    win.document.write('<div style="margin-top:15px;font-size:11px;color:#aaa;">⚠️ = has unlinked ingredients</div>');
+    win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
+    win.document.close();
 };
 
 window.printRecipe = (id) => {
@@ -1330,9 +1501,18 @@ window.copyOrderText = (supName, estSpend) => {
     const isWeekend = [0, 5, 6].includes(new Date().getDay());
     const items = (window.inventoryItems || []).filter(i => i.supplier === supName && !i.archived && i.stock < (isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0)));
     let text = `Hi ${supName},\n\nCould I please place an order for the following:\n\n`;
-    items.forEach(i => { let par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0); text += `- ${(par - i.stock).toFixed(1)}x ${i.buyUnit || 'Unit'} of ${i.name} ${i.sku ? `[${i.sku}]` : ''}\n`; });
+    const orderItems = [];
+    items.forEach(i => {
+        let par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+        const qty = (par - i.stock).toFixed(1);
+        text += `- ${qty}x ${i.buyUnit || 'Unit'} of ${i.name} ${i.sku ? `[${i.sku}]` : ''}\n`;
+        orderItems.push({ name: i.name, sku: i.sku||'', qty, unit: i.buyUnit||'Unit', price: i.price||0 });
+    });
     text += `\nThanks,\nBar Wa Izakaya`;
-    navigator.clipboard.writeText(text).then(() => window.showToast(`Order copied for ${supName}!`));
+    if (!window.orderHistory) window.orderHistory = [];
+    window.orderHistory.push({ date: new Date().toLocaleDateString('en-AU'), supplier: supName, estSpend, items: orderItems });
+    window.saveToDisk();
+    navigator.clipboard.writeText(text).then(() => window.showToast(`Order copied & logged for ${supName}!`));
 };
 
 // =============================================================================
@@ -2027,68 +2207,75 @@ window._irSaveNewItem = (newId, index) => {
     window._renderInvoiceReviewUI();
 };
 
-// Final commit — apply all approved updates to inventory
+// Final commit — apply all approved updates to inventory (date-aware)
 window._commitInvoice = () => {
     const ai = window.pendingInvoiceData;
     const state = window._invoiceReviewState;
     if (!ai || !state) return;
 
-    let updatedCount = 0, addedCount = 0, skippedCount = 0;
+    // Parse invoice date and check if historical (>7 days old)
+    const parseInvDate = (str) => {
+        if (!str) return null;
+        const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+        if (m) return new Date(parseInt(m[3].length===2?'20'+m[3]:m[3]), parseInt(m[2])-1, parseInt(m[1]));
+        return new Date(str);
+    };
+    const invDate = parseInvDate(ai.date);
+    const today = new Date();
+    const daysDiff = invDate ? Math.round((today - invDate) / (1000*3600*24)) : 0;
+    const isHistorical = daysDiff > 7;
 
-    state.forEach(s => {
-        if (s.action === 'skip') { skippedCount++; return; }
-        if (!s.matchedInvId) { skippedCount++; return; }
+    if (isHistorical) {
+        const msg = 'This invoice is dated ' + (ai.date||'unknown') + ' (' + daysDiff + ' days ago).\n\n' +
+            'HISTORICAL INVOICE MODE:\n' +
+            '\u2713 Price history will be updated\n' +
+            '\u2713 Item prices updated\n' +
+            '\u2717 Stock levels will NOT change\n\n' +
+            'This prevents inflating stock from old invoices. Proceed?';
+        if (!confirm(msg)) return;
+    }
 
-        const inv = window.inventoryItems.find(i => i.id === s.matchedInvId);
-        if (!inv) return;
+    let updatedCount = 0, skippedCount = 0;
+    const changedInvIds = [];
 
-        const newPrice = s.aiItem.unitPrice || s.aiItem.totalLinePrice || 0;
-        const oldPrice = inv.price;
-
-        // Update stock
-        inv.stock = (Number(inv.stock) || 0) + Number(s.aiItem.quantity || 0);
-
-        // Update price if provided
-        if (newPrice > 0) inv.price = newPrice;
-
-        // Update SKU if provided and missing
-        if (s.aiItem.sku && !inv.sku) inv.sku = s.aiItem.sku;
-
-        // Append to price history
-        if (!inv.history) inv.history = [];
-        inv.history.push({
-            date: ai.date || new Date().toLocaleDateString('en-AU'),
-            supplier: ai.supplier || '',
-            invoiceNo: ai.invoiceNumber || '',
-            qty: s.aiItem.quantity,
-            price: newPrice,
-            prevPrice: oldPrice
-        });
-        // Cap history at 50 entries
-        if (inv.history.length > 50) inv.history = inv.history.slice(-50);
-
-        if (s.confidence === 'new') addedCount++; else updatedCount++;
+    state.forEach(row => {
+        if (row.action === 'skip') { skippedCount++; return; }
+        const aiItem = row.aiItem;
+        const invId = row.matchedInvId;
+        const invIdx = invId ? window.inventoryItems.findIndex(i => i.id === invId) : -1;
+        const unitPrice = parseFloat(aiItem.unitPrice) || 0;
+        const qty = parseFloat(aiItem.quantity) || 0;
+        if (invIdx >= 0) {
+            const inv = window.inventoryItems[invIdx];
+            const prevPrice = inv.price || 0;
+            if (!inv.history) inv.history = [];
+            inv.history.push({ date: ai.date||new Date().toLocaleDateString('en-AU'), supplier: ai.supplier||'', invoiceNo: ai.invoiceNumber||'', qty, price: unitPrice, prevPrice });
+            if (unitPrice > 0) { inv.price = unitPrice; if (unitPrice !== prevPrice) changedInvIds.push(inv.id); }
+            inv.supplier = ai.supplier || inv.supplier;
+            if (!isHistorical) inv.stock = (inv.stock||0) + qty;
+            updatedCount++;
+        } else { skippedCount++; }
     });
+
+    // Cascade recipe costs for changed prices
+    const cascadeResult = changedInvIds.length > 0 ? window.cascadeRecipeCosts(changedInvIds) : null;
 
     window.saveToDisk();
 
-    const resultsDiv = document.getElementById('invoice-results');
-    resultsDiv.innerHTML = `
-    <div class="card" style="border-top:5px solid var(--green); text-align:center; padding:30px;">
-        <div style="font-size:48px; margin-bottom:15px;">✅</div>
-        <h3 style="color:var(--green); margin:0 0 10px 0;">Invoice Committed!</h3>
-        <div style="font-size:14px; color:var(--text-muted); margin-bottom:20px;">
-            <strong style="color:var(--green);">${updatedCount}</strong> items updated · 
-            <strong style="color:var(--blue);">${addedCount}</strong> new items added · 
-            <strong style="color:var(--text-muted);">${skippedCount}</strong> skipped
-        </div>
-        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-            <button onclick="window.showView('invoice')" class="btn btn-blue">📄 Rip Another Invoice</button>
-            <button onclick="window.showView(\'inventory\')" class="btn btn-outline">📦 View Inventory</button>
-        </div>
-    </div>`;
+    const histNote = isHistorical ? '<div style="background:rgba(245,158,11,0.1);border:1px solid var(--orange);border-radius:8px;padding:12px;margin-bottom:15px;font-size:13px;color:var(--orange);">📅 Historical invoice — stock levels unchanged. Price history updated.</div>' : '';
+    const cascNote = cascadeResult && cascadeResult.updatedMenus > 0 ? '<div style="font-size:12px;color:var(--purple);margin-top:8px;">&#9851; ' + cascadeResult.updatedMenus + ' recipe costs recalculated</div>' : '';
+
+    document.getElementById('invoice-results').innerHTML = '<div style="text-align:center;padding:30px;">' + histNote +
+        '<div style="font-size:48px;margin-bottom:10px;">' + (isHistorical?'📋':'✅') + '</div>' +
+        '<h3 style="color:var(--green);margin:0 0 10px 0;">' + (isHistorical?'Price History Updated':'Invoice Committed') + '</h3>' +
+        '<div style="font-size:14px;color:var(--text-muted);margin-bottom:20px;"><strong style="color:var(--green);">' + updatedCount + '</strong> items · <strong style="color:var(--text-muted);">' + skippedCount + '</strong> skipped' + cascNote + '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+            '<button onclick="window.showView(\'invoice\')" class="btn btn-blue">📄 Rip Another</button>' +
+            '<button onclick="window.showView(\'inventory\')" class="btn btn-outline">📦 Inventory</button>' +
+            (cascadeResult && cascadeResult.gpAlerts && cascadeResult.gpAlerts.length > 0 ? '<button onclick="window.showView(\'margins\')" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">📊 Check Margins</button>' : '') +
+        '</div></div>';
     document.getElementById('invoice-status').innerHTML = '';
-    window.showToast(`Invoice committed — ${updatedCount + addedCount} stock lines updated!`);
+    window.showToast('Invoice processed — ' + updatedCount + ' items updated!');
 };
 
 // =============================================================================
