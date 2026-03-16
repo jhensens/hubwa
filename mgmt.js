@@ -270,6 +270,7 @@ window.renderSalesView = () => {
                 '<button onclick="window.openAiDepletion()" class="btn btn-purple">✨ EOD Depletion</button>' +
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
+                '<button onclick="window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">' + tabHtml + '</div>' +
@@ -301,6 +302,13 @@ window.renderSalesView = () => {
 };
 
 window.updateWageTarget = (val) => { window.salesTargets.wageTarget = val; window.saveToDisk(); window.showToast("Wage Target Saved"); };
+window.clearTakingsData = () => {
+    if (!confirm('Clear ALL takings data? This cannot be undone.\n\nMake sure you have your CSV files ready to re-upload.')) return;
+    window.salesData = [];
+    window.saveToDisk();
+    window.showToast('Takings data cleared. Re-upload your CSVs.');
+    window.showView('sales');
+};
 window.handleSalesCSV = (event) => {
     const file = event.target.files[0];
     const reader = new FileReader();
