@@ -1,8 +1,8 @@
 :root {
     /* Commercial Grade Dark Theme */
     --bg-main: #0c0c0e;
-    --sidebar-bg: #121215;
-    --sidebar-hover: #1e1e24;
+    --sidebar-bg: #090912;
+    --sidebar-hover: #1e1e2e;
     --card-bg: #18181c;
     --border: #2a2a32;
 
@@ -196,4 +196,20 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
     div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
     .sticky-footer { bottom: -15px; flex-direction: column; }
+}
+
+/* LIA Venue Theme */
+body.venue-lia {
+    --brand-dark: #22d3ee;
+    --brand-accent: #0ea5e9;
+    --sidebar-bg: #090f10;
+    --sidebar-hover: #0f1f22;
+    --blue: #22d3ee;
+}
+body.venue-lia .nav-item.active {
+    border-left-color: #22d3ee;
+    background: rgba(34,211,238,0.15);
+}
+body.venue-lia .nav-section-header:hover {
+    color: rgba(34,211,238,0.8);
 }
