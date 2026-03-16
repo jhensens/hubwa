@@ -45,10 +45,11 @@ body {
 .brand-header { 
     text-align: center; 
     border-bottom: 1px solid rgba(255,255,255,0.06); 
-    padding: 12px 10px 8px;
+    padding: 10px 10px 6px;
     flex-shrink: 0;
+    background: #0e0e11;
 }
-.brand-header:hover { background: rgba(255,255,255,0.03); }
+.brand-header:hover { background: #131318; }
 .nav-dashboard { 
     font-size: 13px; 
     font-weight: 600; 
