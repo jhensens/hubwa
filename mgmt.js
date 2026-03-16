@@ -1,9 +1,29 @@
 // --- 1. TAKINGS & KPI DASHBOARD ---
 window._salesTab = window._salesTab || 'week';
+window._salesMonth = window._salesMonth || null; // 'YYYY-MM' format
 
 window.renderSalesView = () => {
-    const allSales = (window.salesData || []).slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Parse BWI date format DD/MM/YYYY into JS Date
+    const parseDate = (str) => {
+        if (!str) return null;
+        const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+        const d = new Date(str);
+        return isNaN(d) ? null : d;
+    };
+
+    const allSales = (window.salesData || []).slice().sort((a, b) => {
+        const da = parseDate(a.date), db = parseDate(b.date);
+        return (da||0) - (db||0);
+    });
     const today = new Date();
+
+    // Build list of available months from data
+    const availableMonths = [...new Set(allSales.map(s => {
+        const d = parseDate(s.date);
+        if (!d) return null;
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    }).filter(Boolean))].sort().reverse();
 
     // Date range helpers
     const getWeekStart = (offset = 0) => {
@@ -19,12 +39,32 @@ window.renderSalesView = () => {
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
     const filterByRange = (start, end) => allSales.filter(s => {
-        const d = new Date(s.date); return d >= start && d <= (end || today);
+        const d = parseDate(s.date);
+        if (!d) return false;
+        return d >= start && d <= (end || today);
     });
 
     const tab = window._salesTab || 'week';
     let periodData, periodLabel, compareData, compareLabel;
-    if (tab === 'week') {
+
+    if (tab === 'month-pick') {
+        // Pick a month view
+        const selMonth = window._salesMonth || (availableMonths[0] || '');
+        if (selMonth) {
+            const [yr, mo] = selMonth.split('-').map(Number);
+            const mStart = new Date(yr, mo-1, 1);
+            const mEnd = new Date(yr, mo, 0, 23, 59, 59);
+            periodData = filterByRange(mStart, mEnd);
+            periodLabel = mStart.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+            // Compare to same month last year if available
+            const lastYrStart = new Date(yr-1, mo-1, 1);
+            const lastYrEnd = new Date(yr-1, mo, 0, 23, 59, 59);
+            compareData = filterByRange(lastYrStart, lastYrEnd);
+            compareLabel = lastYrStart.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+        } else {
+            periodData = []; periodLabel = 'No data'; compareData = []; compareLabel = '';
+        }
+    } else if (tab === 'week') {
         periodData = filterByRange(thisWeekStart);
         periodLabel = 'This Week';
         compareData = filterByRange(lastWeekStart, new Date(thisWeekStart - 1));
@@ -68,39 +108,31 @@ window.renderSalesView = () => {
     const wastageValue = (window.wastageLogs || []).reduce((s, w) => s + Number(w.value || 0), 0);
     const foodCostPct = totalRev > 0 ? ((wastageValue / totalRev) * 100).toFixed(1) : 0;
 
-    // Tab pills
+    // Actual wages from CSV data for the period
+    const totalActualWages = periodData.reduce((s, d) => s + (Number(d.wages) || 0), 0);
+    const actualWagePct = totalRev > 0 && totalActualWages > 0 ? ((totalActualWages / totalRev) * 100).toFixed(1) : null;
+
+    // Tab pills + month picker
     const tabs = [
         { id: 'week', label: 'This Week' },
         { id: 'lastweek', label: 'Last Week' },
         { id: 'days7', label: 'Last 7 Days' },
-        { id: 'month', label: 'This Month' }
+        { id: 'month', label: 'This Month' },
+        { id: 'month-pick', label: '📅 Pick Month' }
     ];
     const tabHtml = tabs.map(t =>
         '<button onclick="window._salesTab=\'' + t.id + '\'; window.showView(\'sales\')" class="btn ' + (tab === t.id ? 'btn-dark' : 'btn-outline') + '" style="font-size:12px;padding:7px 14px;">' + t.label + '</button>'
-    ).join('');
+    ).join('') + (tab === 'month-pick' && availableMonths.length > 0 ?
+        '<select onchange="window._salesMonth=this.value; window.showView(\'sales\')" class="input-box" style="margin:0;padding:7px 12px;font-size:12px;width:auto;display:inline-block;">' +
+        availableMonths.map(m => {
+            const [yr, mo] = m.split('-').map(Number);
+            const label = new Date(yr, mo-1, 1).toLocaleString('en-AU', {month:'long', year:'numeric'});
+            return '<option value="' + m + '" ' + (window._salesMonth === m ? 'selected' : '') + '>' + label + '</option>';
+        }).join('') + '</select>' : 
+        (tab === 'month-pick' && availableMonths.length === 0 ? '<span style="font-size:12px;color:var(--text-muted);align-self:center;">No data uploaded yet</span>' : '')
+    );
 
-    // KPI stat cards
-    const statCard = (label, value, sub, color) =>
-        '<div class="card" style="text-align:center;border-top:4px solid ' + color + ';padding:20px 15px;">' +
-            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">' + label + '</div>' +
-            '<div style="font-size:28px;font-weight:bold;color:' + color + ';line-height:1.1;">' + value + '</div>' +
-            (sub ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + sub + '</div>' : '') +
-        '</div>';
-
-    const statsHtml =
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:20px;">' +
-            statCard('Total Revenue', '$' + totalRev.toLocaleString('en-AU', {minimumFractionDigits:0, maximumFractionDigits:0}), periodData.length + ' days traded' + (revChangeHtml ? '' : ''), 'var(--green)') +
-            '<div class="card" style="text-align:center;border-top:4px solid var(--green);padding:20px 15px;">' +
-                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Total Revenue</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--green);line-height:1.1;">$' + totalRev.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
-                '<div style="font-size:11px;margin-top:4px;">' + periodData.length + ' days ' + revChangeHtml + '</div>' +
-            '</div>' +
-            statCard('Avg Daily', '$' + avgDaily.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}), periodLabel, 'var(--blue)') +
-            statCard('Best Day', bestDay ? '$' + Number(bestDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—', bestDay ? bestDay.date : 'No data', 'var(--green)') +
-            statCard('Worst Day', worstDay ? '$' + Number(worstDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—', worstDay ? worstDay.date : 'No data', 'var(--orange)') +
-        '</div>';
-
-    // Remove the duplicate statCard from above — rewrite stats properly
+    // KPI cards
     const kpiCardsHtml =
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:20px;">' +
             // Revenue
@@ -127,12 +159,20 @@ window.renderSalesView = () => {
                 '<div style="font-size:26px;font-weight:bold;color:var(--orange);">' + (worstDay ? '$' + Number(worstDay.total).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) : '—') + '</div>' +
                 '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">' + (worstDay ? worstDay.date : 'No data') + '</div>' +
             '</div>' +
-            // Wage Cost %
-            '<div class="card" style="text-align:center;border-top:4px solid ' + (wageTarget <= 30 ? 'var(--green)' : 'var(--orange)') + ';padding:20px 15px;">' +
-                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Wage Target</div>' +
-                '<div style="font-size:26px;font-weight:bold;color:' + (wageTarget <= 30 ? 'var(--green)' : 'var(--orange)') + ';">' + wageTarget + '%</div>' +
-                '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">Wage budget of $' + (totalRev * wageTarget / 100).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
-            '</div>' +
+            // Wage Cost % — actual from CSV if available, otherwise target
+            (actualWagePct !== null ?
+                '<div class="card" style="text-align:center;border-top:4px solid ' + (parseFloat(actualWagePct) <= wageTarget ? 'var(--green)' : 'var(--red)') + ';padding:20px 15px;">' +
+                    '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Actual Wages</div>' +
+                    '<div style="font-size:26px;font-weight:bold;color:' + (parseFloat(actualWagePct) <= wageTarget ? 'var(--green)' : 'var(--red)') + ';">' + actualWagePct + '%</div>' +
+                    '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">$' + totalActualWages.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + ' · target ' + wageTarget + '%</div>' +
+                '</div>'
+            :
+                '<div class="card" style="text-align:center;border-top:4px solid var(--orange);padding:20px 15px;">' +
+                    '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Wage Target</div>' +
+                    '<div style="font-size:26px;font-weight:bold;color:var(--orange);">' + wageTarget + '%</div>' +
+                    '<div style="font-size:11px;margin-top:4px;color:var(--text-muted);">Budget $' + (totalRev * wageTarget / 100).toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>' +
+                '</div>'
+            ) +
             // Food Cost %
             '<div class="card" style="text-align:center;border-top:4px solid var(--purple);padding:20px 15px;">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Food Cost %</div>' +
@@ -175,16 +215,24 @@ window.renderSalesView = () => {
         chartHtml = '<div class="card" style="text-align:center;padding:30px;margin-bottom:20px;"><p style="color:var(--text-muted);margin:0;">No sales data for this period. Upload a takings CSV to see trends.</p></div>';
     }
 
-    // Recent daily trade table
-    const tableRows = periodData.slice().reverse().map(s =>
-        '<tr style="border-bottom:1px solid var(--bg-main);">' +
+    // Daily trade table — includes wages and notes from new CSV format
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const tableRows = periodData.slice().reverse().map(s => {
+        const d = parseDate(s.date);
+        const dayLabel = d ? dayNames[d.getDay()] : '';
+        const wageAmt = Number(s.wages || 0);
+        const wagePctDay = Number(s.total || 0) > 0 && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+        return '<tr style="border-bottom:1px solid var(--bg-main);">' +
             '<td style="padding:10px;">' + s.date + '</td>' +
+            '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
             '<td style="padding:10px;">$' + Number(s.eftpos||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
-            '<td style="padding:10px;">' + (s.meandu > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:10px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
-        '</tr>'
-    ).join('');
+            '<td style="padding:10px;color:var(--orange);font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '—') + '</td>' +
+            '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + (s.notes || '') + '</td>' +
+        '</tr>';
+    }).join('');
 
     // EOD depletion log
     const recentDepletions = (window.depletionLogs || []).slice(-10).reverse();
@@ -235,9 +283,9 @@ window.renderSalesView = () => {
             '<div style="max-height:300px;overflow-y:auto;">' +
                 '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
                     '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-                        '<th style="padding:10px;">Date</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Me&u</th><th style="padding:10px;">Total</th>' +
+                        '<th style="padding:10px;">Date</th><th style="padding:10px;">Day</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Me&u</th><th style="padding:10px;color:var(--green);">Total</th><th style="padding:10px;color:var(--orange);">Wages</th><th style="padding:10px;">Notes</th>' +
                     '</tr></thead>' +
-                    '<tbody>' + (tableRows || '<tr><td colspan="5" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
+                    '<tbody>' + (tableRows || '<tr><td colspan="8" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
                 '</table>' +
             '</div>' +
         '</div>' +
@@ -254,16 +302,60 @@ window.renderSalesView = () => {
 
 window.updateWageTarget = (val) => { window.salesTargets.wageTarget = val; window.saveToDisk(); window.showToast("Wage Target Saved"); };
 window.handleSalesCSV = (event) => {
-    const file = event.target.files[0]; const reader = new FileReader();
+    const file = event.target.files[0];
+    const reader = new FileReader();
     reader.onload = (e) => {
-        e.target.result.split('\\n').slice(1).forEach(row => {
+        const lines = e.target.result.split('\n');
+        let imported = 0, skipped = 0, updated = 0;
+
+        // BWI format: rows 1-4 are metadata/headers, data starts row 6 (index 5)
+        // Headers row (index 4): Date,Day,EFTPOS,Petty Cash,Charity,MEANDU,Gift cards,Cash,Total,,,,Notes,total day hours,total day wages,rostered diff,hour %,Wage %
+        const dataRows = lines.slice(5); // skip first 5 rows
+
+        dataRows.forEach(row => {
+            if (!row.trim()) return;
             const cols = row.split(',');
-            if(cols.length > 8) {
-                const date = cols[0]; const eftpos = parseFloat(cols[2]) || 0; const meandu = parseFloat(cols[5]) || 0; const cash = parseFloat(cols[7]) || 0; const total = parseFloat(cols[8]) || 0;
-                if(!window.salesData.find(s => s.date === date) && date) window.salesData.push({ date, eftpos, meandu, cash, total });
+            if (cols.length < 9) return;
+
+            const rawDate = (cols[0] || '').trim();
+            if (!rawDate || rawDate === 'Date') return;
+
+            // Parse DD/MM/YYYY into a consistent stored format
+            let dateStr = rawDate;
+            const ddmmyyyy = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (ddmmyyyy) {
+                // Store as DD/MM/YYYY (consistent with en-AU locale)
+                dateStr = ddmmyyyy[1].padStart(2,'0') + '/' + ddmmyyyy[2].padStart(2,'0') + '/' + ddmmyyyy[3];
+            }
+
+            const eftpos   = parseFloat(cols[2]) || 0;
+            const petty    = parseFloat(cols[3]) || 0;
+            const charity  = parseFloat(cols[4]) || 0;
+            const meandu   = parseFloat(cols[5]) || 0;
+            const giftcard = parseFloat(cols[6]) || 0;
+            const cash     = parseFloat(cols[7]) || 0;
+            const total    = parseFloat(cols[8]) || 0;
+            const notes    = (cols[12] || '').trim();
+            const wages    = parseFloat(cols[14]) || 0;
+            const wagePct  = parseFloat(cols[17]) || 0;
+
+            if (!total && !eftpos && !cash) return; // skip empty rows
+
+            const existing = window.salesData.find(s => s.date === dateStr);
+            const entry = { date: dateStr, eftpos, petty, charity, meandu, giftcard, cash, total, notes, wages, wagePct };
+
+            if (existing) {
+                Object.assign(existing, entry);
+                updated++;
+            } else {
+                window.salesData.push(entry);
+                imported++;
             }
         });
-        window.saveToDisk(); window.showToast("Takings Imported Successfully!"); window.showView('sales');
+
+        window.saveToDisk();
+        window.showToast('Imported ' + imported + ' new, ' + updated + ' updated.');
+        window.showView('sales');
     };
     reader.readAsText(file);
 };
