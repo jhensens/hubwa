@@ -488,29 +488,165 @@ window.completeOrientation = (index) => { window.orientationLogs[index].status =
 window.deleteOrientation = (index) => { if(confirm("Remove this staff member's training record?")) { window.orientationLogs.splice(index, 1); window.saveToDisk(); window.showView('orientation'); } };
 
 // --- 3. ROTATIONAL TASKS ---
-window.renderTaskView = function() { return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; margin-bottom:20px;"><div><button onclick="window.renderTaskList()" class="btn btn-dark">Active</button><button onclick="window.renderTaskHistory()" class="btn btn-outline" style="margin-left:10px;">Audit History</button></div><button onclick="window.addTaskForm()" class="btn btn-blue">+ Setup Task</button></div><div id="taskSubContent">${window.renderTaskListTemplate()}</div></div>`; }
-window.renderTaskListTemplate = function() { 
-    const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
-    return `<div id="activeTasks">${(window.rotationalTasks || []).map((t, i) => {
-        let isDue = true; let daysLeftText = "DUE NOW";
-        if (t.lastLogIso) {
-            const daysSince = (new Date() - new Date(t.lastLogIso)) / (1000 * 3600 * 24);
-            isDue = daysSince >= freqMap[t.freq];
-            if (!isDue) daysLeftText = `Due in ${Math.ceil(freqMap[t.freq] - daysSince)} days`;
-        }
-        return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; border-left:6px solid ${isDue ? 'var(--red)' : 'var(--green)'}; padding:15px; margin-bottom:10px;"><div><strong style="font-size:16px;">${t.name}</strong><br><small style="color:var(--text-muted);">Freq: ${t.freq} | Last Done: ${t.lastDate || 'Never'}</small><br><strong style="font-size:12px; display:inline-block; margin-top:5px; color:${isDue ? 'var(--red)' : 'var(--green)'};">${daysLeftText}</strong></div><div style="display:flex; align-items:center; gap:10px;"><input type="text" id="staff-${i}" placeholder="Staff Initials" class="input-box" style="width:110px; margin:0;"><button onclick="window.logTaskCompletion(${i})" class="btn btn-green">Log Done</button><button onclick="window.delTask(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div></div>`;
-    }).join('')}</div>`; 
-}
-window.renderTaskList = () => { document.getElementById('taskSubContent').innerHTML = window.renderTaskListTemplate(); };
-window.renderTaskHistory = () => { document.getElementById('taskSubContent').innerHTML = `<table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:15px;">Date</th><th style="padding:15px;">Task</th><th style="padding:15px;">Staff</th></tr></thead><tbody>${(window.taskHistory || []).slice().reverse().map(h => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px; font-size:13px; color:var(--text-muted);">${h.date}</td><td style="padding:15px;">${h.name}</td><td style="padding:15px;"><strong>${h.staff}</strong></td></tr>`).join('')}</tbody></table>`; };
-
-window.addTaskForm = () => { 
-    let html = `<label style="font-size:11px; color:var(--text-muted);">Task Name</label><input type="text" id="t-n" class="input-box" placeholder="e.g. Grease Trap Clean"><label style="font-size:11px; color:var(--text-muted);">Frequency</label><select id="t-f" class="input-box" style="margin-bottom:20px;"><option>Weekly</option><option>Fortnightly</option><option>Monthly</option><option>Quarterly</option></select><button onclick="window.subTask()" class="btn btn-green" style="width:100%;">Save Task</button>`;
-    window.openModal("🔄 New Recurring Task", html);
+window.renderTaskView = function() {
+    return `<div style="max-width: 900px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.renderTaskList()" class="btn btn-dark">Active Tasks</button>
+                <button onclick="window.renderTaskHistory()" class="btn btn-outline">Audit History</button>
+            </div>
+            <button onclick="window.addTaskForm()" class="btn btn-blue">+ Add Task</button>
+        </div>
+        <div id="taskSubContent">${window.renderTaskListTemplate()}</div>
+    </div>`;
 };
-window.subTask = () => { window.rotationalTasks.push({ name: document.getElementById('t-n').value, freq: document.getElementById('t-f').value, lastLogIso: null, lastDate: 'Never' }); window.saveToDisk(); window.closeModal(); window.showView('tasks'); window.showToast("Task Created!"); };
-window.logTaskCompletion = (i) => { const s = document.getElementById(`staff-${i}`).value; if(!s) return window.showToast("Enter Staff Initials", "error"); const now = new Date(); window.taskHistory.push({ name: window.rotationalTasks[i].name, staff: s, date: now.toLocaleDateString() }); window.rotationalTasks[i].lastLogIso = now.toISOString(); window.rotationalTasks[i].lastDate = now.toLocaleDateString(); window.saveToDisk(); window.showView('tasks'); window.showToast("Task Logged!"); };
-window.delTask = (i) => { if(confirm("Delete Task?")) { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); }};
+
+window.renderTaskListTemplate = function() {
+    const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
+    const tasks = window.rotationalTasks || [];
+    if (tasks.length === 0) return '<div class="card"><p style="color:var(--text-muted);margin:0;">No tasks set up yet. Click + Add Task to get started.</p></div>';
+
+    return '<div id="activeTasks">' + tasks.map((t, i) => {
+        // Determine due status — supports both recurring freq and specific due date
+        let isDue = true, daysLeftText = 'DUE NOW', nextDueStr = '';
+
+        if (t.dueDateMode === 'specific' && t.specificDueDate) {
+            const dueDate = new Date(t.specificDueDate);
+            const today = new Date(); today.setHours(0,0,0,0);
+            const daysUntil = Math.round((dueDate - today) / (1000*3600*24));
+            isDue = daysUntil <= 0;
+            daysLeftText = isDue ? (daysUntil < 0 ? Math.abs(daysUntil) + ' days overdue' : 'DUE TODAY') : 'Due in ' + daysUntil + ' days';
+            nextDueStr = 'Due: ' + dueDate.toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'});
+        } else if (t.lastLogIso) {
+            const daysSince = (new Date() - new Date(t.lastLogIso)) / (1000*3600*24);
+            const interval = freqMap[t.freq] || 7;
+            isDue = daysSince >= interval;
+            if (!isDue) daysLeftText = 'Due in ' + Math.ceil(interval - daysSince) + ' days';
+            nextDueStr = t.freq + ' | Last: ' + (t.lastDate || 'Never');
+        } else {
+            nextDueStr = (t.dueDateMode === 'specific' ? 'Due: ' + (t.specificDueDate || 'Not set') : (t.freq || 'Weekly')) + ' | Never done';
+        }
+
+        const borderColor = isDue ? 'var(--red)' : 'var(--green)';
+        return '<div class="card" style="border-left:6px solid ' + borderColor + ';padding:15px;margin-bottom:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
+                '<div style="flex:1;">' +
+                    '<strong style="font-size:16px;">' + t.name + '</strong>' +
+                    (t.notes ? '<br><small style="color:var(--text-muted);font-size:12px;">' + t.notes + '</small>' : '') +
+                    '<br><small style="color:var(--text-muted);">' + nextDueStr + '</small>' +
+                    '<br><strong style="font-size:12px;display:inline-block;margin-top:4px;color:' + (isDue?'var(--red)':'var(--green)') + ';">' + daysLeftText + '</strong>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                    '<input type="text" id="staff-' + i + '" placeholder="Staff Initials" class="input-box" style="width:110px;margin:0;">' +
+                    '<button onclick="window.logTaskCompletion(' + i + ')" class="btn btn-green">Log Done</button>' +
+                    '<button onclick="window.editTaskForm(' + i + ')" class="btn btn-outline" style="font-size:12px;padding:6px 10px;">✏️ Edit</button>' +
+                    '<button onclick="window.delTask(' + i + ')" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;">&times;</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+};
+
+window.renderTaskList = () => { document.getElementById('taskSubContent').innerHTML = window.renderTaskListTemplate(); };
+window.renderTaskHistory = () => {
+    const rows = (window.taskHistory||[]).slice().reverse().map(h =>
+        '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:12px 15px;font-size:13px;color:var(--text-muted);">' + h.date + '</td><td style="padding:12px 15px;">' + h.name + '</td><td style="padding:12px 15px;"><strong>' + h.staff + '</strong></td></tr>'
+    ).join('');
+    document.getElementById('taskSubContent').innerHTML = '<table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">' +
+        '<thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+        '<th style="padding:12px 15px;">Date</th><th style="padding:12px 15px;">Task</th><th style="padding:12px 15px;">Staff</th></tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="3" style="padding:15px;color:var(--text-muted);text-align:center;">No history yet.</td></tr>') + '</tbody></table>';
+};
+
+window.addTaskForm = (editIdx) => {
+    const t = editIdx !== undefined ? window.rotationalTasks[editIdx] : { name:'', freq:'Weekly', dueDateMode:'recurring', specificDueDate:'', notes:'' };
+    const isEdit = editIdx !== undefined;
+    const today = new Date().toISOString().split('T')[0];
+    const html = '<label style="font-size:11px;color:var(--text-muted);">Task Name</label>' +
+        '<input type="text" id="t-n" class="input-box" value="' + (t.name||'') + '" placeholder="e.g. Grease Trap Clean">' +
+        '<label style="font-size:11px;color:var(--text-muted);">Notes (optional)</label>' +
+        '<input type="text" id="t-notes" class="input-box" value="' + (t.notes||'') + '" placeholder="e.g. Check gasket seal">' +
+        '<label style="font-size:11px;color:var(--text-muted);">Schedule Type</label>' +
+        '<select id="t-mode" class="input-box" onchange="document.getElementById(\'t-recurring\').style.display=this.value===\'recurring\'?\'block\':\'none\';document.getElementById(\'t-specific\').style.display=this.value===\'specific\'?\'block\':\'none\'">' +
+            '<option value="recurring" ' + ((t.dueDateMode||'recurring')==='recurring'?'selected':'') + '>Recurring (Weekly/Monthly etc)</option>' +
+            '<option value="specific" ' + (t.dueDateMode==='specific'?'selected':'') + '>Specific Due Date</option>' +
+        '</select>' +
+        '<div id="t-recurring" style="display:' + ((t.dueDateMode||'recurring')==='recurring'?'block':'none') + ';">' +
+            '<label style="font-size:11px;color:var(--text-muted);">Frequency</label>' +
+            '<select id="t-f" class="input-box">' +
+                ['Weekly','Fortnightly','Monthly','Quarterly'].map(f => '<option ' + (t.freq===f?'selected':'') + '>' + f + '</option>').join('') +
+            '</select>' +
+        '</div>' +
+        '<div id="t-specific" style="display:' + (t.dueDateMode==='specific'?'block':'none') + ';">' +
+            '<label style="font-size:11px;color:var(--text-muted);">Due Date</label>' +
+            '<input type="date" id="t-date" class="input-box" value="' + (t.specificDueDate||today) + '">' +
+        '</div>' +
+        '<button onclick="window.subTask(' + (isEdit?editIdx:'undefined') + ')" class="btn btn-green" style="width:100%;margin-top:5px;">' + (isEdit?'Save Changes':'Add Task') + '</button>';
+    window.openModal(isEdit ? '✏️ Edit Task' : '🔄 New Task', html);
+};
+
+window.editTaskForm = (i) => { window.addTaskForm(i); };
+
+window.subTask = (editIdx) => {
+    const name = document.getElementById('t-n').value.trim();
+    if (!name) return window.showToast('Task name required.', 'error');
+    const mode = document.getElementById('t-mode').value;
+    const freq = mode === 'recurring' ? document.getElementById('t-f').value : 'Once';
+    const specificDueDate = mode === 'specific' ? document.getElementById('t-date').value : '';
+    const notes = document.getElementById('t-notes').value.trim();
+    const obj = { name, freq, dueDateMode: mode, specificDueDate, notes, lastLogIso: null, lastDate: 'Never' };
+    if (editIdx !== undefined && editIdx !== 'undefined') {
+        // Preserve completion history when editing
+        obj.lastLogIso = window.rotationalTasks[editIdx].lastLogIso;
+        obj.lastDate = window.rotationalTasks[editIdx].lastDate;
+        window.rotationalTasks[editIdx] = obj;
+        window.showToast('Task updated!');
+    } else {
+        window.rotationalTasks.push(obj);
+        window.showToast('Task created!');
+    }
+    window.saveToDisk(); window.closeModal(); window.showView('tasks');
+};
+
+window.logTaskCompletion = (i) => {
+    const s = document.getElementById('staff-' + i).value;
+    if (!s) return window.showToast('Enter staff initials.', 'error');
+    const today = new Date().toISOString().split('T')[0];
+    window._taskLogStaff = s;
+    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Logging: <strong>' + window.rotationalTasks[i].name + '</strong></p>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Completion Date</label>' +
+        '<div style="display:flex;gap:8px;margin-bottom:15px;">' +
+            '<button onclick="window._confirmTaskLog(' + i + ',window._taskLogStaff,\'today\')" class="btn btn-green" style="flex:1;">✓ Today</button>' +
+            '<button onclick="document.getElementById(\'t-custom-date\').style.display=\'block\'" class="btn btn-outline" style="flex:1;">📅 Pick Date</button>' +
+        '</div>' +
+        '<div id="t-custom-date" style="display:none;">' +
+            '<input type="date" id="t-log-date" class="input-box" value="' + today + '">' +
+            '<button onclick="window._confirmTaskLog(' + i + ',window._taskLogStaff,\'custom\')" class="btn btn-green" style="width:100%;">Confirm Date</button>' +
+        '</div>';
+    window.openModal('✓ Log Task Completion', html);
+};
+
+window._confirmTaskLog = (i, staff, mode) => {
+    let logDate;
+    if (mode === 'custom') {
+        const d = document.getElementById('t-log-date').value;
+        if (!d) return window.showToast('Select a date.', 'error');
+        logDate = new Date(d);
+    } else {
+        logDate = new Date();
+    }
+    const dateStr = logDate.toLocaleDateString('en-AU');
+    window.taskHistory.push({ name: window.rotationalTasks[i].name, staff, date: dateStr });
+    window.rotationalTasks[i].lastLogIso = logDate.toISOString();
+    window.rotationalTasks[i].lastDate = dateStr;
+    // If specific due date mode — clear the due date after completion (task done)
+    if (window.rotationalTasks[i].dueDateMode === 'specific') {
+        window.rotationalTasks[i].specificDueDate = '';
+    }
+    window.saveToDisk(); window.closeModal(); window.showView('tasks'); window.showToast('Task logged!');
+};
+
+window.delTask = (i) => { if(confirm('Delete this task?')) { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); }};
 
 // --- 4. COMPLIANCE ---
 window.renderComplianceView = function() {
