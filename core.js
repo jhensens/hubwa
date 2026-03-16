@@ -159,16 +159,38 @@ window.renderVenueSwitcher = () => {
     }).join('');
 
     const setupHtml = '<div style="margin-top:20px;padding-top:15px;border-top:1px solid var(--border);">' +
+        '<div style="margin-bottom:15px;padding:12px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;">' +
+        '<p style="font-size:12px;color:var(--text-muted);margin:0 0 8px 0;">🗑️ <strong>Wipe Venue Data</strong> — Reset current venue to blank:</p>' +
+        '<button onclick="window.wipeVenueData()" class="btn btn-outline" style="width:100%;color:var(--red);border-color:var(--red);font-size:13px;">⚠️ Wipe ' + current.name + ' Data</button>' +
+        '</div>' +
         '<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px 0;">⚙️ <strong>Device Setup</strong> — Set which venue this device defaults to:</p>' +
-        '<div style="display:flex;gap:8px;">' +
+        '<div style="display:flex;gap:8px;margin-bottom:15px;">' +
         window._venues.map(v => 
             '<button onclick="window.setDeviceVenue(\'' + v.id + '\')" class="btn ' + (deviceVenue===v.id?'btn-dark':'btn-outline') + '" style="flex:1;font-size:13px;">' + v.emoji + ' ' + v.name + '</button>'
         ).join('') +
         '</div>' +
-        '<p style="font-size:11px;color:var(--text-muted);margin:8px 0 0 0;">Device venue determines which data loads by default and what staff see.</p>' +
+        '<p style="font-size:11px;color:var(--text-muted);margin:0;">Device venue determines which data loads by default and what staff see.</p>' +
     '</div>';
 
     window.openModal('🏢 Venue Management', venueHtml + setupHtml);
+};
+
+window.wipeVenueData = () => {
+    const v = window.getCurrentVenue();
+    if (!confirm('⚠️ WIPE ALL DATA for ' + v.name + '?\n\nThis will clear all inventory, recipes, takings, compliance logs, staff data and settings for this venue.\n\nThis CANNOT be undone.\n\nType OK to confirm.')) return;
+    // Clear all saveKeys for this venue
+    const vid = v.id;
+    window.saveKeys.forEach(k => {
+        const emptyVal = Array.isArray(window[k]) ? [] : (typeof window[k] === 'object' ? {} : '');
+        window[k] = emptyVal;
+        localStorage.removeItem(vid + '_' + k);
+        localStorage.removeItem(k); // also clear unversioned just in case
+    });
+    // Save clean state to Firebase
+    window.saveToDisk();
+    window.closeModal();
+    window.showToast(v.name + ' data wiped. Starting fresh!');
+    setTimeout(() => location.reload(), 1000);
 };
 
 window.switchVenue = (id) => {
@@ -204,37 +226,42 @@ window.updateVenueBadge = () => {
 
 window.applyVenueTheme = (v) => {
     const root = document.documentElement;
+    const body = document.body;
+    // Remove all venue classes
+    body.classList.remove('venue-bwi', 'venue-lia');
+    body.classList.add('venue-' + v.id);
+
     if (v.id === 'lia') {
-        // LIA theme - teal accent, darker tropical feel
         root.style.setProperty('--brand-dark', '#22d3ee');
         root.style.setProperty('--brand-accent', '#0ea5e9');
-        root.style.setProperty('--sidebar-bg', '#090f10');
-        root.style.setProperty('--sidebar-hover', '#0f1f22');
+        root.style.setProperty('--sidebar-bg', '#041a1a');
+        root.style.setProperty('--sidebar-hover', '#083030');
         root.style.setProperty('--blue', '#22d3ee');
-        // Update logo
+        root.style.setProperty('--purple', '#22d3ee');
+        root.style.setProperty('--card-bg', '#0a1f1f');
+        root.style.setProperty('--bg-main', '#041515');
+        // Top bar colour
+        const header = document.querySelector('.main-header');
+        if (header) { header.style.borderBottom = '3px solid #22d3ee'; header.style.background = 'linear-gradient(135deg, #041a1a, #083030)'; }
+        // Logo
         const logoEl = document.getElementById('venue-logo');
-        if (logoEl) {
-            logoEl.src = './lia-logo.png';
-            logoEl.style.filter = 'none';
-            logoEl.style.width = '120px';
-            logoEl.style.marginTop = '4px';
-        }
-        // Update page title
+        if (logoEl) { logoEl.src = './lia-logo.png'; logoEl.style.filter = 'none'; logoEl.style.width = '120px'; logoEl.style.marginTop = '4px'; }
         document.title = 'Lost In Asia Hub';
     } else {
-        // BWI theme - restore defaults
         root.style.setProperty('--brand-dark', '#a78bfa');
         root.style.setProperty('--brand-accent', '#7c3aed');
         root.style.setProperty('--sidebar-bg', '#090912');
         root.style.setProperty('--sidebar-hover', '#1e1e2e');
         root.style.setProperty('--blue', '#3b82f6');
-        // Restore BWI logo
+        root.style.setProperty('--purple', '#8b5cf6');
+        root.style.setProperty('--card-bg', '#13131a');
+        root.style.setProperty('--bg-main', '#0d0d14');
+        // Reset top bar
+        const header = document.querySelector('.main-header');
+        if (header) { header.style.borderBottom = ''; header.style.background = ''; }
+        // Logo
         const logoEl = document.getElementById('venue-logo');
-        if (logoEl) {
-            logoEl.src = './bwi-logo.png';
-            logoEl.style.filter = 'invert(1) contrast(1.4) brightness(1.3)';
-            logoEl.style.width = '88px';
-        }
+        if (logoEl) { logoEl.src = './bwi-logo.png'; logoEl.style.filter = 'invert(1) contrast(1.4) brightness(1.3)'; logoEl.style.width = '88px'; }
         document.title = 'Hobart Hub | Bar Wa Izakaya';
     }
 };
