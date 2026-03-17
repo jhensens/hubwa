@@ -326,7 +326,10 @@ window.applyVenueTheme = (v) => {
 // =============================================================================
 // TANDA API
 // =============================================================================
-window.getTandaToken = () => localStorage.getItem('tandaApiToken') || '';
+window.getTandaToken = () => {
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    return localStorage.getItem(vid + '_tandaApiToken') || '';
+};
 
 window.fetchTanda = async (endpoint) => {
     const token = window.getTandaToken();
@@ -414,7 +417,8 @@ window.openTandaSettings = () => {
 window.saveTandaToken = () => {
     const token = document.getElementById('tanda-token').value.trim();
     if (!token) return window.showToast('Token required.','error');
-    localStorage.setItem('tandaApiToken', token);
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    localStorage.setItem(vid + '_tandaApiToken', token);
     window.closeModal();
     window.showToast('Tanda connected!');
     window.loadTandaData();
