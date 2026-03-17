@@ -1957,6 +1957,397 @@ window.renderAiOrderView = () => {
     '</div>';
 };
 
+
+// =============================================================================
+// LIGHTSPEED REPORT IMPORTER
+// Handles Sales By, Guests, and Reconciliation CSVs
+// =============================================================================
+window.renderLightspeedImportView = () => {
+    return '<div style="max-width:900px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div>' +
+                '<h2 style="margin:0;">📥 Lightspeed Import</h2>' +
+                '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Drop your Lightspeed CSV exports here — Sales By, Guests, or Reconciliation. The Hub detects each type automatically.</p>' +
+            '</div>' +
+            '<button onclick="window.showView(\'invoice\')" class="btn btn-outline" style="font-size:12px;">🧾 Invoice Ripper</button>' +
+        '</div>' +
+
+        // Drop zone
+        '<div id="ls-dropzone" style="border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:20px;" ' +
+            'onclick="document.getElementById(\'ls-file-input\').click()" ' +
+            'ondragover="event.preventDefault();this.style.borderColor=\'#3b82f6\';this.style.background=\'rgba(59,130,246,0.05)\';" ' +
+            'ondragleave="this.style.borderColor=\'#2a2a35\';this.style.background=\'\';" ' +
+            'ondrop="event.preventDefault();this.style.borderColor=\'#2a2a35\';this.style.background=\'\';window.handleLsFiles(event.dataTransfer.files);">' +
+            '<div style="font-size:48px;margin-bottom:10px;">📊</div>' +
+            '<div style="font-size:16px;font-weight:bold;margin-bottom:5px;">Drop Lightspeed CSV files here</div>' +
+            '<div style="font-size:13px;color:var(--text-muted);">Or click to browse · Accepts Sales By, Guests, and Reconciliation reports</div>' +
+            '<input type="file" id="ls-file-input" multiple accept=".csv" style="display:none;" onchange="window.handleLsFiles(this.files)">' +
+        '</div>' +
+
+        // Date range selector
+        '<div class="card" style="padding:15px;margin-bottom:20px;">' +
+            '<div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap;">' +
+                '<div style="font-size:13px;color:var(--text-muted);font-weight:bold;">Import date range:</div>' +
+                '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">' +
+                    '<input type="radio" name="ls-mode" value="all" checked onchange="window._lsMode=\'all\'"> All dates in file' +
+                '</label>' +
+                '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">' +
+                    '<input type="radio" name="ls-mode" value="today" onchange="window._lsMode=\'today\'"> Today only' +
+                '</label>' +
+                '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">' +
+                    '<input type="radio" name="ls-mode" value="week" onchange="window._lsMode=\'week\'"> This week' +
+                '</label>' +
+            '</div>' +
+        '</div>' +
+
+        // Results area
+        '<div id="ls-results"></div>' +
+
+        // Recent imports log
+        '<div style="margin-top:25px;">' +
+            '<h3 style="margin:0 0 12px 0;font-size:14px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Recent Imports</h3>' +
+            ((window.lsImportLog||[]).length === 0 ?
+                '<p style="color:var(--text-muted);font-size:13px;">No imports yet.</p>' :
+                (window.lsImportLog||[]).slice(-10).reverse().map(log =>
+                    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--border);font-size:13px;">' +
+                        '<span>' + log.icon + ' <strong>' + log.type + '</strong> — ' + log.summary + '</span>' +
+                        '<span style="color:var(--text-muted);">' + log.time + '</span>' +
+                    '</div>'
+                ).join('')
+            ) +
+        '</div>' +
+    '</div>';
+};
+
+window._lsMode = 'all';
+
+window.handleLsFiles = (files) => {
+    if (!files || files.length === 0) return;
+    const results = document.getElementById('ls-results');
+    results.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Processing files...</div>';
+
+    const fileArr = Array.from(files);
+    let processed = 0;
+    const summaries = [];
+
+    fileArr.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            const summary = window.processLsFile(file.name, text);
+            summaries.push(summary);
+            processed++;
+            if (processed === fileArr.length) {
+                window.saveToDisk();
+                window.showLsResults(summaries);
+            }
+        };
+        reader.readAsText(file);
+    });
+};
+
+window.processLsFile = (filename, text) => {
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) return { type: 'Unknown', icon: '❓', status: 'error', message: 'File appears empty' };
+
+    const header = lines[0].toLowerCase();
+
+    if (header.includes('product') && header.includes('quantity') && header.includes('sale amount')) {
+        return window.parseLsSalesBy(lines);
+    } else if (header.includes('guest count') && header.includes('avg per guest')) {
+        return window.parseLsGuests(lines);
+    } else if (header.includes('cashup') || header.includes('recorded') && header.includes('counted')) {
+        return window.parseLsReconciliation(lines);
+    } else {
+        return { type: 'Unknown', icon: '❓', status: 'error', message: 'Could not identify report type. Expected Sales By, Guests, or Reconciliation CSV.' };
+    }
+};
+
+// Parse CSV line handling quoted fields
+window.parseCsvLine = (line) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') { inQuotes = !inQuotes; }
+        else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+        else { current += line[i]; }
+    }
+    result.push(current.trim());
+    return result;
+};
+
+// ---- SALES BY PARSER ----
+window.parseLsSalesBy = (lines) => {
+    const rows = lines.slice(1).map(l => window.parseCsvLine(l));
+    let totalSales = 0, totalCost = 0, matched = 0, depleted = 0;
+    const productSales = [];
+
+    rows.forEach(r => {
+        const name = r[2] || '';
+        const qty = parseFloat(r[3]) || 0;
+        const saleAmt = parseFloat(r[5]) || 0;
+        const cost = parseFloat(r[7]) || 0;
+        const gpPct = parseFloat(r[8]) || 0;
+        if (!name || qty === 0) return;
+
+        totalSales += saleAmt;
+        totalCost += cost;
+        productSales.push({ name, qty, saleAmt, cost, gpPct });
+
+        // Match to inventory and deplete
+        const invMatch = (window.inventoryItems||[]).find(i =>
+            !i.archived && (
+                i.name.toLowerCase() === name.toLowerCase() ||
+                (i.posAlias && i.posAlias.toLowerCase() === name.toLowerCase()) ||
+                name.toLowerCase().includes(i.name.toLowerCase().substring(0,6))
+            )
+        );
+        if (invMatch) {
+            matched++;
+            // Deplete by qty in use units
+            const depletion = qty * (invMatch.useToBy || 1);
+            invMatch.stock = Math.max(0, (invMatch.stock || 0) - depletion);
+            depleted++;
+        }
+    });
+
+    // Calculate food vs bev split
+    const foodKeywords = ['gyoza','chicken','edamame','rice','salad','pork','beef','wagyu','tofu','tempura','katsu','takoyaki','karaage','dumpling','noodle','ramen','curry','soup'];
+    const bevKeywords = ['sapporo','beer','wine','sake','whisky','whiskey','cocktail','negroni','spritz','gin','rum','vodka','tequila','spirits','shochu','umeshu','yuzu','soda','juice','tea','coffee'];
+
+    let foodSales = 0, bevSales = 0;
+    productSales.forEach(p => {
+        const nameLower = p.name.toLowerCase();
+        const isBev = bevKeywords.some(k => nameLower.includes(k));
+        const isFood = foodKeywords.some(k => nameLower.includes(k));
+        if (isBev) bevSales += p.saleAmt;
+        else if (isFood) foodSales += p.saleAmt;
+    });
+
+    // Store for food/bev split
+    const today = new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
+    if (!window.lsSalesByData) window.lsSalesByData = {};
+    window.lsSalesByData[today] = { products: productSales, totalSales, totalCost, foodSales, bevSales };
+
+    if (!window.lsImportLog) window.lsImportLog = [];
+    window.lsImportLog.push({ type:'Sales By', icon:'📊', summary: productSales.length + ' products · $' + totalSales.toFixed(0) + ' revenue · ' + depleted + ' inventory items depleted', time: new Date().toLocaleTimeString() });
+
+    return {
+        type: 'Sales By',
+        icon: '📊',
+        status: 'success',
+        rows: productSales.length,
+        totalSales,
+        totalCost,
+        foodSales,
+        bevSales,
+        matched,
+        depleted,
+        products: productSales.slice(0,10)
+    };
+};
+
+// ---- GUESTS PARSER ----
+window.parseLsGuests = (lines) => {
+    const rows = lines.slice(1).map(l => window.parseCsvLine(l));
+    let imported = 0;
+
+    rows.forEach(r => {
+        const rawDate = r[0] || '';
+        const guests = parseInt(r[1]) || 0;
+        const total = parseFloat(r[5]) || 0;
+        const avgPerGuest = parseFloat(r[6]) || 0;
+
+        if (!rawDate || !guests) return;
+
+        // Convert YYYY-MM-DD to DD/MM/YYYY
+        const parts = rawDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (!parts) return;
+        const dateStr = parts[3] + '/' + parts[2] + '/' + parts[1];
+
+        // Apply mode filter
+        if (window._lsMode === 'today') {
+            const today = new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
+            if (dateStr !== today) return;
+        } else if (window._lsMode === 'week') {
+            const d = new Date(rawDate);
+            const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7);
+            if (d < weekAgo) return;
+        }
+
+        // Update or add to salesData
+        if (!window.salesData) window.salesData = [];
+        const idx = window.salesData.findIndex(s => s.date === dateStr);
+        if (idx >= 0) {
+            window.salesData[idx].covers = guests;
+            window.salesData[idx].avgSpend = avgPerGuest;
+            if (!window.salesData[idx].total && total) window.salesData[idx].total = total;
+        } else {
+            window.salesData.push({ date: dateStr, covers: guests, avgSpend: avgPerGuest, total, eftpos: 0, cash: 0 });
+        }
+        imported++;
+    });
+
+    if (!window.lsImportLog) window.lsImportLog = [];
+    window.lsImportLog.push({ type:'Guests', icon:'👥', summary: imported + ' days imported', time: new Date().toLocaleTimeString() });
+
+    return { type:'Guests', icon:'👥', status:'success', imported, rows };
+};
+
+// ---- RECONCILIATION PARSER ----
+window.parseLsReconciliation = (lines) => {
+    const rows = lines.slice(1).map(l => window.parseCsvLine(l));
+    let imported = 0;
+    const byDate = {};
+    const warnings = [];
+
+    rows.forEach(r => {
+        const cashupNum = r[0];
+        const rawDate = r[1] || '';
+        const register = r[3] || '';
+        const staffRaw = r[4] || '';
+        const counted = parseFloat(r[5]) || 0;
+        const recorded = parseFloat(r[6]) || 0;
+        const variance = parseFloat(r[7]) || 0;
+
+        // Parse date from "2026-03-16 09:01:21"
+        const datePart = rawDate.match(/(\d{4}-\d{2}-\d{2})/);
+        if (!datePart) return;
+        const ymd = datePart[1];
+        const parts = ymd.match(/(\d{4})-(\d{2})-(\d{2})/);
+        const dateStr = parts[3] + '/' + parts[2] + '/' + parts[1];
+
+        // Clean staff name — strip leading numbers and punctuation
+        const staff = staffRaw.replace(/^[\d\s\.\-_]+/, '').trim();
+
+        // Apply mode filter
+        if (window._lsMode === 'today') {
+            const today = new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
+            if (dateStr !== today) return;
+        } else if (window._lsMode === 'week') {
+            const d = new Date(ymd);
+            const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7);
+            if (d < weekAgo) return;
+        }
+
+        // Sum across registers for same date
+        if (!byDate[dateStr]) byDate[dateStr] = { recorded: 0, counted: 0, variance: 0, staff, registers: [] };
+        byDate[dateStr].recorded += recorded;
+        byDate[dateStr].counted += counted;
+        byDate[dateStr].variance += variance;
+        byDate[dateStr].registers.push(register);
+
+        // Flag large variances
+        if (Math.abs(variance) > 200) {
+            warnings.push({ date: dateStr, register, variance, staff });
+        }
+    });
+
+    // Update salesData
+    Object.entries(byDate).forEach(([dateStr, data]) => {
+        if (!window.salesData) window.salesData = [];
+        const idx = window.salesData.findIndex(s => s.date === dateStr);
+        const entry = {
+            date: dateStr,
+            total: data.recorded,
+            eftpos: Math.max(0, data.recorded - Math.abs(data.counted < data.recorded ? data.recorded - data.counted : 0)),
+            cash: data.counted,
+            cashVariance: data.variance,
+            staffCashUp: data.staff
+        };
+        if (idx >= 0) {
+            window.salesData[idx] = { ...window.salesData[idx], ...entry };
+        } else {
+            window.salesData.push(entry);
+        }
+        imported++;
+    });
+
+    if (!window.lsImportLog) window.lsImportLog = [];
+    window.lsImportLog.push({ type:'Reconciliation', icon:'💳', summary: imported + ' days · ' + (warnings.length > 0 ? warnings.length + ' variance alerts' : 'no variance issues'), time: new Date().toLocaleTimeString() });
+
+    return { type:'Reconciliation', icon:'💳', status:'success', imported, warnings, byDate };
+};
+
+// ---- DISPLAY RESULTS ----
+window.showLsResults = (summaries) => {
+    const el = document.getElementById('ls-results');
+    if (!el) return;
+
+    const html = summaries.map(s => {
+        if (s.status === 'error') {
+            return '<div class="card" style="border-left:4px solid var(--red);padding:15px;margin-bottom:15px;">' +
+                '<div style="font-weight:bold;color:var(--red);">❓ Unknown file type</div>' +
+                '<div style="font-size:13px;color:var(--text-muted);margin-top:5px;">' + s.message + '</div>' +
+            '</div>';
+        }
+
+        if (s.type === 'Sales By') {
+            const foodPct = s.totalSales > 0 ? (s.foodSales/s.totalSales*100).toFixed(1) : 0;
+            const bevPct = s.totalSales > 0 ? (s.bevSales/s.totalSales*100).toFixed(1) : 0;
+            const topProducts = s.products.slice(0,5).map(p =>
+                '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);font-size:12px;">' +
+                '<span>' + p.name.substring(0,35) + '</span>' +
+                '<span style="color:var(--green);">$' + p.saleAmt.toFixed(0) + ' · ' + p.qty + ' sold</span>' +
+                '</div>'
+            ).join('');
+
+            return '<div class="card" style="border-left:4px solid var(--green);margin-bottom:15px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
+                    '<div><strong style="font-size:16px;">📊 Sales By — Imported</strong><br>' +
+                    '<small style="color:var(--text-muted);">' + s.rows + ' products · ' + s.depleted + ' inventory items depleted</small></div>' +
+                    '<div style="text-align:right;"><div style="font-size:22px;font-weight:bold;color:var(--green);">$' + s.totalSales.toFixed(0) + '</div><small style="color:var(--text-muted);">Total revenue</small></div>' +
+                '</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">' +
+                    '<div style="background:var(--bg-main);padding:10px;border-radius:8px;text-align:center;">' +
+                        '<div style="font-size:11px;color:var(--orange);text-transform:uppercase;">🍱 Food</div>' +
+                        '<div style="font-size:20px;font-weight:bold;">$' + s.foodSales.toFixed(0) + '</div>' +
+                        '<div style="font-size:11px;color:var(--text-muted);">' + foodPct + '% of sales</div>' +
+                    '</div>' +
+                    '<div style="background:var(--bg-main);padding:10px;border-radius:8px;text-align:center;">' +
+                        '<div style="font-size:11px;color:var(--blue);text-transform:uppercase;">🍶 Beverage</div>' +
+                        '<div style="font-size:20px;font-weight:bold;">$' + s.bevSales.toFixed(0) + '</div>' +
+                        '<div style="font-size:11px;color:var(--text-muted);">' + bevPct + '% of sales</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);font-weight:bold;margin-bottom:5px;">TOP SELLERS</div>' +
+                topProducts +
+            '</div>';
+        }
+
+        if (s.type === 'Guests') {
+            return '<div class="card" style="border-left:4px solid var(--blue);margin-bottom:15px;">' +
+                '<strong style="font-size:16px;">👥 Guests — Imported</strong><br>' +
+                '<small style="color:var(--text-muted);">' + s.imported + ' days of covers data added to takings</small>' +
+            '</div>';
+        }
+
+        if (s.type === 'Reconciliation') {
+            const warningHtml = s.warnings.length > 0 ?
+                '<div style="margin-top:12px;">' +
+                '<div style="font-size:12px;color:var(--red);font-weight:bold;margin-bottom:5px;">⚠️ VARIANCE ALERTS</div>' +
+                s.warnings.map(w =>
+                    '<div style="font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;">' +
+                    '<span>' + w.date + ' · ' + w.register + ' · ' + w.staff + '</span>' +
+                    '<span style="color:var(--red);font-weight:bold;">$' + w.variance.toFixed(2) + '</span>' +
+                    '</div>'
+                ).join('') + '</div>' : '';
+
+            return '<div class="card" style="border-left:4px solid var(--purple);margin-bottom:15px;">' +
+                '<strong style="font-size:16px;">💳 Reconciliation — Imported</strong><br>' +
+                '<small style="color:var(--text-muted);">' + s.imported + ' days of takings imported from Lightspeed</small>' +
+                warningHtml +
+            '</div>';
+        }
+
+        return '';
+    }).join('');
+
+    el.innerHTML = html;
+    window.showView('lightspeed-import'); // refresh to update recent imports log
+};
+
 window.renderPrepListView = () => {
     const isWeekend = [0, 5, 6].includes(new Date().getDay());
     const currentDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
