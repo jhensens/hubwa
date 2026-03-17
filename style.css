@@ -198,18 +198,46 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     .sticky-footer { bottom: -15px; flex-direction: column; }
 }
 
-/* LIA Venue Theme */
+/* LIA Venue Theme — strong visual differentiation */
 body.venue-lia {
     --brand-dark: #22d3ee;
     --brand-accent: #0ea5e9;
-    --sidebar-bg: #090f10;
-    --sidebar-hover: #0f1f22;
+    --sidebar-bg: #041a1a;
+    --sidebar-hover: #083030;
     --blue: #22d3ee;
+    --purple: #22d3ee;
+    --card-bg: #0a1f1f;
+    --bg-main: #041515;
+}
+body.venue-lia .sidebar {
+    background: linear-gradient(180deg, #041a1a 0%, #062020 100%);
+    border-right: 2px solid rgba(34,211,238,0.3);
 }
 body.venue-lia .nav-item.active {
     border-left-color: #22d3ee;
     background: rgba(34,211,238,0.15);
+    color: #22d3ee;
+}
+body.venue-lia .nav-item:hover {
+    background: rgba(34,211,238,0.08);
+    color: rgba(34,211,238,0.9);
+}
+body.venue-lia .nav-section-header {
+    color: rgba(34,211,238,0.5);
 }
 body.venue-lia .nav-section-header:hover {
     color: rgba(34,211,238,0.8);
+}
+body.venue-lia .nav-dashboard {
+    background: rgba(34,211,238,0.12);
+    border: 1px solid rgba(34,211,238,0.3);
+    color: #22d3ee;
+}
+body.venue-lia .sidebar-footer {
+    background: #041a1a;
+    border-top: 1px solid rgba(34,211,238,0.2);
+}
+body.venue-lia .brand-header {
+    border-bottom: 1px solid rgba(34,211,238,0.2);
+    background: #031212;
 }
