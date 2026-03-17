@@ -64,31 +64,80 @@ window.closeModal = () => {
 
 // --- 3. KIOSK PIN SECURITY ---
 window.isLocked = !!localStorage.getItem('venuePin');
+window._lastActivity = Date.now();
+window._autoLockMinutes = 10;
+
+['click','keypress','touchstart'].forEach(evt =>
+    document.addEventListener(evt, () => { window._lastActivity = Date.now(); }, { passive: true })
+);
+
+setInterval(() => {
+    if (!window.isLocked && localStorage.getItem('venuePin')) {
+        const idleMinutes = (Date.now() - window._lastActivity) / 60000;
+        if (idleMinutes >= window._autoLockMinutes) {
+            window.isLocked = true;
+            window.checkLockState();
+            window.showToast('Hub auto-locked after inactivity.');
+        }
+    }
+}, 60000);
+
+window._restrictedViews = [
+    'sales', 'suppliers', 'recipes', 'invoice', 'orientation', 'safe', 'handover',
+    'margins', 'menu-engineering', 'sell-price-editor', 'price-alerts', 'forecast',
+    'staff-directory', 'bulk-category-editor', 'pos-alias-editor', 'ai-order',
+    'cross-venue', 'par-editor', 'batch-linker', 'costing-report', 'prime-cost'
+];
+
 window.checkLockState = () => {
     const restrictedItems = document.querySelectorAll('.restricted');
     const lockBtn = document.getElementById('btn-lock');
     if (window.isLocked) {
         restrictedItems.forEach(el => el.style.display = 'none');
-        if(lockBtn) { lockBtn.innerHTML = "🔓 Unlock Hub"; lockBtn.style.background = "rgba(59, 130, 246, 0.1)"; lockBtn.style.color = "var(--blue)"; lockBtn.style.borderColor = "rgba(59, 130, 246, 0.2)"; }
-        // Kick them to dashboard if they refresh on a restricted page
-        const restrictedViews = ['sales', 'suppliers', 'recipes', 'invoice', 'orientation', 'safe', 'handover'];
-        if (restrictedViews.includes(window.currentView)) window.showView('dashboard');
+        if (lockBtn) { lockBtn.innerHTML = '🔓 Unlock Hub'; lockBtn.style.background = 'rgba(59,130,246,0.1)'; lockBtn.style.color = 'var(--blue)'; lockBtn.style.borderColor = 'rgba(59,130,246,0.2)'; }
+        if (window._restrictedViews.includes(window.currentView)) window.showView('dashboard');
     } else {
-        restrictedItems.forEach(el => el.style.display = 'flex'); // flex to align with new sidebar css
-        if(lockBtn) { lockBtn.innerHTML = "🔒 Lock Hub"; lockBtn.style.background = "rgba(239, 68, 68, 0.1)"; lockBtn.style.color = "var(--red)"; lockBtn.style.borderColor = "rgba(239, 68, 68, 0.2)"; }
+        restrictedItems.forEach(el => el.style.display = 'flex');
+        if (lockBtn) { lockBtn.innerHTML = '🔒 Lock Hub'; lockBtn.style.background = 'rgba(239,68,68,0.1)'; lockBtn.style.color = 'var(--red)'; lockBtn.style.borderColor = 'rgba(239,68,68,0.2)'; }
+    }
+};
+
+window.requirePin = (onSuccess) => {
+    const pin = localStorage.getItem('venuePin');
+    if (!pin) { onSuccess(); return; }
+    if (!window.isLocked) { onSuccess(); return; }
+    const attempt = prompt('Enter Manager PIN:');
+    if (attempt === null) return;
+    if (attempt === pin) {
+        window.isLocked = false;
+        window._lastActivity = Date.now();
+        window.checkLockState();
+        window.showToast('Hub unlocked.');
+        onSuccess();
+    } else {
+        alert('Incorrect PIN.');
     }
 };
 
 window.toggleLock = () => {
-    let pin = localStorage.getItem('venuePin');
+    const pin = localStorage.getItem('venuePin');
     if (!pin) {
-        let newPin = prompt("Set a new 4-digit Master Manager PIN:");
-        if (newPin && newPin.length >= 4) { localStorage.setItem('venuePin', newPin); window.isLocked = true; window.checkLockState(); window.showToast("Hub Locked."); }
+        const newPin = prompt('Set a 4-digit Manager PIN:');
+        if (newPin && newPin.length >= 4) {
+            localStorage.setItem('venuePin', newPin);
+            window.isLocked = true;
+            window.checkLockState();
+            window.showToast('PIN set. Hub locked.');
+        } else if (newPin) {
+            alert('PIN must be at least 4 digits.');
+        }
     } else if (window.isLocked) {
-        let attempt = prompt("Enter 4-digit PIN to unlock Manager Mode:");
-        if (attempt === pin) { window.isLocked = false; window.checkLockState(); window.showToast("Hub Unlocked."); } else { alert("Incorrect PIN"); }
+        window.requirePin(() => {});
     } else {
-        window.isLocked = true; window.checkLockState(); window.showView('dashboard'); window.showToast("Hub Locked.");
+        window.isLocked = true;
+        window.checkLockState();
+        window.showView('dashboard');
+        window.showToast('Hub locked.');
     }
 };
 
@@ -136,6 +185,10 @@ window.getDeviceVenue = () => localStorage.getItem('hubDeviceVenue') || 'bwi';
 window.getLocalKey = (key) => window.getCurrentVenue().id + '_' + key;
 
 window.renderVenueSwitcher = () => {
+    if (window.isLocked && localStorage.getItem('venuePin')) {
+        window.requirePin(() => window.renderVenueSwitcher());
+        return;
+    }
     const current = window.getCurrentVenue();
     const deviceVenue = window.getDeviceVenue();
     const venueHtml = window._venues.map(v => {
@@ -267,6 +320,67 @@ window.applyVenueTheme = (v) => {
 };
 
 
+
+// =============================================================================
+// TANDA API
+// =============================================================================
+window.getTandaToken = () => localStorage.getItem('tandaApiToken') || '';
+
+window.fetchTanda = async (endpoint) => {
+    const token = window.getTandaToken();
+    if (!token) return null;
+    try {
+        const res = await fetch('https://my.tanda.co/api/v2/' + endpoint, {
+            headers: { 'Authorization': 'bearer ' + token, 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch(e) { return null; }
+};
+
+window.loadTandaData = async () => {
+    if (!window.getTandaToken()) return;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const data = await window.fetchTanda('schedules?date=' + dateStr + '&show_costs=true');
+    if (!data) return;
+    let totalHours = 0, totalCost = 0, staff = [];
+    (data.schedules || []).forEach(s => {
+        const hrs = s.duration ? s.duration/3600 : 0;
+        totalHours += hrs;
+        if (s.cost) totalCost += Number(s.cost);
+        if (s.user_name) staff.push({ name: s.user_name, hours: hrs.toFixed(1) });
+    });
+    window._tandaData = {
+        date: dateStr,
+        rosteredHours: totalHours.toFixed(1),
+        estimatedWageCost: totalCost.toFixed(2),
+        staffCount: staff.length,
+        staff,
+        lastUpdated: new Date().toLocaleTimeString()
+    };
+    if (window.currentView === 'dashboard' || window.currentView === 'prime-cost') window.showView(window.currentView);
+};
+
+window.openTandaSettings = () => {
+    const token = window.getTandaToken();
+    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Connect Tanda to automatically pull rostered hours and wage costs.</p>' +
+        '<label style="font-size:11px;color:var(--text-muted);">API Token — get from: my.tanda.co/api/v2/my_tokens</label>' +
+        '<input type="text" id="tanda-token" class="input-box" value="' + token + '" placeholder="Paste Tanda API token...">' +
+        '<button onclick="window.saveTandaToken()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Save & Connect</button>' +
+        (token ? '<button onclick="window.loadTandaData();window.closeModal();window.showToast(\'Refreshing...\')" class="btn btn-outline" style="width:100%;">🔄 Refresh Now</button>' : '') +
+        (window._tandaData ? '<div style="margin-top:12px;font-size:12px;color:var(--text-muted);">Last sync: ' + window._tandaData.lastUpdated + ' · ' + window._tandaData.staffCount + ' staff · Est. $' + window._tandaData.estimatedWageCost + '</div>' : '');
+    window.openModal('⏱️ Tanda Integration', html);
+};
+
+window.saveTandaToken = () => {
+    const token = document.getElementById('tanda-token').value.trim();
+    if (!token) return window.showToast('Token required.','error');
+    localStorage.setItem('tandaApiToken', token);
+    window.closeModal();
+    window.showToast('Tanda connected!');
+    window.loadTandaData();
+};
+
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
     if (syncLabel) { syncLabel.innerHTML = '☁️ Saving...'; syncLabel.style.color = 'var(--blue)'; }
@@ -356,8 +470,10 @@ window.showToast = (msg, type = "success") => {
 window.currentView = 'dashboard';
 window.showView = (view) => {
     window.closeModal(); // Clean up any open modals to prevent glitching
-    const restrictedViews = ['sales', 'suppliers', 'recipes', 'invoice', 'orientation', 'safe', 'handover'];
-    if (window.isLocked && restrictedViews.includes(view)) return alert("This area is locked. Enter Manager PIN to access.");
+    if (window.isLocked && (window._restrictedViews||[]).includes(view)) {
+        window.requirePin(() => window.showView(view));
+        return;
+    }
     
     window.currentView = view;
     const content = document.getElementById('mainContent');
@@ -404,6 +520,7 @@ window.showView = (view) => {
         else if (view === 'forecast' && window.renderForecastView) content.innerHTML = window.renderForecastView();
         else if (view === 'cross-venue') { if (window.renderCrossVenueDashboard) window.renderCrossVenueDashboard(); }
         else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
+        else if (view === 'prime-cost' && window.renderPrimeCostView) content.innerHTML = window.renderPrimeCostView();
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
@@ -432,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.checkLockState();
     window.updateVenueBadge();
     window.showView('dashboard');
+    setTimeout(() => window.loadTandaData(), 2000);
 
     // Then sync from Firebase in background and re-render if data differs
     if (typeof db !== 'undefined') {
