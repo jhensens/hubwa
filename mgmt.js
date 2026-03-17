@@ -428,14 +428,14 @@ window.renderSalesView = () => {
         const dayLabel = d ? dayNames[d.getDay()] : '';
         const wageAmt = Number(s.wages || 0);
         const wagePctDay = Number(s.total || 0) > 0 && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
-        return '<tr style="border-bottom:1px solid var(--bg-main);">' +
+        return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;" onclick="window.manualTakingsForm(\''+s.date+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
             '<td style="padding:10px;">' + s.date + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
             '<td style="padding:10px;">$' + Number(s.eftpos||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
-            '<td style="padding:10px;color:var(--orange);font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '—') + '</td>' +
+            '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + (s.notes || '') + '</td>' +
         '</tr>';
     }).join('');
