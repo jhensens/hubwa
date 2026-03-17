@@ -340,16 +340,38 @@ window.fetchTanda = async (endpoint) => {
 
 window.loadTandaData = async () => {
     if (!window.getTandaToken()) return;
-    const dateStr = new Date().toISOString().split('T')[0];
-    const data = await window.fetchTanda('schedules?date=' + dateStr + '&show_costs=true');
-    if (!data) return;
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+
+    // Step 1: Get current user to find org user IDs
+    const me = await window.fetchTanda('users/me');
+    if (!me) { console.log('Tanda: could not authenticate'); return; }
+
+    // Step 2: Get current week roster using rosters/on endpoint
+    const roster = await window.fetchTanda('rosters/on/' + dateStr + '?show_costs=true');
+    if (!roster) {
+        // Try current roster as fallback
+        const current = await window.fetchTanda('rosters/current?show_costs=true');
+        if (!current) { console.log('Tanda: no roster found'); return; }
+        window._processTandaRoster(current, dateStr);
+        return;
+    }
+    window._processTandaRoster(roster, dateStr);
+};
+
+window._processTandaRoster = (roster, dateStr) => {
     let totalHours = 0, totalCost = 0, staff = [];
-    (data.schedules || []).forEach(s => {
-        const hrs = s.duration ? s.duration/3600 : 0;
+    const schedules = roster.schedules || [];
+    schedules.forEach(s => {
+        // Only count shifts for today
+        if (s.date && s.date !== dateStr) return;
+        const hrs = s.duration ? s.duration/3600 : (s.finish && s.start ? (s.finish - s.start)/3600 : 0);
         totalHours += hrs;
         if (s.cost) totalCost += Number(s.cost);
-        if (s.user_name) staff.push({ name: s.user_name, hours: hrs.toFixed(1) });
+        const name = s.user_name || s.name || ('Staff #' + (s.user_id||''));
+        if (name) staff.push({ name, hours: hrs.toFixed(1) });
     });
+
     window._tandaData = {
         date: dateStr,
         rosteredHours: totalHours.toFixed(1),
@@ -358,6 +380,7 @@ window.loadTandaData = async () => {
         staff,
         lastUpdated: new Date().toLocaleTimeString()
     };
+    console.log('Tanda loaded:', window._tandaData);
     if (window.currentView === 'dashboard' || window.currentView === 'prime-cost') window.showView(window.currentView);
 };
 
