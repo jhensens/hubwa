@@ -241,3 +241,6 @@ body.venue-lia .brand-header {
     border-bottom: 1px solid rgba(34,211,238,0.2);
     background: #031212;
 }
+
+/* Lock button dynamic label */
+#btn-lock.unlocked { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
