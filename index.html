@@ -33,6 +33,7 @@
                 </div>
                 <div class="nav-section-items" id="sec-ops">
                     <div class="nav-item restricted" onclick="window.showView('sales')">📈 Takings & KPIs</div>
+                    <div class="nav-item restricted" onclick="window.showView('prime-cost')">💎 Prime Cost</div>
                     <div class="nav-item restricted" onclick="window.showView('forecast')">🔮 Revenue Forecast</div>
                     <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
                     <div class="nav-item" onclick="window.showView('inventory')">📦 Live Inventory</div>
@@ -107,6 +108,7 @@
 
         <div class="sidebar-footer">
             <div id="btn-lock" class="nav-item btn-lock" onclick="window.toggleLock()">🔒 Lock Hub</div>
+            <div class="nav-item restricted" onclick="window.openTandaSettings()" style="font-size:12px;justify-content:center;background:rgba(59,130,246,0.1);color:var(--blue);">⏱️ Tanda Settings</div>
             <div class="nav-item restricted btn-backup" onclick="window.exportData()">💾 Backup Data</div>
             <div class="nav-item restricted btn-restore">
                 <label for="importFile" style="cursor:pointer; display: block; width: 100%;">📂 Restore Data</label>
@@ -161,7 +163,14 @@
 
 <script>
 // Collapsible sidebar sections
-window._sectionState = JSON.parse(localStorage.getItem('hubSections') || '{}');
+// Default: Operations open, everything else collapsed
+window._defaultOpenSections = ['sec-ops'];
+window._sectionState = JSON.parse(localStorage.getItem('hubSections') || 'null');
+if (window._sectionState === null) {
+    // First load - set defaults
+    window._sectionState = { 'sec-ops': true, 'sec-recipes': false, 'sec-compliance': false, 'sec-logistics': false, 'sec-external': false };
+}
+
 window.toggleSection = (id) => {
     const el = document.getElementById(id);
     const arr = document.getElementById('arr-' + id);
@@ -172,14 +181,21 @@ window.toggleSection = (id) => {
     window._sectionState[id] = !isOpen;
     localStorage.setItem('hubSections', JSON.stringify(window._sectionState));
 };
-// Restore section states on load
+
 document.addEventListener('DOMContentLoaded', () => {
-    Object.keys(window._sectionState).forEach(id => {
+    // Apply saved or default section states
+    const allSections = ['sec-ops','sec-recipes','sec-compliance','sec-logistics','sec-external'];
+    allSections.forEach(id => {
         const el = document.getElementById(id);
         const arr = document.getElementById('arr-' + id);
-        if (el && window._sectionState[id] === false) {
+        if (!el) return;
+        const isOpen = window._sectionState[id] !== false; // default open unless explicitly false
+        if (!isOpen) {
             el.style.display = 'none';
             if (arr) arr.textContent = '▸';
+        } else {
+            el.style.display = 'block';
+            if (arr) arr.textContent = '▾';
         }
     });
 });
