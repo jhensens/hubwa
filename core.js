@@ -404,20 +404,39 @@ window.saveTandaToken = () => {
     window.loadTandaData();
 };
 
+// Debounced Firebase write — max once every 4 seconds
+window._saveTimer = null;
+window._lastFirebaseSave = 0;
+
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
-    if (syncLabel) { syncLabel.innerHTML = '☁️ Saving...'; syncLabel.style.color = 'var(--blue)'; }
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
 
-    const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
-    
-    if (typeof db !== 'undefined') {
+    // Always save to localStorage immediately
+    window.saveKeys.forEach(k => {
+        try { localStorage.setItem(vid+'_'+k, JSON.stringify(window[k])); } catch(e) {}
+    });
+
+    if (syncLabel) { syncLabel.innerHTML = '💾 Saved Local'; syncLabel.style.color = 'var(--blue)'; }
+
+    // Debounce Firebase — only write if 4+ seconds since last write
+    if (window._saveTimer) clearTimeout(window._saveTimer);
+    window._saveTimer = setTimeout(() => {
+        if (typeof db === 'undefined') {
+            if (syncLabel) { syncLabel.innerHTML = '🟢 Saved Local'; syncLabel.style.color = 'var(--green)'; }
+            return;
+        }
+        const now = Date.now();
+        if (now - window._lastFirebaseSave < 4000) return; // Extra guard
+        window._lastFirebaseSave = now;
         let payload = {}; window.saveKeys.forEach(k => payload[k] = window[k]);
         db.collection('venueData').doc(window.getVenueDocId()).set(payload, { merge: true })
-        .then(() => { if (syncLabel) setTimeout(() => { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }, 800); })
-        .catch(err => { console.error("Firebase save error:", err); if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Sync'; syncLabel.style.color = 'var(--orange)'; } });
-    } else {
-        if (syncLabel) setTimeout(() => { syncLabel.innerHTML = '🟢 Saved Local'; syncLabel.style.color = 'var(--green)'; }, 800);
-    }
+            .then(() => { if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; } })
+            .catch(err => {
+                console.error('Firebase save error:', err);
+                if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Mode'; syncLabel.style.color = 'var(--orange)'; }
+            });
+    }, 3000); // Wait 3 seconds after last save call before writing to Firebase
 };
 
 window.loadData = () => {
@@ -430,7 +449,7 @@ window.loadData = () => {
                 window.saveKeys.forEach(k => { if (data[k] !== undefined) window[k] = data[k]; });
                 const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
                 window.checkLockState();
-                if (window.currentView) window.showView(window.currentView);
+                // Don't re-render here — avoid loop. User can navigate normally.
             }
         }).catch(err => console.error("Firebase read error:", err));
     } else {
@@ -592,7 +611,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
                 if (changed) {
                     window.checkLockState();
-                    window.showView(window.currentView || 'dashboard');
+                    // Only re-render if on dashboard - avoid re-render loop
+                    if (!window.currentView || window.currentView === 'dashboard') {
+                        window.showView('dashboard');
+                    }
                 }
                 const syncLabel = document.getElementById('sync-status');
                 if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }
