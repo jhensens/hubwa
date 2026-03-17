@@ -345,33 +345,34 @@ window.loadTandaData = async () => {
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
-    // Step 1: Get current user to find org user IDs
-    const me = await window.fetchTanda('users/me');
-    if (!me) { console.log('Tanda: could not authenticate'); return; }
+    // Step 1: Get all users in the organisation
+    const usersData = await window.fetchTanda('users');
+    if (!usersData) { console.log('Tanda: could not fetch users'); return; }
 
-    // Step 2: Get current week roster using rosters/on endpoint
-    const roster = await window.fetchTanda('rosters/on/' + dateStr + '?show_costs=true');
-    if (!roster) {
-        // Try current roster as fallback
-        const current = await window.fetchTanda('rosters/current?show_costs=true');
-        if (!current) { console.log('Tanda: no roster found'); return; }
-        window._processTandaRoster(current, dateStr);
-        return;
-    }
-    window._processTandaRoster(roster, dateStr);
-};
+    const users = Array.isArray(usersData) ? usersData : (usersData.users || []);
+    if (users.length === 0) { console.log('Tanda: no users found'); return; }
 
-window._processTandaRoster = (roster, dateStr) => {
+    const userIds = users.map(u => u.id).join(',');
+    console.log('Tanda: fetching schedules for', users.length, 'staff');
+
+    // Step 2: Get schedules for ALL users for today
+    const schedData = await window.fetchTanda(
+        'schedules?from=' + dateStr + '&to=' + dateStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true'
+    );
+
+    if (!schedData) { console.log('Tanda: no schedule data'); return; }
+
+    const schedules = Array.isArray(schedData) ? schedData : (schedData.schedules || []);
     let totalHours = 0, totalCost = 0, staff = [];
-    const schedules = roster.schedules || [];
+
     schedules.forEach(s => {
-        // Only count shifts for today
-        if (s.date && s.date !== dateStr) return;
-        const hrs = s.duration ? s.duration/3600 : (s.finish && s.start ? (s.finish - s.start)/3600 : 0);
+        const hrs = s.duration ? s.duration/3600 : 0;
         totalHours += hrs;
         if (s.cost) totalCost += Number(s.cost);
-        const name = s.user_name || s.name || ('Staff #' + (s.user_id||''));
-        if (name) staff.push({ name, hours: hrs.toFixed(1) });
+        // Find user name
+        const user = users.find(u => u.id === s.user_id);
+        const name = (user && user.name) || s.user_name || ('Staff #' + (s.user_id||''));
+        if (name && hrs > 0) staff.push({ name, hours: hrs.toFixed(1) });
     });
 
     window._tandaData = {
