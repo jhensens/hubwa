@@ -212,11 +212,30 @@ window.renderSalesView = () => {
     // Parse BWI date format DD/MM/YYYY into JS Date
     const parseDate = (str) => {
         if (!str) return null;
+        // DD/MM/YYYY format (our standard)
         const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
-        const d = new Date(str);
-        return isNaN(d) ? null : d;
+        if (m) {
+            const day = parseInt(m[1]), month = parseInt(m[2]), year = parseInt(m[3]);
+            // Detect US format (MM/DD/YYYY) — if "day" > 12 it must be DD/MM
+            // If month > 12 it's been stored as US format, swap them
+            if (month > 12) return new Date(year, day-1, month); // swap: stored as MM/DD
+            return new Date(year, month-1, day);
+        }
+        // YYYY-MM-DD format
+        const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (iso) return new Date(parseInt(iso[1]), parseInt(iso[2])-1, parseInt(iso[3]));
+        return null; // reject ambiguous formats
     };
+
+    // Fix any US-format dates in salesData on load
+    (window.salesData||[]).forEach(s => {
+        if (!s.date) return;
+        const m = s.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m && parseInt(m[1]) > 12) {
+            // Stored as MM/DD/YYYY — convert to DD/MM/YYYY
+            s.date = m[2].padStart(2,'0') + '/' + m[1].padStart(2,'0') + '/' + m[3];
+        }
+    });
 
     const allSales = (window.salesData || []).slice().sort((a, b) => {
         const da = parseDate(a.date), db = parseDate(b.date);
