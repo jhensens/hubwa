@@ -218,7 +218,7 @@ window.renderSalesView = () => {
             const day = parseInt(m[1]), month = parseInt(m[2]), year = parseInt(m[3]);
             // Detect US format (MM/DD/YYYY) — if "day" > 12 it must be DD/MM
             // If month > 12 it's been stored as US format, swap them
-            if (month > 12) return new Date(year, day-1, month); // swap: stored as MM/DD
+            if (month > 12) return new Date(year, day-1, month); // m[2]>12 → MM/DD format, swap
             return new Date(year, month-1, day);
         }
         // YYYY-MM-DD format
@@ -227,15 +227,19 @@ window.renderSalesView = () => {
         return null; // reject ambiguous formats
     };
 
-    // Fix any US-format dates in salesData on load
+    // Fix US-format dates (MM/DD/YYYY) → DD/MM/YYYY
+    // US format: 03/15/2026 → m[1]=03, m[2]=15. m[2]>12 means it's a day, so MM/DD
+    let _datesFixed = false;
     (window.salesData||[]).forEach(s => {
         if (!s.date) return;
         const m = s.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (m && parseInt(m[1]) > 12) {
-            // Stored as MM/DD/YYYY — convert to DD/MM/YYYY
+        if (m && parseInt(m[2]) > 12) {
+            // m[2] > 12 means it's a day → currently stored as MM/DD/YYYY → swap to DD/MM/YYYY
             s.date = m[2].padStart(2,'0') + '/' + m[1].padStart(2,'0') + '/' + m[3];
+            _datesFixed = true;
         }
     });
+    if (_datesFixed) window.saveToDisk();
 
     const allSales = (window.salesData || []).slice().sort((a, b) => {
         const da = parseDate(a.date), db = parseDate(b.date);
