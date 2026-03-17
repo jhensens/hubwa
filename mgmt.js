@@ -1912,6 +1912,131 @@ function renderCrossContent(venueData, venues) {
         '</div>';
 }
 
+
+// =============================================================================
+// PRIME COST DASHBOARD
+// Food cost % + Labour % = Prime cost. Target < 65% of revenue
+// =============================================================================
+window.renderPrimeCostView = () => {
+    const sales = window.salesData || [];
+    const parseDate = (str) => { const m=str&&str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])):null; };
+
+    // Date range — last 4 weeks by default
+    const today = new Date();
+    const fourWeeksAgo = new Date(today); fourWeeksAgo.setDate(fourWeeksAgo.getDate()-28);
+    const recentSales = sales.filter(s => { const d=parseDate(s.date); return d&&d>=fourWeeksAgo&&d<=today; });
+
+    const totalRevenue = recentSales.reduce((s,d)=>s+Number(d.total||0),0);
+    const totalWages = recentSales.reduce((s,d)=>s+Number(d.wages||0),0);
+
+    // Food cost from wastage + recipe costs (estimated)
+    const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived&&r.price>0);
+    const avgFoodCostPct = recipes.length > 0 ? recipes.reduce((s,r)=>s+(r.gp?100-r.gp:33),0)/recipes.length : 33;
+    const estimatedFoodCost = totalRevenue * (avgFoodCostPct/100);
+
+    const labourPct = totalRevenue > 0 && totalWages > 0 ? (totalWages/totalRevenue*100) : null;
+    const foodCostPct = avgFoodCostPct;
+    const primeCost = labourPct !== null ? foodCostPct + labourPct : null;
+
+    // Tanda live data
+    const tanda = window._tandaData;
+    const todayRevSale = sales.find(s => { const d=parseDate(s.date); return d&&d.toDateString()===today.toDateString(); });
+    const todayRev = todayRevSale ? Number(todayRevSale.total||0) : 0;
+    const tandaWagePct = tanda && todayRev > 0 ? (Number(tanda.estimatedWageCost)/todayRev*100).toFixed(1) : null;
+
+    // Week by week breakdown
+    const weeks = [];
+    for (let w=0; w<4; w++) {
+        const wEnd = new Date(today); wEnd.setDate(wEnd.getDate()-(w*7));
+        const wStart = new Date(wEnd); wStart.setDate(wStart.getDate()-6);
+        const wSales = sales.filter(s=>{ const d=parseDate(s.date); return d&&d>=wStart&&d<=wEnd; });
+        const wRev = wSales.reduce((s,d)=>s+Number(d.total||0),0);
+        const wWages = wSales.reduce((s,d)=>s+Number(d.wages||0),0);
+        const wLabour = wRev>0&&wWages>0?(wWages/wRev*100):null;
+        const wFood = foodCostPct;
+        const wPrime = wLabour!==null?wFood+wLabour:null;
+        weeks.push({ label:'Week '+(w+1), start:wStart.toLocaleDateString('en-AU',{day:'numeric',month:'short'}), end:wEnd.toLocaleDateString('en-AU',{day:'numeric',month:'short'}), revenue:wRev, wages:wWages, labourPct:wLabour, foodPct:wFood, primeCost:wPrime });
+    }
+    weeks.reverse();
+
+    const pcColor = (pc) => pc === null ? 'var(--text-muted)' : pc <= 55 ? 'var(--green)' : pc <= 65 ? 'var(--orange)' : 'var(--red)';
+    const pcLabel = (pc) => pc === null ? 'No Data' : pc <= 55 ? '✅ Excellent' : pc <= 65 ? '⚠️ Watch It' : '🔴 Over Target';
+
+    const weekRows = weeks.map(w =>
+        '<tr style="border-bottom:1px solid var(--border);">' +
+        '<td style="padding:10px 15px;font-size:13px;color:var(--text-muted);">' + w.start + ' – ' + w.end + '</td>' +
+        '<td style="padding:10px 15px;font-weight:bold;">$' + Math.round(w.revenue).toLocaleString() + '</td>' +
+        '<td style="padding:10px 15px;color:var(--orange);">' + w.foodPct.toFixed(1) + '%</td>' +
+        '<td style="padding:10px 15px;color:var(--blue);">' + (w.labourPct !== null ? w.labourPct.toFixed(1)+'%' : '<span style="color:var(--text-muted);">No wage data</span>') + '</td>' +
+        '<td style="padding:10px 15px;font-weight:bold;font-size:16px;color:' + pcColor(w.primeCost) + ';">' + (w.primeCost !== null ? w.primeCost.toFixed(1)+'%' : '—') + '</td>' +
+        '<td style="padding:10px 15px;font-size:12px;color:' + pcColor(w.primeCost) + ';">' + pcLabel(w.primeCost) + '</td>' +
+        '</tr>'
+    ).join('');
+
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">Prime Cost Dashboard</h2>' +
+            '<small style="color:var(--text-muted);">Food Cost % + Labour % = Prime Cost. Industry target: under 65%</small></div>' +
+            '<button onclick="window.openTandaSettings()" class="btn btn-outline" style="font-size:12px;">⏱️ ' + (window.getTandaToken?.()?'Tanda Connected':'Connect Tanda') + '</button>' +
+        '</div>' +
+
+        // KPI Cards
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Food Cost %</div>' +
+                '<div style="font-size:32px;font-weight:bold;color:var(--orange);">' + foodCostPct.toFixed(1) + '%</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">From recipe GP avg</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Labour % (4wk avg)</div>' +
+                '<div style="font-size:32px;font-weight:bold;color:var(--blue);">' + (labourPct !== null ? labourPct.toFixed(1)+'%' : '—') + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (labourPct !== null ? 'From takings wages' : 'Add wages to takings') + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid ' + pcColor(primeCost) + ';">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Prime Cost</div>' +
+                '<div style="font-size:32px;font-weight:bold;color:' + pcColor(primeCost) + ';">' + (primeCost !== null ? primeCost.toFixed(1)+'%' : '—') + '</div>' +
+                '<div style="font-size:11px;color:' + pcColor(primeCost) + ';">' + pcLabel(primeCost) + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">4wk Revenue</div>' +
+                '<div style="font-size:32px;font-weight:bold;color:var(--green);">$' + Math.round(totalRevenue/1000) + 'k</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">Last 28 days</div>' +
+            '</div>' +
+        '</div>' +
+
+        // Tanda live today card
+        (tanda ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+            '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">⏱️ Tanda — Today Live</div>' +
+            '<div style="font-size:15px;">' + tanda.staffCount + ' staff rostered · ' + tanda.rosteredHours + ' hrs · Est. <strong style="color:var(--blue);">$' + tanda.estimatedWageCost + '</strong> wages</div>' +
+            (tandaWagePct ? '<div style="font-size:12px;color:var(--text-muted);">Labour % today: <strong style="color:var(--blue);">' + tandaWagePct + '%</strong></div>' : '') +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text-muted);">Updated: ' + tanda.lastUpdated + ' · <a onclick="window.loadTandaData()" style="color:var(--blue);cursor:pointer;">Refresh</a></div>' +
+        '</div>' : '') +
+
+        // Week breakdown table
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<div style="padding:15px 20px;border-bottom:1px solid var(--border);">' +
+                '<h3 style="margin:0;font-size:15px;">Weekly Breakdown</h3>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                    '<th style="padding:10px 15px;text-align:left;">Week</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Revenue</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Food Cost</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Labour</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Prime Cost</th>' +
+                    '<th style="padding:10px 15px;text-align:left;">Status</th>' +
+                '</tr></thead>' +
+                '<tbody>' + weekRows + '</tbody>' +
+            '</table>' +
+        '</div>' +
+
+        '<div style="margin-top:15px;padding:12px;background:var(--bg-main);border-radius:8px;font-size:12px;color:var(--text-muted);">' +
+            '📌 Food cost % is estimated from your recipe GP averages. Connect Tanda for live labour data. Enter wages in Takings & KPIs for historical labour %.' +
+        '</div>' +
+    '</div>';
+};
+
 window.renderManagerHub = () => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
         .then(res => res.json())
