@@ -366,13 +366,26 @@ window.loadTandaData = async () => {
     let totalHours = 0, totalCost = 0, staff = [];
 
     schedules.forEach(s => {
-        const hrs = s.duration ? s.duration/3600 : 0;
+        // Calculate hours from duration, or from start/finish timestamps
+        let hrs = 0;
+        if (s.duration) {
+            hrs = s.duration / 3600;
+        } else if (s.finish && s.start) {
+            hrs = (s.finish - s.start) / 3600;
+        } else if (s.finish_time && s.start_time) {
+            // Time strings like "09:00" - calculate difference
+            const [sh, sm] = s.start_time.split(':').map(Number);
+            const [fh, fm] = s.finish_time.split(':').map(Number);
+            hrs = ((fh * 60 + fm) - (sh * 60 + sm)) / 60;
+            if (hrs < 0) hrs += 24; // overnight shift
+        }
         totalHours += hrs;
         if (s.cost) totalCost += Number(s.cost);
         // Find user name
         const user = users.find(u => u.id === s.user_id);
         const name = (user && user.name) || s.user_name || ('Staff #' + (s.user_id||''));
-        if (name && hrs > 0) staff.push({ name, hours: hrs.toFixed(1) });
+        // Count staff even if hours are 0 (shift may not have started yet)
+        if (name) staff.push({ name, hours: hrs > 0 ? hrs.toFixed(1) : 'Rostered' });
     });
 
     window._tandaData = {
