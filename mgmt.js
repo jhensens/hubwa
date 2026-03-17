@@ -501,6 +501,8 @@ window.renderSalesView = () => {
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
                 '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +
+                '<button onclick="document.getElementById(\'tanda-wages-upload\').click()" class="btn btn-outline" style="font-size:12px;border-color:var(--blue);color:var(--blue);">⏱️ Import Tanda Wages</button>' +
+                '<input type="file" id="tanda-wages-upload" accept=".csv" style="display:none;" onchange="window.handleTandaWagesCSV(event)">' +
                 '<button onclick="window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
@@ -645,6 +647,64 @@ window.handleSalesCSV = (event) => {
     reader.readAsText(file);
 };
 
+
+window.handleTandaWagesCSV = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
+
+        // Infer start year from filename (e.g. "cost_by_date_report_from_2024-07-01...")
+        let currentYear = new Date().getFullYear();
+        const fnMatch = file.name.match(/from[_-](\d{4})/i);
+        if (fnMatch) currentYear = parseInt(fnMatch[1]);
+
+        const monthMap = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+        let lastMonth = -1;
+        let updated = 0, skipped = 0;
+
+        lines.forEach(line => {
+            // Skip header and week summary rows
+            if (line.startsWith('Date') || line.startsWith('"Week:') || line.startsWith('Week:')) return;
+
+            // Parse: "Mon, 6 Aug",426.62,436.96,10.34
+            const match = line.match(/^"[A-Za-z]+,\s+(\d+)\s+([A-Za-z]+)",([\d.-]+),([\d.-]+)/);
+            if (!match) return;
+
+            const day = parseInt(match[1]);
+            const monthName = match[2];
+            const timesheetCost = parseFloat(match[4]);
+
+            const monthIdx = monthMap[monthName];
+            if (monthIdx === undefined) return;
+
+            // Detect year rollover (month goes backward)
+            if (lastMonth !== -1 && monthIdx < lastMonth && lastMonth >= 10) currentYear++;
+            lastMonth = monthIdx;
+
+            // Skip zero-cost rows (Deputy era / days off)
+            if (timesheetCost <= 0) return;
+
+            // Build DD/MM/YYYY date string
+            const dateStr = String(day).padStart(2,'0') + '/' + String(monthIdx + 1).padStart(2,'0') + '/' + currentYear;
+
+            // Find matching takings entry and overwrite wages
+            const existing = (window.salesData || []).find(s => s.date === dateStr);
+            if (existing) {
+                existing.wages = timesheetCost;
+                updated++;
+            } else {
+                skipped++;
+            }
+        });
+
+        window.saveToDisk();
+        window.showToast('Tanda wages imported: ' + updated + ' days updated, ' + skipped + ' skipped (no takings entry).');
+        window.showView('sales');
+    };
+    reader.readAsText(file);
+};
 
 // --- 2. ORIENTATION & TRAINING ---
 window.renderOrientationView = function(showCompleted = false) {
@@ -2027,8 +2087,8 @@ window.renderPrimeCostView = () => {
             '</div>' +
         '</div>' +
 
-        // Tanda live today card
-        (tanda ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+        // Tanda live today card — only show for venues with a connected Tanda token
+        (tanda && window.getTandaToken() ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">⏱️ Tanda — Today Live</div>' +
             '<div style="font-size:15px;">' + tanda.staffCount + ' staff rostered · ' + tanda.rosteredHours + ' hrs · Est. <strong style="color:var(--blue);">$' + tanda.estimatedWageCost + '</strong> wages</div>' +
             (tandaWagePct ? '<div style="font-size:12px;color:var(--text-muted);">Labour % today: <strong style="color:var(--blue);">' + tandaWagePct + '%</strong></div>' : '') +
@@ -2082,7 +2142,7 @@ window.renderManagerHub = () => {
     let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>70%).</p>';
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>67%).</p>';
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
