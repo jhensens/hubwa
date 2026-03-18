@@ -67,24 +67,32 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
 /* Collapsible sections */
-.nav-section { margin-bottom: 2px; }
+.nav-section { margin-bottom: 4px; }
 .nav-section-header { 
     display: flex; 
     justify-content: space-between; 
     align-items: center;
-    padding: 6px 12px 4px 14px; 
-    font-size: 10px; 
-    font-weight: 700;
+    padding: 7px 12px 5px 12px;
+    margin: 2px 6px 0;
+    font-size: 10.5px; 
+    font-weight: 800;
     text-transform: uppercase; 
-    letter-spacing: 1.5px; 
-    color: rgba(255,255,255,0.55);
+    letter-spacing: 1.8px; 
+    color: rgba(255,255,255,0.75);
     cursor: pointer;
     user-select: none;
-    transition: color 0.15s;
+    transition: color 0.15s, background 0.15s;
+    border-left: 3px solid rgba(139,92,246,0.6);
+    border-radius: 0 4px 4px 0;
+    background: rgba(139,92,246,0.06);
 }
-.nav-section-header:hover { color: rgba(255,255,255,0.6); }
-.nav-section-arrow { font-size: 10px; opacity: 0.5; }
-.nav-section-items { padding: 0 6px 4px; }
+.nav-section-header:hover { 
+    color: rgba(255,255,255,0.95); 
+    border-left-color: rgba(139,92,246,1);
+    background: rgba(139,92,246,0.12);
+}
+.nav-section-arrow { font-size: 10px; opacity: 0.7; }
+.nav-section-items { padding: 2px 6px 6px; }
 
 /* Nav items */
 .nav-item { 
@@ -223,10 +231,14 @@ body.venue-lia .nav-item:hover {
     color: rgba(34,211,238,0.9);
 }
 body.venue-lia .nav-section-header {
-    color: rgba(34,211,238,0.5);
+    color: rgba(34,211,238,0.7);
+    border-left-color: rgba(34,211,238,0.6);
+    background: rgba(34,211,238,0.06);
 }
 body.venue-lia .nav-section-header:hover {
-    color: rgba(34,211,238,0.8);
+    color: rgba(34,211,238,0.95);
+    border-left-color: rgba(34,211,238,1);
+    background: rgba(34,211,238,0.12);
 }
 body.venue-lia .nav-dashboard {
     background: rgba(34,211,238,0.12);
