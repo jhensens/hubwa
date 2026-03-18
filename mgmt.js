@@ -501,8 +501,6 @@ window.renderSalesView = () => {
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
                 '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +
-                '<button onclick="document.getElementById(\'tanda-wages-upload\').click()" class="btn btn-outline" style="font-size:12px;border-color:var(--blue);color:var(--blue);">⏱️ Import Tanda Wages</button>' +
-                '<input type="file" id="tanda-wages-upload" accept=".csv" style="display:none;" onchange="window.handleTandaWagesCSV(event)">' +
                 '<button onclick="window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
@@ -647,64 +645,6 @@ window.handleSalesCSV = (event) => {
     reader.readAsText(file);
 };
 
-
-window.handleTandaWagesCSV = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
-
-        // Infer start year from filename (e.g. "cost_by_date_report_from_2024-07-01...")
-        let currentYear = new Date().getFullYear();
-        const fnMatch = file.name.match(/from[_-](\d{4})/i);
-        if (fnMatch) currentYear = parseInt(fnMatch[1]);
-
-        const monthMap = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-        let lastMonth = -1;
-        let updated = 0, skipped = 0;
-
-        lines.forEach(line => {
-            // Skip header and week summary rows
-            if (line.startsWith('Date') || line.startsWith('"Week:') || line.startsWith('Week:')) return;
-
-            // Parse: "Mon, 6 Aug",426.62,436.96,10.34
-            const match = line.match(/^"[A-Za-z]+,\s+(\d+)\s+([A-Za-z]+)",([\d.-]+),([\d.-]+)/);
-            if (!match) return;
-
-            const day = parseInt(match[1]);
-            const monthName = match[2];
-            const timesheetCost = parseFloat(match[4]);
-
-            const monthIdx = monthMap[monthName];
-            if (monthIdx === undefined) return;
-
-            // Detect year rollover (month goes backward)
-            if (lastMonth !== -1 && monthIdx < lastMonth && lastMonth >= 10) currentYear++;
-            lastMonth = monthIdx;
-
-            // Skip zero-cost rows (Deputy era / days off)
-            if (timesheetCost <= 0) return;
-
-            // Build DD/MM/YYYY date string
-            const dateStr = String(day).padStart(2,'0') + '/' + String(monthIdx + 1).padStart(2,'0') + '/' + currentYear;
-
-            // Find matching takings entry and overwrite wages
-            const existing = (window.salesData || []).find(s => s.date === dateStr);
-            if (existing) {
-                existing.wages = timesheetCost;
-                updated++;
-            } else {
-                skipped++;
-            }
-        });
-
-        window.saveToDisk();
-        window.showToast('Tanda wages imported: ' + updated + ' days updated, ' + skipped + ' skipped (no takings entry).');
-        window.showView('sales');
-    };
-    reader.readAsText(file);
-};
 
 // --- 2. ORIENTATION & TRAINING ---
 window.renderOrientationView = function(showCompleted = false) {
@@ -2087,8 +2027,8 @@ window.renderPrimeCostView = () => {
             '</div>' +
         '</div>' +
 
-        // Tanda live today card — only show for venues with a connected Tanda token
-        (tanda && window.getTandaToken() ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+        // Tanda live today card
+        (tanda ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">⏱️ Tanda — Today Live</div>' +
             '<div style="font-size:15px;">' + tanda.staffCount + ' staff rostered · ' + tanda.rosteredHours + ' hrs · Est. <strong style="color:var(--blue);">$' + tanda.estimatedWageCost + '</strong> wages</div>' +
             (tandaWagePct ? '<div style="font-size:12px;color:var(--text-muted);">Labour % today: <strong style="color:var(--blue);">' + tandaWagePct + '%</strong></div>' : '') +
@@ -2142,7 +2082,7 @@ window.renderManagerHub = () => {
     let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>67%).</p>';
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy (>70%).</p>';
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
@@ -2239,40 +2179,157 @@ window.renderManagerHub = () => {
 
 // --- 10. HANDOVER ---
 window.renderHandoverView = () => {
-    return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;">Shift Handover</h2>
+    const logs = (window.handoverLogs || []).slice().reverse();
+    const logsHtml = logs.length === 0
+        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No shift debriefs yet. Hit the button above to log tonight\'s shift.</p></div>'
+        : logs.map((h, i) => {
+            const isFirst = i === 0;
+            const urgentHtml = h.urgent ? `<div style="margin-top:15px;padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:13px;color:var(--red);"><strong>⚠️ Needs attention:</strong> ${h.urgent}</div>` : '';
+            const debriefHtml = h.debrief
+                ? `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;color:var(--text-main);">${h.debrief}</div>`
+                : `<p style="color:var(--text-muted);font-size:13px;font-style:italic;">No AI debrief — raw notes only.</p><p style="white-space:pre-wrap;font-size:14px;line-height:1.7;">${h.notes||''}</p>`;
+            return `<div class="card" style="border-left:5px solid ${isFirst?'var(--purple)':'var(--border)'};margin-bottom:15px;padding:25px;${isFirst?'background:rgba(139,92,246,0.04);':''}" >
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
+                    <div>
+                        <div style="font-size:18px;font-weight:bold;color:${isFirst?'var(--purple)':'var(--text-main)'};">${h.shift} · ${h.date}</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Closed ${h.closeTime||'—'} · Out ${h.outTime||'—'} · Written by ${h.manager}</div>
+                    </div>
+                    ${isFirst ? '<span style="font-size:11px;background:rgba(139,92,246,0.15);color:var(--purple);padding:3px 10px;border-radius:10px;font-weight:600;">Latest</span>' : ''}
+                </div>
+                ${debriefHtml}
+                ${urgentHtml}
+                ${h.debrief ? `<button onclick="window.copyDebrief(${logs.length-1-i})" class="btn btn-outline" style="font-size:11px;margin-top:15px;padding:6px 14px;">📋 Copy to Clipboard</button>` : ''}
+            </div>`;
+        }).join('');
+
+    return `<div style="max-width:900px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;">
             <div>
-                <button onclick="window.generateAIHandoverSummary()" class="btn btn-purple" style="margin-right:10px;">✨ AI Auto-Summary</button>
-                <button onclick="window.newHandoverForm()" class="btn btn-blue">+ New Handover</button>
+                <h2 style="margin:0;">📝 Shift Debrief</h2>
+                <small style="color:var(--text-muted);">End of night handover — for opening staff, managers and ownership.</small>
             </div>
+            <button onclick="window.newHandoverForm()" class="btn btn-purple" style="font-size:14px;padding:10px 20px;">✨ Log Tonight's Shift</button>
         </div>
-        <div id="ai-summary-box"></div>
-        ${(window.handoverLogs || []).length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No handovers logged.</p></div>' : window.handoverLogs.slice().reverse().map(h => `<div class="card" style="border-left:5px solid var(--purple); margin-bottom:15px; padding:20px;"><div style="display:flex; justify-content:space-between; margin-bottom:15px;"><strong style="font-size:18px;">${h.shift} - ${h.date}</strong><span style="color:var(--brand-accent); background:var(--bg-main); padding:4px 10px; border-radius:15px; font-size:12px; border:1px solid var(--border);">Manager: ${h.manager}</span></div><p style="margin:0 0 15px 0; white-space:pre-wrap; font-size:15px; line-height:1.5;">${h.notes}</p>${h.urgent ? `<div style="color:var(--red); font-size:13px; font-weight:bold; background:rgba(239, 68, 68, 0.1); padding:10px; border-radius:6px; border:1px solid rgba(239, 68, 68, 0.2);">⚠️ URGENT PASSON: ${h.urgent}</div>` : ''}</div>`).join('')}
+        ${logsHtml}
     </div>`;
 };
 
-window.generateAIHandoverSummary = async () => {
-    const target = document.getElementById('ai-summary-box'); target.innerHTML = `<div class="card" style="text-align:center; border:1px solid var(--purple);"><p style="color:var(--purple); font-weight:bold; font-size:16px;">🤖 AI is analyzing today's logs for you...</p></div>`;
-    const summaryData = { temps: (window.tempLogs || []).filter(l => l.time.includes(new Date().toLocaleDateString())), wastage: (window.wastageLogs || []).filter(l => l.time.includes(new Date().toLocaleDateString())), defects: (window.defectLogs || []).filter(l => l.status === 'Open'), trained: (window.orientationLogs || []).filter(l => l.status === 'Completed').length };
-    const prompt = `Write a short 3-sentence end-of-shift manager summary. Mention today's fridge alerts: ${JSON.stringify(summaryData.temps)}, wastage logged: ${JSON.stringify(summaryData.wastage)}, and current open maintenance issues: ${JSON.stringify(summaryData.defects)}. Keep it professional.`;
-    try {
-        const apiKey = window.getApiKey(); if(!apiKey) return target.innerHTML = '';
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const data = await response.json(); if (data.error) throw new Error(data.error.message);
-        const text = data.candidates[0].content.parts[0].text;
-        target.innerHTML = `<div class="card" style="border-left:5px solid var(--purple); background:rgba(139, 92, 246, 0.05);"><h4 style="margin:0 0 10px 0; color:var(--purple);">🤖 AI Suggested Handover Summary</h4><p style="font-size:15px; font-style:italic; line-height:1.5;">"${text}"</p><button onclick="window.copyToHandover('${text.replace(/'/g, "\\'")}')" class="btn btn-outline" style="font-size:12px; margin-top:10px;">Copy to New Handover</button></div>`;
-    } catch (e) { target.innerHTML = `<div class="card"><p style="color:var(--red);">AI Summary failed. Check API key.</p></div>`; }
+window.newHandoverForm = () => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    const timeNow = hh + ':' + mm;
+    const html = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Manager Name</label>
+            <input type="text" id="h-mgr" class="input-box" placeholder="Your name" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Shift</label>
+            <select id="h-shift" class="input-box" style="margin:0;"><option>PM Shift</option><option>AM Shift</option><option>Full Day</option></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:15px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Close Time</label>
+            <input type="time" id="h-close" class="input-box" value="${timeNow}" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Out of Building</label>
+            <input type="time" id="h-out" class="input-box" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">KH Finish</label>
+            <input type="time" id="h-kh" class="input-box" style="margin:0;"></div>
+        </div>
+        <label style="font-size:11px;color:var(--text-muted);">How did the shift go? (running low on anything, payment issues, breakdowns, bookings to follow up, general notes)</label>
+        <textarea id="h-notes" class="input-box" placeholder="e.g. Busy night, ran low on Asahi pints, ice machine making noise again, table 7 booking needs confirmation for Saturday..." style="height:130px;margin-bottom:15px;line-height:1.6;"></textarea>
+        <label style="font-size:11px;color:var(--red);font-weight:600;">⚠️ Anything urgent for opening team? (optional)</label>
+        <input type="text" id="h-urgent" class="input-box" placeholder="e.g. Walk-in fridge door seal broken — call repairman first thing" style="margin-bottom:20px;border-color:rgba(239,68,68,0.4);">
+        <button onclick="window.saveAndGenerateDebrief()" class="btn btn-purple" style="width:100%;font-size:15px;padding:14px;" id="btn-debrief">✨ Generate Shift Debrief</button>`;
+    window.openModal('📝 Log Tonight\'s Shift', html);
 };
-window.copyToHandover = (text) => { window.newHandoverForm(); setTimeout(() => { document.getElementById('h-notes').value = text; }, 100); };
 
-window.newHandoverForm = () => { 
-    let html = `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;"><select id="h-shift" class="input-box" style="margin:0;"><option>AM Shift</option><option>PM Shift</option><option>Full Day</option></select><input type="text" id="h-mgr" class="input-box" placeholder="Manager Name" style="margin:0;"></div><label style="font-size:11px; color:var(--text-muted);">Shift Notes</label><textarea id="h-notes" class="input-box" placeholder="Shift notes, staff issues, 86'd items..." style="height:120px; margin-bottom:15px;"></textarea><label style="font-size:11px; color:var(--red); font-weight:bold;">Urgent Pass-on (Optional)</label><input type="text" id="h-urgent" class="input-box" placeholder="Critical info for next shift..." style="margin-bottom:20px; border-color:var(--red);"><button onclick="window.saveHandover()" class="btn btn-green" style="width:100%; font-size:16px;">Submit Handover</button>`;
-    window.openModal("📝 New Shift Handover", html);
+window.saveAndGenerateDebrief = async () => {
+    const mgr = document.getElementById('h-mgr').value.trim();
+    const notes = document.getElementById('h-notes').value.trim();
+    if (!mgr) return window.showToast('Enter your name.', 'error');
+    if (!notes) return window.showToast('Add some shift notes.', 'error');
+
+    const btn = document.getElementById('btn-debrief');
+    btn.innerText = '✨ Writing debrief...';
+    btn.disabled = true;
+
+    const shift = document.getElementById('h-shift').value;
+    const closeTime = document.getElementById('h-close').value;
+    const outTime = document.getElementById('h-out').value;
+    const khTime = document.getElementById('h-kh').value;
+    const urgent = document.getElementById('h-urgent').value.trim();
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-AU');
+
+    // Pull today's ops data quietly — no financials shown to managers
+    const todaySales = (window.salesData||[]).find(s => s.date === today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/'));
+    const todayRevenue = todaySales ? Number(todaySales.total||0) : null;
+    const openTickets = (window.defectLogs||[]).filter(d=>d.status==='Open').length;
+    const wastageLogs = (window.wastageLogs||[]).filter(l=>l.time&&l.time.includes(today.toLocaleDateString()));
+
+    const prompt = `You are writing an end-of-shift debrief for a hospitality venue called ${window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue'}. 
+
+The manager (${mgr}) has provided the following shift notes:
+"${notes}"
+
+Additional context:
+- Shift: ${shift}
+- Venue closed at: ${closeTime||'not recorded'}
+- Manager out of building: ${outTime||'not recorded'}
+- Kitchen hand finished: ${khTime||'not recorded'}
+${todayRevenue ? '- It was a ' + (todayRevenue > 25000 ? 'big' : todayRevenue > 15000 ? 'solid' : 'quiet') + ' night for the venue.' : ''}
+${openTickets > 0 ? '- There are ' + openTickets + ' open maintenance tickets.' : ''}
+${wastageLogs.length > 0 ? '- Wastage was logged tonight (' + wastageLogs.length + ' items).' : ''}
+${urgent ? '- URGENT for opening team: ' + urgent : ''}
+
+Write a clear, friendly shift debrief that the opening team and management will read tomorrow. 
+- Write in plain paragraphs, no bullet points, no headers
+- Tone is professional but warm — like a message from a capable colleague
+- Cover: how the shift went, anything running low or needing attention, any follow-ups needed
+- If there's an urgent item, make sure it's clear
+- Do NOT mention revenue figures, wage percentages or financial targets
+- Keep it to 3-4 short paragraphs maximum
+- End with the close/out times as a simple sign-off line`;
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 1000,
+                messages: [{ role: 'user', content: prompt }]
+            })
+        });
+        const data = await response.json();
+        const debrief = data.content && data.content[0] ? data.content[0].text : null;
+
+        const entry = { date: dateStr, shift, manager: mgr, closeTime, outTime, khTime, notes, urgent, debrief };
+        if (!window.handoverLogs) window.handoverLogs = [];
+        window.handoverLogs.push(entry);
+        window.saveToDisk();
+        window.closeModal();
+        window.showView('handover');
+        window.showToast('Shift debrief saved!');
+
+    } catch(e) {
+        // Save raw notes even if AI fails
+        const entry = { date: dateStr, shift, manager: mgr, closeTime, outTime, khTime, notes, urgent, debrief: null };
+        if (!window.handoverLogs) window.handoverLogs = [];
+        window.handoverLogs.push(entry);
+        window.saveToDisk();
+        window.closeModal();
+        window.showView('handover');
+        window.showToast('Saved without AI debrief — check API connection.', 'error');
+    }
 };
-window.saveHandover = () => { const mgr = document.getElementById('h-mgr').value; const notes = document.getElementById('h-notes').value; if(!mgr || !notes) return window.showToast("Manager and Notes required.", "error"); window.handoverLogs.push({ date: new Date().toLocaleDateString(), shift: document.getElementById('h-shift').value, manager: mgr, notes: notes, urgent: document.getElementById('h-urgent').value }); window.saveToDisk(); window.closeModal(); window.showView('handover'); window.showToast("Handover Submitted!"); };
+
+window.copyDebrief = (idx) => {
+    const h = (window.handoverLogs||[])[idx];
+    if (!h) return;
+    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const text = `${venueName} — Shift Debrief\n${h.shift} · ${h.date} · ${h.manager}\n\n${h.debrief||h.notes}${h.urgent ? '\n\n⚠️ URGENT: ' + h.urgent : ''}\n\nClosed: ${h.closeTime||'—'} · Out: ${h.outTime||'—'} · KH: ${h.khTime||'—'}`;
+    navigator.clipboard.writeText(text).then(() => window.showToast('Copied to clipboard!')).catch(() => window.showToast('Copy failed — try manually.', 'error'));
+};
 
 
 // --- 11. KNOWLEDGE BASE ---
