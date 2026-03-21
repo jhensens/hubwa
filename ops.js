@@ -69,7 +69,7 @@ window.renderZoneManager = () => {
     `).join('');
 
     return `
-    <div style="max-width: 700px; margin: auto;">
+    <div style="max-width: 800px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div>
                 <h2 style="margin:0;">Storage Zones</h2>
@@ -404,7 +404,7 @@ window.renderInventoryView = () => {
     </div>` : '';
 
     return `
-    <div style="max-width:1300px; margin:auto;">
+    <div style="max-width:1100px; margin:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
             <h2 style="margin:0;">Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -804,7 +804,7 @@ window.renderQuickStockCount = () => {
         }).join('');
         
         return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:15px;">' +
-            '<div style="padding:12px 15px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+            '<div style="padding:10px 12px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
                 '<strong style="color:var(--brand-dark);">' + zone + '</strong>' +
                 '<span style="font-size:12px;color:var(--text-muted);">' + zoneItems.length + ' items</span>' +
             '</div>' +
@@ -1430,7 +1430,7 @@ window.editRecipeForm = (id = null) => {
         const gp=r.price>0?((r.price-totalCost)/r.price*100).toFixed(1):0;
         const gpColor=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)';
         document.getElementById('mainContent').innerHTML = `
-        <div style="max-width:880px;margin:auto;padding-bottom:80px;">
+        <div style="max-width:880px;margin:auto;padding-bottom:60px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
                 <button onclick="window.tempRecipeId=null;window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
                 <div style="display:flex;gap:8px;">
@@ -1472,7 +1472,7 @@ window.editRecipeForm = (id = null) => {
                 </div>
                 <div style="display:flex;flex-direction:column;gap:15px;">
                     <div class="card" style="padding:15px;text-align:center;border-top:4px solid ${gpColor};">
-                        ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:40px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
+                        ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:30px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
                     </div>
                     <div class="card" style="padding:15px;">
                         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">📹 Training Video URL</label>
@@ -2183,7 +2183,7 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
                 '</tr>'
             ).join('');
 
-            return '<div class="card" style="border-top:5px solid var(--purple);margin-bottom:15px;">' +
+            return '<div class="card" style="border-top:4px solid var(--purple);margin-bottom:12px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
                     '<h3 style="margin:0;">' + sup + '</h3>' +
                     '<button onclick="window.generateAiOrderEmail(window._aoSup)" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
@@ -2662,7 +2662,7 @@ window.renderPrepListView = () => {
             if (!meetsMin) warningHtml += `<span style="color:var(--red); font-size:12px; margin-right:10px;">⚠️ Under Min Spend ($${data.totalSpend.toFixed(2)} / $${supObj.minSpend})</span>`;
             if (!validDay) warningHtml += `<span style="color:var(--orange); font-size:12px;">🚫 No Delivery on ${currentDay}</span>`;
             return `
-            <div class="card" style="border-top:5px solid var(--blue); margin-bottom:20px;">
+            <div class="card" style="border-top:4px solid var(--blue); margin-bottom:14px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:10px;">
                     <div>
                         <h3 style="margin:0;">${supName === 'null' || supName === '' ? 'Unassigned Supplier' : supName}</h3>
@@ -2797,11 +2797,11 @@ window.showWastageReport = () => {
     const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">' +
         '<div class="card" style="text-align:center;border-top:4px solid var(--red);">' +
             '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Lost (30 days)</div>' +
-            '<div style="font-size:32px;font-weight:bold;color:var(--red);">$' + totalVal.toFixed(2) + '</div>' +
+            '<div style="font-size:24px;font-weight:bold;color:var(--red);">$' + totalVal.toFixed(2) + '</div>' +
         '</div>' +
         '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
             '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Incidents (30 days)</div>' +
-            '<div style="font-size:32px;font-weight:bold;color:var(--orange);">' + recent.length + '</div>' +
+            '<div style="font-size:24px;font-weight:bold;color:var(--orange);">' + recent.length + '</div>' +
         '</div>' +
     '</div>' +
     '<h4 style="margin:0 0 10px 0;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Top Wasted Items</h4>' +
@@ -3653,7 +3653,7 @@ window.renderVarianceReport = () => {
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid ' + (totalVarianceCost > 0 ? 'var(--red)' : 'var(--green)') + ';">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Variance Cost</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:' + (Math.abs(totalVarianceCost) > 50 ? 'var(--red)' : 'var(--green)') + ';">$' + Math.abs(totalVarianceCost).toFixed(2) + '</div>' +
+                '<div style="font-size:22px;font-weight:bold;color:' + (Math.abs(totalVarianceCost) > 50 ? 'var(--red)' : 'var(--green)') + ';">$' + Math.abs(totalVarianceCost).toFixed(2) + '</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">' + (totalVarianceCost > 0 ? 'Over-used' : 'Under-used') + '</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
