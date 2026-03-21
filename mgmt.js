@@ -141,7 +141,7 @@ window.renderForecastView = () => {
     const yoyPct = (yoyTrend * 100).toFixed(1);
     const yoyColor = yoyTrend >= 0 ? 'var(--green)' : 'var(--red)';
 
-    return '<div style="max-width:1100px;margin:auto;">' +
+    return '<div style="max-width:1050px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<div><h2 style="margin:0;">Revenue Forecast</h2>' +
             '<small style="color:var(--text-muted);">Based on ' + sales.length + ' days of historical data · Day-of-week patterns + seasonal adjustment</small></div>' +
@@ -492,7 +492,7 @@ window.renderSalesView = () => {
             ).join('')) +
     '</div>';
 
-    return '<div style="max-width:1100px;margin:auto;">' +
+    return '<div style="max-width:1050px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<h2 style="margin:0;">Takings & KPIs</h2>' +
             '<button onclick="window.showFoodBevSplit()" class="btn btn-outline" style="font-size:12px;">🍱🍶 Food vs Bev Split</button>' +
@@ -753,15 +753,23 @@ window.renderTaskListTemplate = function() {
             isDue = daysSince >= interval;
             if (!isDue) daysLeftText = 'Due in ' + Math.ceil(interval - daysSince) + ' days';
             nextDueStr = t.freq + ' | Last: ' + (t.lastDate || 'Never');
+        } else if (t.anchorDate) {
+            // Has anchor date but never done — check if anchor date has passed
+            const anchorD = new Date(t.anchorDate);
+            const today2 = new Date(); today2.setHours(0,0,0,0);
+            const daysUntilAnchor = Math.round((anchorD - today2) / (1000*3600*24));
+            isDue = daysUntilAnchor <= 0;
+            daysLeftText = isDue ? 'DUE NOW' : 'Due in ' + daysUntilAnchor + ' days';
+            nextDueStr = t.freq + ' | First due: ' + anchorD.toLocaleDateString('en-AU', {day:'numeric',month:'short'});
         } else {
             nextDueStr = (t.dueDateMode === 'specific' ? 'Due: ' + (t.specificDueDate || 'Not set') : (t.freq || 'Weekly')) + ' | Never done';
         }
 
         const borderColor = isDue ? 'var(--red)' : 'var(--green)';
-        return '<div class="card" style="border-left:6px solid ' + borderColor + ';padding:15px;margin-bottom:10px;">' +
+        return '<div class="card" style="border-left:5px solid ' + borderColor + ';padding:12px;margin-bottom:8px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
                 '<div style="flex:1;">' +
-                    '<strong style="font-size:16px;">' + t.name + '</strong>' +
+                    '<strong style="font-size:14px;">' + t.name + '</strong>' +
                     (t.notes ? '<br><small style="color:var(--text-muted);font-size:12px;">' + t.notes + '</small>' : '') +
                     '<br><small style="color:var(--text-muted);">' + nextDueStr + '</small>' +
                     '<br><strong style="font-size:12px;display:inline-block;margin-top:4px;color:' + (isDue?'var(--red)':'var(--green)') + ';">' + daysLeftText + '</strong>' +
@@ -806,6 +814,9 @@ window.addTaskForm = (editIdx) => {
             '<select id="t-f" class="input-box">' +
                 ['Weekly','Fortnightly','Monthly','Quarterly'].map(f => '<option ' + (t.freq===f?'selected':'') + '>' + f + '</option>').join('') +
             '</select>' +
+            '<label style="font-size:11px;color:var(--text-muted);">First Due Date (when should this first be done?)</label>' +
+            '<input type="date" id="t-anchor" class="input-box" value="' + (t.anchorDate || '') + '" placeholder="Leave blank for immediately">' +
+            '<p style="font-size:11px;color:var(--text-muted);margin:0;">After completion, next due = completion date + frequency interval.</p>' +
         '</div>' +
         '<div id="t-specific" style="display:' + (t.dueDateMode==='specific'?'block':'none') + ';">' +
             '<label style="font-size:11px;color:var(--text-muted);">Due Date</label>' +
@@ -824,11 +835,13 @@ window.subTask = (editIdx) => {
     const freq = mode === 'recurring' ? document.getElementById('t-f').value : 'Once';
     const specificDueDate = mode === 'specific' ? document.getElementById('t-date').value : '';
     const notes = document.getElementById('t-notes').value.trim();
-    const obj = { name, freq, dueDateMode: mode, specificDueDate, notes, lastLogIso: null, lastDate: 'Never' };
+    const anchorDate = mode === 'recurring' && document.getElementById('t-anchor') ? document.getElementById('t-anchor').value : '';
+    const obj = { name, freq, dueDateMode: mode, specificDueDate, notes, anchorDate, lastLogIso: null, lastDate: 'Never' };
     if (editIdx !== undefined && editIdx !== 'undefined') {
         // Preserve completion history when editing
         obj.lastLogIso = window.rotationalTasks[editIdx].lastLogIso;
         obj.lastDate = window.rotationalTasks[editIdx].lastDate;
+        if (!obj.anchorDate) obj.anchorDate = window.rotationalTasks[editIdx].anchorDate;
         window.rotationalTasks[editIdx] = obj;
         window.showToast('Task updated!');
     } else {
@@ -1292,7 +1305,7 @@ window.renderSafeView = function() {
             </div>`;
         }).join('')}</div>`;
 
-    return `<div style="max-width:1100px;margin:auto;">
+    return `<div style="max-width:1050px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
             <h2 style="margin:0;">Digital Safe</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1685,7 +1698,7 @@ window.renderIncidentView = function() {
             '<h2 style="margin:0;">Incident Log</h2>' +
             '<button onclick="window.exportIncidentLog()" class="btn btn-outline" style="font-size:12px;">🖨️ Export / Print</button>' +
         '</div>' +
-        '<div class="card" style="border-top:5px solid var(--red);margin-bottom:20px;">' +
+        '<div class="card" style="border-top:4px solid var(--red);margin-bottom:15px;">' +
             '<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">' +
                 '<textarea id="inc-desc" class="input-box" style="height:90px;margin:0;" placeholder="Describe the incident in detail..."></textarea>' +
                 '<div style="display:flex;flex-direction:column;gap:8px;">' +
@@ -2022,7 +2035,7 @@ function renderCrossContent(venueData, venues) {
             // Revenue
             '<div style="background:var(--bg-main);border-radius:8px;padding:15px;margin-bottom:15px;">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Today\'s Revenue</div>' +
-                '<div style="font-size:32px;font-weight:bold;color:' + revColor + ';">' + revStr + '</div>' +
+                '<div style="font-size:24px;font-weight:bold;color:' + revColor + ';">' + revStr + '</div>' +
                 (s.todaySale ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">EFTPOS: $' + (s.todaySale.eftpos||0) + ' · Cash: $' + (s.todaySale.cash||0) + '</div>' : '') +
                 '<div style="margin-top:8px;font-size:13px;color:var(--text-muted);">This week: <strong style="color:var(--blue);">$' + Math.round(s.weekRevenue).toLocaleString() + '</strong></div>' +
             '</div>' +
@@ -2126,7 +2139,7 @@ window.renderPrimeCostView = () => {
         '</tr>'
     ).join('');
 
-    return '<div style="max-width:1100px;margin:auto;">' +
+    return '<div style="max-width:1050px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<div><h2 style="margin:0;">Prime Cost Dashboard</h2>' +
             '<small style="color:var(--text-muted);">Food Cost % + Labour % = Prime Cost. Industry target: under 65%</small></div>' +
@@ -2226,8 +2239,12 @@ window.renderManagerHub = () => {
 
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const overdueTasks = (window.rotationalTasks || []).filter(t => {
-        if(!t.lastLogIso) return true;
-        return ((today - new Date(t.lastLogIso)) / (1000 * 3600 * 24)) >= freqMap[t.freq];
+        if(!t.lastLogIso) {
+            // Never done — check anchor date
+            if (t.anchorDate) { const ad = new Date(t.anchorDate); return ad <= today; }
+            return true;
+        }
+        return ((today - new Date(t.lastLogIso)) / (1000 * 3600 * 24)) >= (freqMap[t.freq] || 7);
     });
     let taskHtml = overdueTasks.length > 0 ? overdueTasks.map(t => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🔄 <strong>${t.name}</strong> (${t.freq}) is DUE NOW.</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">All rotational tasks are current.</p>';
 
@@ -2299,13 +2316,13 @@ window.renderManagerHub = () => {
 
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
-            <h2 style="margin:0; font-size:28px;">Command Center</h2>
+            <h2 style="margin:0; font-size:22px;">Command Center</h2>
             <div style="text-align:right;">
                 <div style="color:var(--brand-dark); font-size:16px; font-weight:bold;">${today.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                 <div style="color:var(--brand-accent); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin-top:2px;">Targeting ${isWeekend ? 'WEEKEND' : 'WEEKDAY'} Pars</div>
             </div>
         </div>
-        <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; background:var(--card-bg); padding:12px 15px; border-radius:10px; border:1px solid var(--border);">
+        <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; background:var(--card-bg); padding:8px 12px; border-radius:8px; border:1px solid var(--border);">
             <span style="font-size:11px; color:var(--text-muted); align-self:center; margin-right:4px; text-transform:uppercase; letter-spacing:1px;">Quick Log:</span>
             <button onclick="window.showView('stock-count')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">✅ Stock Count</button>
             <button onclick="window.showView('compliance')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">🌡️ Temps</button>
@@ -2326,7 +2343,7 @@ window.renderManagerHub = () => {
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
                 <div>
                     <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">💰 Today's Takings</div>
-                    <div style="font-size:36px;font-weight:bold;color:var(--green);margin-top:4px;">${todayTakingsStr}</div>
+                    <div style="font-size:28px;font-weight:bold;color:var(--green);margin-top:4px;">${todayTakingsStr}</div>
                     ${todayTakingsMeta}
                 </div>
                 <div style="text-align:right;">
@@ -2342,7 +2359,7 @@ window.renderManagerHub = () => {
         </div>
         <div class="card" style="border-top:5px solid var(--green); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
             <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Est. Stock Value</h3>
-            <div style="font-size:42px; font-weight:bold; color:var(--green); margin:10px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
+            <div style="font-size:30px; font-weight:bold; color:var(--green); margin:8px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
             <p style="margin:0; color:var(--text-muted); font-size:12px;">Based on Current Buy Units</p>
         </div>
     </div>
@@ -2371,7 +2388,7 @@ window.renderHandoverView = () => {
             const debriefHtml = h.debrief
                 ? `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;color:var(--text-main);">${h.debrief}</div>`
                 : `<p style="color:var(--text-muted);font-size:13px;font-style:italic;">No AI debrief — raw notes only.</p><p style="white-space:pre-wrap;font-size:14px;line-height:1.7;">${h.notes||''}</p>`;
-            return `<div class="card" style="border-left:5px solid ${isFirst?'var(--purple)':'var(--border)'};margin-bottom:15px;padding:25px;${isFirst?'background:rgba(139,92,246,0.04);':''}" >
+            return `<div class="card" style="border-left:4px solid ${isFirst?'var(--purple)':'var(--border)'};margin-bottom:12px;padding:18px;${isFirst?'background:rgba(139,92,246,0.04);':''}" >
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
                     <div>
                         <div style="font-size:18px;font-weight:bold;color:${isFirst?'var(--purple)':'var(--text-main)'};">${h.shift} · ${h.date}</div>
