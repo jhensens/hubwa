@@ -256,3 +256,217 @@ body.venue-lia .brand-header {
 
 /* Lock button dynamic label */
 #btn-lock.unlocked { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+
+
+/* Quick Stock Count — large touch-friendly inputs */
+.stock-count-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+.stock-count-input:focus {
+    outline: none;
+    border-color: var(--blue);
+    background: rgba(59, 130, 246, 0.05);
+}
+.stock-count-input.changed {
+    border-color: var(--green);
+    background: rgba(16, 185, 129, 0.05);
+}
+
+/* Search-as-you-type dropdown */
+.search-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 200;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    margin-top: 2px;
+}
+.search-dropdown-item {
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.search-dropdown-item:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+.search-dropdown-item:last-child { border-bottom: none; }
+
+/* Subcategory tree styles */
+.subcat-tree {
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+}
+.subcat-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    margin: 0 4px 4px 0;
+    border-radius: 16px;
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+    color: var(--text-muted);
+}
+.subcat-pill:hover { border-color: var(--purple); color: var(--purple); }
+.subcat-pill.active { background: var(--purple); border-color: var(--purple); color: white; }
+
+/* Price history sparkline container */
+.price-sparkline {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+/* Structured handover sections */
+.handover-section {
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 12px;
+}
+.handover-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    color: var(--brand-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Quick action buttons on dashboard */
+.quick-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 15px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    min-width: 80px;
+}
+.quick-action-btn:hover {
+    border-color: var(--blue);
+    background: rgba(59, 130, 246, 0.05);
+    color: var(--text-main);
+}
+.quick-action-btn .qa-icon { font-size: 24px; }
+
+/* Improved mobile sidebar */
+@media (max-width: 768px) {
+    .mobile-menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        background: none;
+        border: none;
+        color: var(--text-main);
+        cursor: pointer;
+        padding: 12px 0;
+        font-size: 15px;
+        font-weight: 600;
+    }
+    .sidebar {
+        width: 100%;
+        max-height: 54px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        z-index: 20;
+        overflow: hidden;
+        flex-direction: row;
+        align-items: center;
+        padding: 0 12px;
+        transition: max-height 0.3s ease;
+    }
+    .sidebar.mobile-open {
+        max-height: 100vh;
+        flex-direction: column;
+        align-items: stretch;
+        overflow-y: auto;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100;
+        padding: 0 12px;
+        transition: max-height 0.3s ease;
+    }
+    .sidebar.mobile-open .mobile-menu-btn #mobile-close-x { display: inline !important; }
+    .sidebar.mobile-open .mobile-menu-btn #mobile-venue-label { display: none; }
+    .sidebar:not(.mobile-open) .mobile-menu-btn #mobile-close-x { display: none !important; }
+    .sidebar:not(.mobile-open) .mobile-menu-btn #mobile-venue-label { display: inline; }
+    .brand-header { display: none; }
+    .sidebar-scroll { display: none; }
+    .sidebar.mobile-open .sidebar-scroll { display: block; }
+    .sidebar-footer { display: none; }
+    .sidebar.mobile-open .sidebar-footer { display: block; }
+    .nav-section-header { padding: 10px 15px; font-size: 12px; }
+    .nav-item { font-size: 14px; padding: 12px 15px; min-height: 44px; }
+    .nav-dashboard { min-height: 44px; display: flex; align-items: center; }
+    .card { padding: 15px; }
+    .content-area { padding: 15px; }
+    .main-header { padding: 12px 15px; flex-wrap: wrap; gap: 8px; }
+    .main-header > div[style*="max-width:400px"] { max-width: 100% !important; margin: 0 !important; order: 3; width: 100%; }
+    table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+    .sticky-footer { bottom: -15px; flex-direction: column; }
+    .stock-count-input { font-size: 20px; padding: 14px; }
+    .quick-action-btn { padding: 12px 8px; min-width: 60px; }
+    .quick-action-btn .qa-icon { font-size: 20px; }
+}
+
+/* HACCP breach indicator */
+.breach-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+.breach-indicator.ok { background: var(--green); }
+.breach-indicator.warn { background: var(--orange); }
+.breach-indicator.breach { background: var(--red); }
+
+/* Pinned SOP badge */
+.pinned-badge {
+    display: inline-block;
+    font-size: 10px;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--orange);
+    padding: 2px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    margin-left: 6px;
+    font-weight: 600;
+}
