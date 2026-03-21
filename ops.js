@@ -332,27 +332,26 @@ window.renderInventoryView = () => {
             const isSelected = window._invSelected.has(item.id);
             return `
             <tr style="border-bottom:1px solid var(--bg-main); opacity:${item.archived?'0.5':'1'}; background:${isSelected?'rgba(59,130,246,0.07)':''};">
-                <td style="padding:10px 8px; width:36px; text-align:center;">
-                    <input type="checkbox" ${isSelected?'checked':''} onchange="window._invToggleSelect('${item.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;">
+                <td style="padding:6px 6px; width:30px; text-align:center;">
+                    <input type="checkbox" ${isSelected?'checked':''} onchange="window._invToggleSelect('${item.id}', this.checked)" style="transform:scale(1.1); cursor:pointer;">
                 </td>
-                <td style="padding:12px 10px;">
-                    <strong style="cursor:pointer;" onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}">${item.name}</strong>
-                    <br><small style="color:var(--text-muted);">${item.sku || 'No SKU'} | ${item.supplier || 'No Supplier'}</small>
+                <td style="padding:7px 8px;">
+                    <strong style="cursor:pointer;font-size:13px;" onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}">${item.name}</strong>
+                    <br><small style="color:var(--text-muted);font-size:11px;">${item.sku || 'No SKU'} · ${item.supplier || 'No Supplier'}</small>
                 </td>
-                <td style="padding:12px 10px;">
-                    <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong> / ${item.buyUnit || 'Unit'}<br>
-                    <small style="color:var(--blue); font-weight:bold;">Yields ${yieldVal} ${item.useUnit || 'Unit'}</small><br>
+                <td style="padding:7px 8px;font-size:12px;white-space:nowrap;">
+                    <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong>/${item.buyUnit || 'Unit'} <small style="color:var(--blue);">→ ${yieldVal} ${item.useUnit || 'Unit'}</small><br>
                     <small style="color:var(--text-muted);">$${(price/yieldVal).toFixed(4)} per ${item.useUnit || 'Unit'}</small>
                 </td>
-                <td style="padding:12px 10px; font-size:13px; color:var(--text-muted);">${item.location || 'Unassigned'}</td>
-                <td style="padding:12px 10px;">
-                    <span style="color:${stock<parTarget?'var(--red)':'var(--green)'}; font-weight:bold; font-size:16px; cursor:pointer;" title="Click to edit stock" onclick="window._inlineEditStock('${item.id}')">${stock.toFixed(2)}</span>
+                <td style="padding:7px 8px; font-size:12px; color:var(--text-muted);">${item.location || '—'}</td>
+                <td style="padding:7px 8px;">
+                    <span style="color:${stock<parTarget?'var(--red)':'var(--green)'}; font-weight:bold; font-size:14px; cursor:pointer;" title="Click to edit stock" onclick="window._inlineEditStock('${item.id}')">${stock.toFixed(1)}</span>
                     <small style="color:var(--text-muted);"> / </small>
-                    <span style="color:var(--text-muted); font-size:12px; cursor:pointer;" title="Click to edit PAR" onclick="window._inlineEditPar('${item.id}')">${parTarget} PAR</span>
+                    <span style="color:var(--text-muted); font-size:11px; cursor:pointer;" title="Click to edit PAR" onclick="window._inlineEditPar('${item.id}')">${parTarget}</span>
                 </td>
-                <td style="text-align:right; padding:12px 10px; white-space:nowrap;">
-                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:4px 8px; border-color:var(--purple); color:var(--purple); margin-right:4px;">📈</button>
-                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:11px; padding:4px 8px;">Edit</button>
+                <td style="text-align:right; padding:7px 6px; white-space:nowrap;">
+                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:3px 6px; border-color:var(--purple); color:var(--purple); margin-right:2px;">📈</button>
+                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:3px 6px;">Edit</button>
                 </td>
             </tr>`;
         }).join('');
@@ -360,23 +359,23 @@ window.renderInventoryView = () => {
         const grpSel = grouped[groupName].filter(i => window._invSelected.has(i.id)).length;
         const allChk = grpSel === grouped[groupName].length && grouped[groupName].length > 0 ? 'checked' : '';
         return `
-        <details class="card" style="padding:0; overflow:visible; margin-bottom:10px;" open>
-            <summary style="padding:12px 15px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;">
-                <span style="display:flex; align-items:center; gap:10px;">
-                    <input type="checkbox" ${allChk} onclick="event.stopPropagation(); window._invSelectGroup('${groupName}', this.checked)" style="transform:scale(1.2);">
-                    ${groupName} <span style="color:var(--text-muted); font-size:12px; font-weight:normal;">(${grouped[groupName].length} items)</span>
+        <details class="card" style="padding:0; overflow:visible; margin-bottom:8px;" open>
+            <summary style="padding:8px 12px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0; font-size:14px;">
+                <span style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" ${allChk} onclick="event.stopPropagation(); window._invSelectGroup('${groupName}', this.checked)" style="transform:scale(1.1);">
+                    ${groupName} <span style="color:var(--text-muted); font-size:11px; font-weight:normal;">(${grouped[groupName].length})</span>
                 </span>
-                <span style="color:var(--blue); font-size:12px;">▼</span>
+                <span style="color:var(--blue); font-size:11px;">▼</span>
             </summary>
             <div id="inv-list-container" style="overflow-x:auto; overflow-y:visible;">
                 <table style="width:100%; border-collapse:collapse;">
-                    <thead><tr style="background:#0a0a0c; font-size:11px; color:var(--text-muted); text-transform:uppercase;">
-                        <th style="padding:8px; width:36px;"></th>
-                        <th style="padding:8px 10px; text-align:left;">Product</th>
-                        <th style="padding:8px 10px; text-align:left;">Pricing</th>
-                        <th style="padding:8px 10px; text-align:left;">Zone</th>
-                        <th style="padding:8px 10px; text-align:left;">Stock / PAR</th>
-                        <th style="padding:8px 10px;"></th>
+                    <thead><tr style="background:#0a0a0c; font-size:10px; color:var(--text-muted); text-transform:uppercase;">
+                        <th style="padding:5px; width:30px;"></th>
+                        <th style="padding:5px 8px; text-align:left;">Product</th>
+                        <th style="padding:5px 8px; text-align:left;">Pricing</th>
+                        <th style="padding:5px 8px; text-align:left;">Zone</th>
+                        <th style="padding:5px 8px; text-align:left;">Stock / PAR</th>
+                        <th style="padding:5px 8px;"></th>
                     </tr></thead>
                     <tbody>${itemsHtml}</tbody>
                 </table>
