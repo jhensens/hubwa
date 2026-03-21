@@ -508,9 +508,10 @@ window.editInvItem = (id = null) => {
     let html = `
     <div class="card" style="max-width:700px; margin:auto; padding-bottom: 80px;">
         <h2 style="margin-top:0;">${id ? 'Edit Product' : 'New Product'}</h2>
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:15px;">
+        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:10px; margin-bottom:15px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Product Name</label><input type="text" id="iv-n" class="input-box" value="${e.name}"></div>
             <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="${e.category}"><datalist id="cat-list">${catOpts}</datalist></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Sub-category</label><input type="text" id="iv-subcat" list="subcat-list" class="input-box" value="${e.subcategory || ''}" placeholder="e.g. Proteins, Spirits..."><datalist id="subcat-list">${(() => { const subs = new Set(); (window.inventoryItems||[]).forEach(i => { if (i.subcategory) subs.add(i.subcategory); }); return [...subs].map(s => '<option value="'+s+'">').join(''); })()}</datalist></div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><select id="iv-s" class="input-box"><option value="">-- None --</option>${supplierOpts}</select></div>
@@ -555,6 +556,7 @@ window.subInvItem = (id, addAnother, isModal = false) => {
         supplier: document.getElementById('iv-s').value,
         price: price,
         location: document.getElementById('iv-loc').value,
+        subcategory: document.getElementById('iv-subcat') ? document.getElementById('iv-subcat').value : '',
         gstFree: document.getElementById('iv-gst').checked,
         stock: parseFloat(document.getElementById('iv-st').value) || 0,
         parWeekday: parseFloat(document.getElementById('iv-parwd').value) || 0,
@@ -584,6 +586,103 @@ window.subInvItem = (id, addAnother, isModal = false) => {
 // One save commits everything to Firebase
 // =============================================================================
 
+
+
+
+// =============================================================================
+// INGREDIENT PRICE HISTORY
+// =============================================================================
+window.recordPriceChange = (itemId, oldPrice, newPrice, source) => {
+    if (!window.priceHistory) window.priceHistory = {};
+    if (!window.priceHistory[itemId]) window.priceHistory[itemId] = [];
+    window.priceHistory[itemId].push({
+        date: new Date().toISOString(),
+        oldPrice: oldPrice,
+        newPrice: newPrice,
+        source: source || 'invoice'
+    });
+    // Keep last 50 entries per item
+    if (window.priceHistory[itemId].length > 50) {
+        window.priceHistory[itemId] = window.priceHistory[itemId].slice(-50);
+    }
+};
+
+window.viewPriceTrend = (id) => {
+    const item = (window.inventoryItems||[]).find(i => i.id === id);
+    if (!item) return;
+    const history = (window.priceHistory || {})[id] || [];
+    const priceEntries = history.filter(h => h.newPrice !== undefined);
+    
+    if (priceEntries.length === 0) {
+        window.openModal('📈 Price History — ' + item.name,
+            '<div style="text-align:center;padding:20px;">' +
+            '<p style="color:var(--text-muted);margin:0;">No price history yet.</p>' +
+            '<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Price changes are recorded when invoices are committed.</p>' +
+            '<div style="margin-top:20px;font-size:18px;font-weight:bold;color:var(--brand-accent);">Current: $' + Number(item.price||0).toFixed(2) + ' / ' + (item.buyUnit||'unit') + '</div>' +
+            '</div>'
+        );
+        return;
+    }
+    
+    // Build SVG sparkline chart
+    const maxPrice = Math.max(...priceEntries.map(p => p.newPrice), item.price||0);
+    const minPrice = Math.min(...priceEntries.map(p => p.newPrice), item.price||0);
+    const range = maxPrice - minPrice || 1;
+    const chartW = 500, chartH = 150, padding = 30;
+    const plotW = chartW - padding*2, plotH = chartH - padding*2;
+    
+    const allPoints = [...priceEntries.map(p => ({ price: p.newPrice, date: new Date(p.date) })), { price: item.price||0, date: new Date(), label: 'Current' }];
+    allPoints.sort((a,b) => a.date - b.date);
+    
+    const dateRange = (allPoints[allPoints.length-1].date - allPoints[0].date) || 1;
+    const points = allPoints.map(p => {
+        const x = padding + ((p.date - allPoints[0].date) / dateRange) * plotW;
+        const y = padding + plotH - ((p.price - minPrice) / range) * plotH;
+        return { x, y, price: p.price, date: p.date, label: p.label };
+    });
+    
+    const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    const dots = points.map(p =>
+        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="4" fill="' + (p.label==='Current'?'var(--green)':'var(--blue)') + '" stroke="var(--card-bg)" stroke-width="2"><title>$' + p.price.toFixed(2) + ' — ' + p.date.toLocaleDateString('en-AU') + '</title></circle>'
+    ).join('');
+    
+    const firstPrice = priceEntries[0].newPrice;
+    const currentPrice = item.price || 0;
+    const pctChange = firstPrice > 0 ? ((currentPrice - firstPrice) / firstPrice * 100).toFixed(1) : 0;
+    const trendColor = pctChange > 5 ? 'var(--red)' : pctChange < -5 ? 'var(--green)' : 'var(--text-muted)';
+    const trendLabel = pctChange > 0 ? '▲ +' + pctChange + '%' : pctChange < 0 ? '▼ ' + pctChange + '%' : '— No change';
+    
+    const svgHtml = '<svg width="' + chartW + '" height="' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">' +
+        '<rect width="' + chartW + '" height="' + chartH + '" fill="var(--bg-main)" rx="8"/>' +
+        '<line x1="' + padding + '" y1="' + (chartH-padding) + '" x2="' + (chartW-padding) + '" y2="' + (chartH-padding) + '" stroke="var(--border)" stroke-width="1"/>' +
+        '<text x="' + padding + '" y="' + (chartH-8) + '" fill="var(--text-muted)" font-size="10">' + allPoints[0].date.toLocaleDateString('en-AU',{month:'short',year:'2-digit'}) + '</text>' +
+        '<text x="' + (chartW-padding) + '" y="' + (chartH-8) + '" fill="var(--text-muted)" font-size="10" text-anchor="end">' + allPoints[allPoints.length-1].date.toLocaleDateString('en-AU',{month:'short',year:'2-digit'}) + '</text>' +
+        '<text x="' + (padding-5) + '" y="' + (padding+5) + '" fill="var(--text-muted)" font-size="10" text-anchor="end">$' + maxPrice.toFixed(0) + '</text>' +
+        '<text x="' + (padding-5) + '" y="' + (chartH-padding) + '" fill="var(--text-muted)" font-size="10" text-anchor="end">$' + minPrice.toFixed(0) + '</text>' +
+        '<path d="' + pathD + '" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round"/>' +
+        dots +
+    '</svg>';
+    
+    const tableRows = priceEntries.slice().reverse().slice(0, 10).map(p =>
+        '<tr style="border-bottom:1px dashed var(--border);">' +
+        '<td style="padding:6px 0;font-size:12px;color:var(--text-muted);">' + new Date(p.date).toLocaleDateString('en-AU') + '</td>' +
+        '<td style="padding:6px 0;font-size:12px;">$' + Number(p.oldPrice||0).toFixed(2) + ' → <strong>$' + Number(p.newPrice).toFixed(2) + '</strong></td>' +
+        '<td style="padding:6px 0;font-size:11px;color:var(--text-muted);">' + (p.source||'invoice') + '</td>' +
+        '</tr>'
+    ).join('');
+    
+    const html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+        '<div><div style="font-size:28px;font-weight:bold;color:var(--brand-dark);">$' + currentPrice.toFixed(2) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);">per ' + (item.buyUnit||'unit') + '</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:18px;font-weight:bold;color:' + trendColor + ';">' + trendLabel + '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);">Since first recorded</div></div>' +
+    '</div>' +
+    '<div style="margin-bottom:20px;overflow-x:auto;">' + svgHtml + '</div>' +
+    (tableRows ? '<h4 style="margin:15px 0 8px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Recent Changes</h4>' +
+    '<table style="width:100%;border-collapse:collapse;">' + tableRows + '</table>' : '');
+    
+    window.openModal('📈 Price History — ' + item.name, html);
+};
 
 // =============================================================================
 // STOCK COUNT SHEET — Print-friendly for physical stocktakes
@@ -640,13 +739,127 @@ window.printCountSheet = () => {
         'th:last-child{text-align:right;}' +
         '@media print{body{margin:10px;max-width:none;}@page{margin:10mm;size:A4;}}' +
         '</style></head><body>');
-    win.document.write('<h1>📦 Stock Count Sheet — Bar Wa Izakaya</h1>');
+    win.document.write('<h1>📦 Stock Count Sheet — ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + '</h1>');
     win.document.write('<div class="meta"><span>Grouped by: '+( groupBy==='zone'?'Zone':'Category')+'</span><span>Date: _____________ &nbsp;&nbsp; Staff: _____________</span></div>');
     win.document.write('<table><thead><tr><th>Item</th><th>Unit</th><th>PAR</th><th style="text-align:right;">Count</th></tr></thead><tbody>'+tableHtml+'</tbody></table>');
-    win.document.write('<div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">'+items.length+' items · Bar Wa Izakaya · Hobart Hub</div>');
+    win.document.write('<div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">'+items.length+' items · ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + ' · Hobart Hub</div>');
     win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
     win.document.close();
     window.closeModal();
+};
+
+
+
+// =============================================================================
+// QUICK STOCK COUNT — Digital count entry, grouped by zone
+// =============================================================================
+window.renderQuickStockCount = () => {
+    const items = (window.inventoryItems||[]).filter(i => !i.archived);
+    if (items.length === 0) {
+        return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No inventory items yet.</h3><button onclick="window.showView(\'inventory\')" class="btn btn-blue" style="margin-top:10px;">Go to Inventory</button></div></div>';
+    }
+    const isWeekend = [0,5,6].includes(new Date().getDay());
+    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    
+    // Group by zone (walking order)
+    const grouped = {};
+    items.forEach(item => {
+        const zone = item.location || 'Unassigned Zone';
+        if (!grouped[zone]) grouped[zone] = [];
+        grouped[zone].push(item);
+    });
+    
+    // Sort zones: BOH first, then FOH, then other
+    const zoneOrder = (window.storageZones || []).map(z => z.name);
+    const sortedZones = Object.keys(grouped).sort((a, b) => {
+        const ai = zoneOrder.indexOf(a);
+        const bi = zoneOrder.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+    });
+    
+    let tabIdx = 0;
+    const zonesHtml = sortedZones.map(zone => {
+        const zoneItems = grouped[zone].sort((a,b) => a.name.localeCompare(b.name));
+        const rows = zoneItems.map(item => {
+            const par = isWeekend ? (item.parWeekend||item.par||0) : (item.parWeekday||item.par||0);
+            const stock = Number(item.stock) || 0;
+            const statusColor = stock < par ? 'var(--red)' : 'var(--green)';
+            tabIdx++;
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:10px 12px;"><strong style="font-size:14px;">' + item.name + '</strong>' +
+                '<br><small style="color:var(--text-muted);">' + (item.buyUnit||'unit') + ' · PAR: ' + par + '</small></td>' +
+                '<td style="padding:10px;text-align:center;"><span style="color:' + statusColor + ';font-weight:bold;font-size:14px;">' + stock.toFixed(1) + '</span></td>' +
+                '<td style="padding:8px;width:120px;"><input type="number" step="0.1" min="0" tabindex="' + tabIdx + '" ' +
+                    'id="sc-' + item.id + '" ' +
+                    'class="stock-count-input" ' +
+                    'placeholder="—" ' +
+                    'data-original="' + stock + '" ' +
+                    'oninput="this.classList.toggle(\\\'changed\\\', this.value !== \\\'\\\' && parseFloat(this.value) !== ' + stock + ')" ' +
+                    'onkeydown="if(event.key===\\\'Enter\\\'){event.preventDefault();var inputs=document.querySelectorAll(\\\'.stock-count-input\\\');var arr=Array.from(inputs);var cur=arr.indexOf(this);if(arr[cur+1])arr[cur+1].focus();}">' +
+                '</td>' +
+            '</tr>';
+        }).join('');
+        
+        return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:15px;">' +
+            '<div style="padding:12px 15px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="color:var(--brand-dark);">' + zone + '</strong>' +
+                '<span style="font-size:12px;color:var(--text-muted);">' + zoneItems.length + ' items</span>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;background:#0a0a0c;">' +
+                '<th style="padding:8px 12px;text-align:left;">Item</th>' +
+                '<th style="padding:8px;text-align:center;">Current</th>' +
+                '<th style="padding:8px;text-align:center;">New Count</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody>' +
+            '</table>' +
+        '</div>';
+    }).join('');
+    
+    return '<div style="max-width:900px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">Quick Stock Count</h2>' +
+            '<small style="color:var(--text-muted);">' + venueName + ' · ' + new Date().toLocaleDateString('en-AU',{weekday:"long",day:"numeric",month:"long"}) + ' · ' + (isWeekend?'Weekend':'Weekday') + ' PARs</small></div>' +
+            '<div style="display:flex;gap:8px;">' +
+                '<button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px;">🖨️ Print Blank</button>' +
+                '<button onclick="window.showView(\'inventory\')" class="btn btn-outline" style="font-size:12px;">← Inventory</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="border-left:4px solid var(--blue);padding:12px 18px;margin-bottom:20px;">' +
+            '<p style="margin:0;font-size:13px;color:var(--text-muted);">Tab through each item and enter the count. Only filled fields will update. Empty fields are skipped.</p>' +
+        '</div>' +
+        zonesHtml +
+        '<div class="sticky-footer" style="justify-content:space-between;">' +
+            '<span id="sc-changed-count" style="font-size:13px;color:var(--text-muted);">0 items changed</span>' +
+            '<div style="display:flex;gap:10px;">' +
+                '<button onclick="window.saveQuickStockCount()" class="btn btn-green" style="font-size:16px;padding:12px 30px;">💾 Save All Counts</button>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
+};
+
+window.saveQuickStockCount = () => {
+    let updated = 0;
+    const timestamp = new Date().toISOString();
+    (window.inventoryItems || []).filter(i => !i.archived).forEach(item => {
+        const input = document.getElementById('sc-' + item.id);
+        if (!input || input.value === '') return;
+        const newVal = parseFloat(input.value);
+        if (isNaN(newVal)) return;
+        if (newVal !== Number(item.stock)) {
+            // Record in price history as stock count event
+            if (!window.priceHistory[item.id]) window.priceHistory[item.id] = [];
+            window.priceHistory[item.id].push({ type:'count', date: timestamp, oldStock: item.stock, newStock: newVal });
+            item.stock = newVal;
+            updated++;
+        }
+    });
+    if (updated === 0) return window.showToast('No changes to save.', 'error');
+    window.saveToDisk();
+    window.showToast(updated + ' stock levels updated!');
+    window.showView('stock-count');
 };
 
 window.renderParEditor = () => {
@@ -1161,9 +1374,23 @@ window.printRecipe = (id) => {
     <h2>Ingredients</h2><ul>${ingText||'<li>No ingredients listed</li>'}</ul>
     <h2>Method</h2><div class="method">${r.method||'No method written.'}</div>
     ${r.allergens&&r.allergens.length>0?`<div class="allergens"><strong>⚠️ Allergens:</strong> ${r.allergens.join(', ')}</div>`:''}
-    <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">Bar Wa Izakaya · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
+    <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">${window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya'} · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
     <script>window.onload=()=>{window.print();}<\/script></body></html>`);
     win.document.close();
+};
+
+
+window.duplicateRecipe = (id) => {
+    const original = window.recipes.find(r => r.id === id);
+    if (!original) return window.showToast('Recipe not found.', 'error');
+    const newRecipe = JSON.parse(JSON.stringify(original));
+    newRecipe.id = window.generateId('rec');
+    newRecipe.name = original.name + ' (Copy)';
+    newRecipe.photo = '';
+    window.recipes.push(newRecipe);
+    window.saveToDisk();
+    window.showToast('Recipe duplicated!');
+    window.editRecipeForm(newRecipe.id);
 };
 
 window.editRecipeForm = (id = null) => {
@@ -1208,7 +1435,7 @@ window.editRecipeForm = (id = null) => {
                 <button onclick="window.tempRecipeId=null;window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
                 <div style="display:flex;gap:8px;">
                     ${cleanId?`<button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>`:''}
-                    ${cleanId?`<button onclick="window.delRecipe('${r.id}')" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>`:''}
+                    ${cleanId?`<button onclick="window.duplicateRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">📋 Duplicate</button>`:''}\n                    ${cleanId?`<button onclick="window.delRecipe('${r.id}')" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>`:''}
                 </div>
             </div>
             <div class="card" style="padding:20px;margin-bottom:15px;">
@@ -1277,7 +1504,58 @@ window.editRecipeForm = (id = null) => {
         if (document.getElementById('r-yq')) { r.yieldQty=parseFloat(document.getElementById('r-yq').value)||1; r.yieldUnit=document.getElementById('r-yu').value; }
         renderBuilder();
     };
-    window.updateUnitHint = () => {
+    
+window._filterIngSearch = (query) => {
+    const dropdown = document.getElementById('ing-search-dropdown');
+    if (!dropdown) return;
+    const q = query.toLowerCase();
+    
+    const invItems = (window.inventoryItems||[]).filter(i => !i.archived && (!q || i.name.toLowerCase().includes(q)));
+    const batchItems = (window.recipes||[]).filter(b => b.type==='Batch' && (!q || b.name.toLowerCase().includes(q)));
+    
+    if (invItems.length === 0 && batchItems.length === 0) {
+        dropdown.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:12px;text-align:center;">No matches</div>';
+        dropdown.style.display = 'block';
+        return;
+    }
+    
+    let html = '';
+    if (invItems.length > 0) {
+        html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 12px 4px;font-weight:bold;">Inventory</div>';
+        invItems.slice(0, 10).forEach(inv => {
+            var safeName = inv.name.replace(/'/g, '');
+            html += '<div class="search-dropdown-item" data-val="inv_' + inv.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>' + inv.name + '</span><small style="color:var(--blue);">per ' + (inv.useUnit||'Unit') + '</small></div>';
+        });
+    }
+    if (batchItems.length > 0) {
+        html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 12px 4px;font-weight:bold;">Prep Batches</div>';
+        batchItems.slice(0, 5).forEach(b => {
+            var safeName = b.name.replace(/'/g, '');
+            html += '<div class="search-dropdown-item" data-val="batch_' + b.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>[Batch] ' + b.name + '</span><small style="color:var(--purple);">per ' + (b.yieldUnit||'Unit') + '</small></div>';
+        });
+    }
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+};
+
+window._selectIngFromSearch = (value, displayName) => {
+    document.getElementById('add-sel').value = value;
+    document.getElementById('add-search').value = displayName;
+    document.getElementById('ing-search-dropdown').style.display = 'none';
+    window.updateUnitHint();
+    // Focus qty field
+    const qtyField = document.getElementById('add-qty');
+    if (qtyField) qtyField.focus();
+};
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+    const dd = document.getElementById('ing-search-dropdown');
+    const input = document.getElementById('add-search');
+    if (dd && input && !dd.contains(e.target) && e.target !== input) dd.style.display = 'none';
+});
+
+window.updateUnitHint = () => {
         const sel=document.getElementById('add-sel'); const hint=document.getElementById('unit-hint');
         if (!sel||!hint||!sel.value){if(hint)hint.innerText='';return;}
         const parts=sel.value.split('_');
@@ -2961,6 +3239,13 @@ ${rawText}`;
 // Smart fuzzy matching: SKU first, then name similarity
 window._findBestMatch = (aiItem) => {
     const inv = window.inventoryItems || [];
+    // 0. Check learned matches first
+    const learnedMap = window.invoiceMatchMap || {};
+    const learnKey = (aiItem.itemName||'').toLowerCase().trim();
+    if (learnedMap[learnKey]) {
+        const learnedItem = inv.find(i => i.id === learnedMap[learnKey]);
+        if (learnedItem) return { item: learnedItem, confidence: 'learned' };
+    }
     // 1. Exact SKU match
     if (aiItem.sku) {
         const skuMatch = inv.find(i => i.sku && i.sku.toLowerCase() === aiItem.sku.toLowerCase());
@@ -3035,7 +3320,7 @@ window._renderInvoiceReviewUI = () => {
                 </div>
                 <div style="flex:1; text-align:center; font-size:12px; color:var(--text-muted);">
                     ➔ <strong style="color:var(--green);">${inv ? inv.name : '?'}</strong>
-                    <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">${s.confidence === 'sku' ? '🔑 SKU match' : s.confidence === 'high' ? '✓ Name match' : '~ Fuzzy match'}</div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">${s.confidence === 'learned' ? '🧠 Learned match' : s.confidence === 'sku' ? '🔑 SKU match' : s.confidence === 'high' ? '✓ Name match' : '~ Fuzzy match'}</div>
                 </div>
                 <div style="flex:1; text-align:right; font-size:13px;">
                     ${priceChange
@@ -3182,6 +3467,17 @@ window._irSaveNewItem = (newId, index) => {
 };
 
 // Final commit — apply all approved updates to inventory (date-aware)
+window._learnInvoiceMatches = () => {
+    const state = window._invoiceReviewState || [];
+    if (!window.invoiceMatchMap) window.invoiceMatchMap = {};
+    state.forEach(s => {
+        if (s.matchedInvId && s.action === 'update') {
+            const key = (s.aiItem.itemName||'').toLowerCase().trim();
+            if (key) window.invoiceMatchMap[key] = s.matchedInvId;
+        }
+    });
+};
+
 window._commitInvoice = () => {
     const ai = window.pendingInvoiceData;
     const state = window._invoiceReviewState;
@@ -3255,6 +3551,138 @@ window._commitInvoice = () => {
 // =============================================================================
 // 9. ALLERGENS, RUN SHEETS & MARGIN CHECKER
 // =============================================================================
+
+
+
+// =============================================================================
+// THEORETICAL vs ACTUAL VARIANCE REPORT
+// Compare: what SHOULD have been used (POS sales × recipe ingredients)
+// vs what WAS used (stock count deltas)
+// =============================================================================
+window.renderVarianceReport = () => {
+    const recipes = (window.recipes||[]).filter(r => r.type === 'Menu' && r.posAlias && !r.archived);
+    const salesByData = window.lsSalesByData || {};
+    const depLogs = window.depletionLogs || [];
+    const items = (window.inventoryItems||[]).filter(i => !i.archived);
+    
+    if (recipes.length === 0 || Object.keys(salesByData).length === 0) {
+        return '<div style="max-width:900px;margin:auto;">' +
+            '<h2 style="margin-bottom:20px;">Actual vs Theoretical Variance</h2>' +
+            '<div class="card" style="text-align:center;padding:40px;">' +
+                '<div style="font-size:48px;margin-bottom:10px;">📊</div>' +
+                '<h3 style="color:var(--text-muted);">Not enough data yet</h3>' +
+                '<p style="color:var(--text-muted);font-size:13px;">This report needs:</p>' +
+                '<div style="text-align:left;max-width:400px;margin:15px auto;font-size:13px;">' +
+                    '<div style="padding:8px 0;border-bottom:1px dashed var(--border);color:' + (recipes.length > 0 ? 'var(--green)' : 'var(--red)') + ';">' + (recipes.length > 0 ? '✅' : '❌') + ' Recipes with POS aliases (' + recipes.length + ' set)</div>' +
+                    '<div style="padding:8px 0;border-bottom:1px dashed var(--border);color:' + (Object.keys(salesByData).length > 0 ? 'var(--green)' : 'var(--red)') + ';">' + (Object.keys(salesByData).length > 0 ? '✅' : '❌') + ' Lightspeed Sales By data imported</div>' +
+                    '<div style="padding:8px 0;color:' + (depLogs.length > 0 ? 'var(--green)' : 'var(--orange)') + ';">' + (depLogs.length > 0 ? '✅' : '⚠️') + ' EOD depletion runs (' + depLogs.length + ' logs)</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }
+    
+    // Calculate theoretical usage from sales data
+    const theoreticalUsage = {};
+    // Get all sales by products
+    const allProducts = [];
+    Object.values(salesByData).forEach(dateData => {
+        if (dateData.products) allProducts.push(...dateData.products);
+    });
+    
+    // Map POS items to recipes, then recipes to ingredients
+    recipes.forEach(recipe => {
+        const posName = (recipe.posAlias || recipe.name).toLowerCase().trim();
+        const matchingSales = allProducts.filter(p => p.name && p.name.toLowerCase().trim() === posName);
+        const totalSold = matchingSales.reduce((s, p) => s + (p.qty || 0), 0);
+        
+        if (totalSold > 0) {
+            (recipe.ingredients || []).forEach(ing => {
+                if (ing.type === 'inv' && ing.ref) {
+                    if (!theoreticalUsage[ing.ref]) theoreticalUsage[ing.ref] = { theoretical: 0, itemName: '' };
+                    const inv = items.find(i => i.id === ing.ref);
+                    if (inv) {
+                        theoreticalUsage[ing.ref].theoretical += (ing.qty || 0) * totalSold / (inv.yield || 1);
+                        theoreticalUsage[ing.ref].itemName = inv.name;
+                    }
+                }
+            });
+        }
+    });
+    
+    // Calculate actual usage from depletion logs
+    const actualUsage = {};
+    depLogs.forEach(log => {
+        (log.changes || []).forEach(change => {
+            if (!actualUsage[change.id]) actualUsage[change.id] = 0;
+            actualUsage[change.id] += Math.abs(change.delta || 0);
+        });
+    });
+    
+    // Build variance table
+    const varianceItems = Object.keys(theoreticalUsage).map(itemId => {
+        const inv = items.find(i => i.id === itemId);
+        if (!inv) return null;
+        const theoretical = theoreticalUsage[itemId].theoretical;
+        const actual = actualUsage[itemId] || 0;
+        const variance = actual - theoretical;
+        const variancePct = theoretical > 0 ? ((variance / theoretical) * 100) : 0;
+        const varianceCost = variance * ((inv.price || 0) / (inv.yield || 1));
+        return { id: itemId, name: inv.name, unit: inv.buyUnit || 'unit', theoretical, actual, variance, variancePct, varianceCost, category: inv.category || 'Other' };
+    }).filter(Boolean).sort((a, b) => Math.abs(b.varianceCost) - Math.abs(a.varianceCost));
+    
+    const totalVarianceCost = varianceItems.reduce((s, v) => s + v.varianceCost, 0);
+    
+    const rows = varianceItems.slice(0, 30).map(v => {
+        const color = Math.abs(v.variancePct) < 5 ? 'var(--green)' : Math.abs(v.variancePct) < 15 ? 'var(--orange)' : 'var(--red)';
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:10px 12px;"><strong>' + v.name + '</strong><br><small style="color:var(--text-muted);">' + v.category + '</small></td>' +
+            '<td style="padding:10px 12px;text-align:center;">' + v.theoretical.toFixed(1) + '</td>' +
+            '<td style="padding:10px 12px;text-align:center;">' + v.actual.toFixed(1) + '</td>' +
+            '<td style="padding:10px 12px;text-align:center;color:' + color + ';font-weight:bold;">' + (v.variance > 0 ? '+' : '') + v.variance.toFixed(1) + ' ' + v.unit + '</td>' +
+            '<td style="padding:10px 12px;text-align:center;color:' + color + ';">' + (v.variancePct > 0 ? '+' : '') + v.variancePct.toFixed(1) + '%</td>' +
+            '<td style="padding:10px 12px;text-align:right;font-weight:bold;color:' + color + ';">$' + Math.abs(v.varianceCost).toFixed(2) + '</td>' +
+        '</tr>';
+    }).join('');
+    
+    return '<div style="max-width:1100px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">Actual vs Theoretical Variance</h2>' +
+            '<small style="color:var(--text-muted);">Comparing POS sales × recipe ingredients vs actual stock depletion</small></div>' +
+            '<button onclick="window.showView(\'sales\')" class="btn btn-outline" style="font-size:12px;">← Takings</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+            '<div class="card" style="text-align:center;border-top:4px solid ' + (totalVarianceCost > 0 ? 'var(--red)' : 'var(--green)') + ';">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Variance Cost</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:' + (Math.abs(totalVarianceCost) > 50 ? 'var(--red)' : 'var(--green)') + ';">$' + Math.abs(totalVarianceCost).toFixed(2) + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (totalVarianceCost > 0 ? 'Over-used' : 'Under-used') + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Items Tracked</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--blue);">' + varianceItems.length + '</div>' +
+            '</div>' +
+            '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
+                '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">High Variance Items</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">' + varianceItems.filter(v => Math.abs(v.variancePct) >= 15).length + '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                '<th style="padding:10px 12px;text-align:left;">Item</th>' +
+                '<th style="padding:10px 12px;text-align:center;">Theoretical</th>' +
+                '<th style="padding:10px 12px;text-align:center;">Actual</th>' +
+                '<th style="padding:10px 12px;text-align:center;">Variance</th>' +
+                '<th style="padding:10px 12px;text-align:center;">%</th>' +
+                '<th style="padding:10px 12px;text-align:right;">Cost Impact</th>' +
+            '</tr></thead><tbody>' + (rows || '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text-muted);">No variance data available.</td></tr>') + '</tbody>' +
+            '</table>' +
+        '</div>' +
+        '<div class="card" style="margin-top:20px;border-left:4px solid var(--blue);padding:12px 18px;">' +
+            '<p style="margin:0;font-size:13px;color:var(--text-muted);"><strong>How to read this:</strong> Positive variance means more was used than recipes predicted (possible: over-portioning, theft, unrecorded waste). Negative means less used than expected (possible: under-portioning, count error, unreported 86s).</p>' +
+        '</div>' +
+    '</div>';
+};
+
 
 window.renderAllergenView = () => {
     return `<div style="max-width: 800px; margin: auto;">
