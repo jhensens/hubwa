@@ -30,6 +30,15 @@ window.depletionLogs = [];
 window.orderHistory = [];
 window.staffDirectory = [];
 window.shiftChecklistItems = null;
+window.invoiceMatchMap = window.invoiceMatchMap || {};
+window.priceHistory = window.priceHistory || {};
+window.inventorySubcategories = window.inventorySubcategories || {};
+window.kbSubcategories = window.kbSubcategories || {};
+window.safeSubcategories = window.safeSubcategories || {};
+window.handoverTemplateConfig = window.handoverTemplateConfig || {
+    sections: ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'],
+    requireStaff: true
+};
 window.lsImportLog = [];
 window.lsSalesByData = {};
 window.safeCategories = ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
@@ -88,7 +97,7 @@ window._restrictedViews = [
     'sales', 'suppliers', 'recipes', 'invoice', 'orientation', 'safe', 'handover',
     'margins', 'menu-engineering', 'sell-price-editor', 'price-alerts', 'forecast',
     'staff-directory', 'bulk-category-editor', 'pos-alias-editor', 'ai-order',
-    'cross-venue', 'par-editor', 'batch-linker', 'costing-report', 'prime-cost'
+    'cross-venue', 'par-editor', 'batch-linker', 'costing-report', 'prime-cost', 'lightspeed-import'
 ];
 
 window.checkLockState = () => {
@@ -144,7 +153,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig'];
 
 
 // =============================================================================
@@ -519,10 +528,13 @@ window.showToast = (msg, type = "success") => {
     toast.style.zIndex = '10000';
     toast.style.animation = 'slideUp 0.3s ease forwards';
     
-    // Add simple keyframes for the toast if not in CSS
-    const style = document.createElement('style');
-    style.innerHTML = `@keyframes slideUp { from { bottom: -50px; opacity: 0; } to { bottom: 20px; opacity: 1; } } @keyframes slideDown { from { bottom: 20px; opacity: 1; } to { bottom: -50px; opacity: 0; } }`;
-    document.head.appendChild(style);
+    // Add keyframes only once
+    if (!document.getElementById('toast-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'toast-keyframes';
+        style.innerHTML = '@keyframes slideUp { from { bottom: -50px; opacity: 0; } to { bottom: 20px; opacity: 1; } } @keyframes slideDown { from { bottom: 20px; opacity: 1; } to { bottom: -50px; opacity: 0; } }';
+        document.head.appendChild(style);
+    }
     
     document.body.appendChild(toast);
     setTimeout(() => { toast.style.animation = 'slideDown 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
@@ -586,6 +598,9 @@ window.showView = (view) => {
         else if (view === 'lightspeed-import' && window.renderLightspeedImportView) content.innerHTML = window.renderLightspeedImportView();
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
+        else if (view === 'stock-count' && window.renderQuickStockCount) content.innerHTML = window.renderQuickStockCount();
+        else if (view === 'variance' && window.renderVarianceReport) content.innerHTML = window.renderVarianceReport();
+        else if (view === 'haccp-history' && window.renderHACCPHistory) content.innerHTML = window.renderHACCPHistory();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
@@ -594,6 +609,98 @@ window.showView = (view) => {
 };
 
 window.generateId = (prefix) => { return prefix + '_' + Math.random().toString(36).substr(2, 9); };
+
+// --- GLOBAL SEARCH ---
+window.globalSearch = (query) => {
+    if (!query || query.length < 2) return [];
+    const q = query.toLowerCase();
+    const results = [];
+    
+    // Search inventory
+    (window.inventoryItems || []).filter(i => !i.archived).forEach(item => {
+        if (item.name.toLowerCase().includes(q) || (item.sku && item.sku.toLowerCase().includes(q)) || (item.supplier && item.supplier.toLowerCase().includes(q))) {
+            results.push({ type: 'inventory', icon: '📦', label: item.name, sub: (item.category || '') + ' · ' + (item.supplier || 'No supplier'), action: "window.editInvItem('" + item.id + "')" });
+        }
+    });
+    
+    // Search recipes
+    (window.recipes || []).filter(r => !r.archived).forEach(r => {
+        if (r.name.toLowerCase().includes(q) || (r.posAlias && r.posAlias.toLowerCase().includes(q))) {
+            results.push({ type: 'recipe', icon: '⚖️', label: r.name, sub: r.type + ' · ' + (r.station || 'Kitchen'), action: "window.editRecipeForm('" + r.id + "')" });
+        }
+    });
+    
+    // Search Knowledge Base
+    (window.knowledgeBase || []).forEach((k, i) => {
+        if (k.title.toLowerCase().includes(q) || (k.content && k.content.toLowerCase().includes(q)) || (k.category && k.category.toLowerCase().includes(q))) {
+            results.push({ type: 'sop', icon: '📚', label: k.title, sub: k.category || 'General', action: "window.viewSOP(" + i + ")" });
+        }
+    });
+    
+    // Search contacts
+    (window.phoneBook || []).forEach((c, i) => {
+        if (c.name.toLowerCase().includes(q) || (c.phone && c.phone.toLowerCase().includes(q))) {
+            results.push({ type: 'contact', icon: '📞', label: c.name, sub: c.category || '', action: "window.showView('phonebook')" });
+        }
+    });
+    
+    // Search Digital Safe
+    (window.digitalSafe || []).forEach((d, i) => {
+        if (d.name.toLowerCase().includes(q) || (d.category && d.category.toLowerCase().includes(q))) {
+            results.push({ type: 'document', icon: '🔒', label: d.name, sub: d.category || 'General', action: "window.showView('safe')" });
+        }
+    });
+    
+    // Search Staff Directory
+    (window.staffDirectory || []).forEach((s, i) => {
+        if (s.name.toLowerCase().includes(q) || (s.role && s.role.toLowerCase().includes(q))) {
+            results.push({ type: 'staff', icon: '👥', label: s.name, sub: s.role || 'Staff', action: "window.showView('staff-directory')" });
+        }
+    });
+    
+    // Search suppliers
+    (window.suppliers || []).forEach((s, i) => {
+        if (s.name.toLowerCase().includes(q)) {
+            results.push({ type: 'supplier', icon: '🚚', label: s.name, sub: s.contact || '', action: "window.showView('suppliers')" });
+        }
+    });
+    
+    return results.slice(0, 15);
+};
+
+window.renderGlobalSearchResults = (query) => {
+    const resultsDiv = document.getElementById('global-search-results');
+    if (!resultsDiv) return;
+    if (!query || query.length < 2) { resultsDiv.style.display = 'none'; return; }
+    const results = window.globalSearch(query);
+    if (results.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding:15px;color:var(--text-muted);font-size:13px;text-align:center;">No results for "' + query + '"</div>';
+        resultsDiv.style.display = 'block';
+        return;
+    }
+    const grouped = {};
+    results.forEach(r => { if (!grouped[r.type]) grouped[r.type] = []; grouped[r.type].push(r); });
+    const typeLabels = { inventory:'Inventory', recipe:'Recipes', sop:'Knowledge Base', contact:'Contacts', document:'Digital Safe', staff:'Staff', supplier:'Suppliers' };
+    let html = '';
+    Object.keys(grouped).forEach(type => {
+        html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 15px 4px;font-weight:bold;">' + (typeLabels[type]||type) + '</div>';
+        grouped[type].forEach(r => {
+            html += '<div onclick="' + r.action + ';document.getElementById(\'global-search-results\').style.display=\'none\';document.getElementById(\'global-search-input\').value=\'\';" style="padding:10px 15px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background 0.15s;border-bottom:1px solid var(--border);" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'\'"><span style="font-size:16px;">' + r.icon + '</span><div><div style="font-size:13px;font-weight:500;">' + r.label + '</div><div style="font-size:11px;color:var(--text-muted);">' + r.sub + '</div></div></div>';
+        });
+    });
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+};
+
+// Close search results on outside click
+document.addEventListener('click', (e) => {
+    const resultsDiv = document.getElementById('global-search-results');
+    const searchInput = document.getElementById('global-search-input');
+    if (resultsDiv && searchInput && !resultsDiv.contains(e.target) && e.target !== searchInput) {
+        resultsDiv.style.display = 'none';
+    }
+});
+
 
 document.addEventListener('DOMContentLoaded', () => {
     // Show loading state immediately
