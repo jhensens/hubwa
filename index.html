@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hobart Hub | Bar Wa Izakaya</title>
+    <title>Hobart Hub</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
@@ -24,6 +24,10 @@
             <div class="nav-item nav-dashboard" onclick="window.showView('dashboard')" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);font-weight:600;color:rgba(255,255,255,0.9);justify-content:center;letter-spacing:0.5px;">🏠 Dashboard</div>
         </div>
 
+        <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')">
+            <span id="mobile-venue-label">☰ Menu</span>
+            <span id="mobile-close-x" style="display:none;font-size:20px;">&times;</span>
+        </button>
         <div class="sidebar-scroll">
 
             <!-- OPERATIONS -->
@@ -37,12 +41,14 @@
                     <div class="nav-item restricted" onclick="window.showView('forecast')">🔮 Revenue Forecast</div>
                     <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
                     <div class="nav-item" onclick="window.showView('inventory')">📦 Live Inventory</div>
+                    <div class="nav-item" onclick="window.showView('stock-count')">✅ Quick Stock Count</div>
                     <div class="nav-item" onclick="window.showView('zones')">🗄️ Storage Zones</div>
                     <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers & Ordering</div>
                     <div class="nav-item" onclick="window.showView('prep-list')">📝 Auto-Order List</div>
                     <div class="nav-item restricted" onclick="window.showView('lightspeed-import')">📥 Lightspeed Import</div>
                     <div class="nav-item" onclick="window.showView('ai-order')">✨ AI Order Suggester</div>
                     <div class="nav-item" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
+                    <div class="nav-item restricted" onclick="window.showView('variance')">📊 Actual vs Theoretical</div>
                     <div class="nav-item" onclick="window.showView('allergens')">🧪 Allergen Matrix</div>
                 </div>
             </div>
@@ -71,6 +77,7 @@
                 </div>
                 <div class="nav-section-items" id="sec-compliance">
                     <div class="nav-item" onclick="window.showView('compliance')">🌡️ Temp & Checklists</div>
+                    <div class="nav-item" onclick="window.showView('haccp-history')">📋 HACCP History</div>
                     <div class="nav-item restricted" onclick="window.showView('orientation')">🤝 Staff Onboarding</div>
                     <div class="nav-item" onclick="window.showView('maintenance')">🛠️ Maintenance & Assets</div>
                     <div class="nav-item" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
@@ -120,7 +127,12 @@
 
     <div class="main-wrapper">
         <div class="main-header no-print">
-            <button id="venue-badge" onclick="window.renderVenueSwitcher()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:10px;">🏢 Loading...</button><div id="sync-status" class="sync-badge">🟢 Live Sync</div>
+            <button id="venue-badge" onclick="window.renderVenueSwitcher()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:10px;">🏢 Loading...</button>
+            <div style="flex:1;max-width:400px;position:relative;margin:0 15px;">
+                <input type="text" id="global-search-input" placeholder="🔍 Search everything..." oninput="window.renderGlobalSearchResults(this.value)" onfocus="if(this.value.length>=2)window.renderGlobalSearchResults(this.value)" class="input-box" style="margin:0;padding:8px 15px;border-radius:20px;font-size:13px;background:var(--bg-main);">
+                <div id="global-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;margin-top:5px;max-height:400px;overflow-y:auto;box-shadow:0 15px 40px rgba(0,0,0,0.5);z-index:100;"></div>
+            </div>
+            <div id="sync-status" class="sync-badge">🟢 Live Sync</div>
         </div>
         
         <div class="content-area" id="mainContent">
