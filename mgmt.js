@@ -2319,8 +2319,8 @@ window.renderManagerHub = () => {
             <button onclick="window.renderCrossVenueDashboard()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">🏢 All Venues</button>
         </div>
     
-    \${expiringHtml}
-        \${checklistWidget}
+    ${expiringHtml}
+    ${checklistWidget}
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
         <div class="card" style="border-top:5px solid var(--green); padding:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
@@ -2347,8 +2347,6 @@ window.renderManagerHub = () => {
         </div>
     </div>
 
-    \${expiringHtml}
-        \${checklistWidget}
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
         <div class="card" style="border-top:5px solid var(--blue);"><h3 style="margin-top:0; color:var(--brand-accent);">📦 Inventory Alerts <small style="color:var(--text-muted); font-weight:normal;">(${isWeekend?'Weekend':'Weekday'} PAR)</small></h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${stockHtml}</div></div>
         <div class="card" style="border-top:5px solid var(--orange);"><h3 style="margin-top:0; color:var(--brand-accent);">🛠️ Maintenance Tickets</h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${ticketHtml}${eqHtml}</div></div>
