@@ -1700,11 +1700,11 @@ window.renderPriceAlertsView = () => {
         const color = isRise ? 'var(--red)' : 'var(--green)';
         const affected = getAffectedRecipes(a.id);
         return '<tr style="border-bottom:1px solid var(--border);">' +
-            '<td style="padding:12px 15px;"><strong>' + a.name + '</strong><br><small style="color:var(--text-muted);">' + a.supplier + ' · ' + a.date + '</small></td>' +
-            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Number(a.prevPrice).toFixed(2) + '</td>' +
-            '<td style="padding:12px 15px;font-weight:bold;">$' + Number(a.newPrice).toFixed(2) + '</td>' +
-            '<td style="padding:12px 15px;font-weight:bold;color:' + color + ';">' + (isRise?'▲':'▼') + ' ' + Math.abs(a.changePct).toFixed(1) + '%</td>' +
-            '<td style="padding:12px 15px;font-size:12px;color:var(--text-muted);">' + (affected.length > 0 ? affected.join(', ') + (affected.length===3?'...':'') : 'None') + '</td>' +
+            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + a.name + '</strong><br><small style="color:var(--text-muted);">' + a.supplier + ' · ' + a.date + '</small></td>' +
+            '<td style="padding:7px 10px;font-size:12px;color:var(--text-muted);">$' + Number(a.prevPrice).toFixed(2) + '</td>' +
+            '<td style="padding:7px 10px;font-weight:bold;font-size:12px;">$' + Number(a.newPrice).toFixed(2) + '</td>' +
+            '<td style="padding:7px 10px;font-weight:bold;font-size:12px;color:' + color + ';">' + (isRise?'▲':'▼') + ' ' + Math.abs(a.changePct).toFixed(1) + '%</td>' +
+            '<td style="padding:7px 10px;font-size:11px;color:var(--text-muted);">' + (affected.length > 0 ? affected.join(', ') + (affected.length===3?'...':'') : 'None') + '</td>' +
             '<td style="padding:12px 15px;text-align:right;"><button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Check GP</button></td>' +
         '</tr>';
     }).join('');
@@ -1717,27 +1717,27 @@ window.renderPriceAlertsView = () => {
         '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:20px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--red);">' +
-                '<div style="font-size:30px;font-weight:bold;color:var(--red);">' + rises.length + '</div>' +
+                '<div style="font-size:22px;font-weight:bold;color:var(--red);">' + rises.length + '</div>' +
                 '<div style="font-size:12px;color:var(--text-muted);">Price Rises</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
-                '<div style="font-size:30px;font-weight:bold;color:var(--green);">' + falls.length + '</div>' +
+                '<div style="font-size:22px;font-weight:bold;color:var(--green);">' + falls.length + '</div>' +
                 '<div style="font-size:12px;color:var(--text-muted);">Price Drops</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
-                '<div style="font-size:30px;font-weight:bold;color:var(--orange);">' + alerts.length + '</div>' +
+                '<div style="font-size:22px;font-weight:bold;color:var(--orange);">' + alerts.length + '</div>' +
                 '<div style="font-size:12px;color:var(--text-muted);">Total Changes</div>' +
             '</div>' +
         '</div>' +
         '<div class="card" style="padding:0;overflow:hidden;">' +
             '<table style="width:100%;border-collapse:collapse;">' +
                 '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-                    '<th style="padding:10px 15px;text-align:left;">Item</th>' +
-                    '<th style="padding:10px 15px;text-align:left;">Was</th>' +
-                    '<th style="padding:10px 15px;text-align:left;">Now</th>' +
-                    '<th style="padding:10px 15px;text-align:left;">Change</th>' +
-                    '<th style="padding:10px 15px;text-align:left;">Affects Recipes</th>' +
-                    '<th style="padding:10px 15px;"></th>' +
+                    '<th style="padding:6px 10px;text-align:left;">Item</th>' +
+                    '<th style="padding:6px 10px;text-align:left;">Was</th>' +
+                    '<th style="padding:6px 10px;text-align:left;">Now</th>' +
+                    '<th style="padding:6px 10px;text-align:left;">Change</th>' +
+                    '<th style="padding:6px 10px;text-align:left;">Affects</th>' +
+                    '<th style="padding:6px 10px;"></th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
             '</table>' +
@@ -3297,7 +3297,7 @@ window._renderInvoiceReviewUI = () => {
                 <h3 style="margin:0; color:var(--brand-dark);">${ai.supplier} — ${ai.date}</h3>
                 <small style="color:var(--text-muted);">Invoice #${ai.invoiceNumber || 'N/A'} | ${ai.items.length} line items extracted | Total: $${Number(ai.invoiceTotal || 0).toFixed(2)}</small>
             </div>
-            <button onclick="window._commitInvoice()" class="btn btn-green" style="font-size:15px; padding:12px 24px;">✓ Commit All & Update Stock</button>
+            <button onclick="window._commitInvoice()" class="btn btn-green" style="font-size:14px; padding:10px 20px;">✓ Commit All & Update Stock</button>
         </div>`;
 
     // --- AUTO-MATCHED (green) ---
@@ -3365,7 +3365,7 @@ window._renderInvoiceReviewUI = () => {
     html += `
     <div style="background:rgba(16,185,129,0.08); border:1px solid var(--green); padding:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
         <div style="font-size:13px; color:var(--text-muted);">Ready to commit: <strong style="color:var(--green);">${autoMatched.length} updates</strong> + <strong style="color:var(--blue);">${unmatched.filter(s => s.action === 'new' && s.matchedInvId).length} new links</strong></div>
-        <button onclick="window._commitInvoice()" class="btn btn-green" style="font-size:15px; padding:12px 28px;">✓ Commit All & Update Stock</button>
+        <button onclick="window._commitInvoice()" class="btn btn-green" style="font-size:14px; padding:10px 20px;">✓ Commit All & Update Stock</button>
     </div>
     </div>`;
 
