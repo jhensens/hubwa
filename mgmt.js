@@ -151,7 +151,7 @@ window.renderForecastView = () => {
             '</div>' +
         '</div>' +
         // KPI cards
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Next 7 Days</div>' +
                 '<div style="font-size:28px;font-weight:bold;color:var(--blue);">$' + Math.round(next7.reduce((a,d)=>a+d.forecast,0)).toLocaleString() + '</div>' +
@@ -452,11 +452,11 @@ window.renderSalesView = () => {
         const wageAmt = Number(s.wages || 0);
         const wagePctDay = Number(s.total || 0) > 0 && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
         return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;" onclick="window.manualTakingsForm(\''+s.date+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
-            '<td style="padding:10px;">' + s.date + '</td>' +
+            '<td style="padding:7px 8px;font-size:12px;">' + s.date + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
             '<td style="padding:10px;">$' + Number(s.eftpos||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
-            '<td style="padding:10px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:6px 8px;font-size:13px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + (s.notes || '') + '</td>' +
@@ -515,7 +515,7 @@ window.renderSalesView = () => {
             '<div style="max-height:300px;overflow-y:auto;">' +
                 '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
                     '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-                        '<th style="padding:10px;">Date</th><th style="padding:10px;">Day</th><th style="padding:10px;">EFTPOS</th><th style="padding:10px;">Cash</th><th style="padding:10px;">Me&u</th><th style="padding:10px;color:var(--green);">Total</th><th style="padding:10px;color:var(--orange);">Wages</th><th style="padding:10px;">Notes</th>' +
+                        '<th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;">Day</th><th style="padding:6px 8px;">EFTPOS</th><th style="padding:6px 8px;">Cash</th><th style="padding:6px 8px;">Me&u</th><th style="padding:6px 8px;color:var(--green);">Total</th><th style="padding:6px 8px;color:var(--orange);">Wages</th><th style="padding:6px 8px;">Notes</th>' +
                     '</tr></thead>' +
                     '<tbody>' + (tableRows || '<tr><td colspan="8" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
                 '</table>' +
@@ -720,7 +720,7 @@ window.deleteOrientation = (index) => { if(confirm("Remove this staff member's t
 // --- 3. ROTATIONAL TASKS ---
 window.renderTaskView = function() {
     return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex;gap:8px;">
                 <button onclick="window.renderTaskList()" class="btn btn-dark">Active Tasks</button>
                 <button onclick="window.renderTaskHistory()" class="btn btn-outline">Audit History</button>
@@ -947,9 +947,9 @@ window.renderShiftChecklists = () => {
 
     const items = activeList.map((item, i) => {
         const checked = saved.includes(i);
-        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border);">' +
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);">' +
             '<input type="checkbox" id="sc-' + i + '" ' + (checked?'checked':'') + ' onchange="window.saveShiftCheckItem(' + i + ',window._scStateKey)" style="transform:scale(1.3);flex-shrink:0;">' +
-            '<label for="sc-' + i + '" style="cursor:pointer;font-size:14px;' + (checked?'text-decoration:line-through;color:var(--text-muted);':'') + '">' + item + '</label>' +
+            '<label for="sc-' + i + '" style="cursor:pointer;font-size:13px;' + (checked?'text-decoration:line-through;color:var(--text-muted);':'') + '">' + item + '</label>' +
         '</div>';
     }).join('');
 
@@ -1036,8 +1036,8 @@ window.renderComplianceView = function() {
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 style="margin:0;">Fridge/Freezer Temp Log</h3><button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Setup Units</button></div>
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:15px; margin-bottom:20px;">
                 ${(window.fridgeUnits || []).map((f, i) => `
-                    <div style="background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border);">
-                        <strong style="font-size:13px; display:block; margin-bottom:8px; color:var(--brand-dark);">${f}</strong>
+                    <div style="background:var(--bg-main); padding:10px; border-radius:6px; border:1px solid var(--border);">
+                        <strong style="font-size:12px; display:block; margin-bottom:8px; color:var(--brand-dark);">${f}</strong>
                         <input type="number" step="0.1" id="t-val-${i}" oninput="window.checkT(${i})" class="input-box" placeholder="Temp °C" style="margin:0; width:100%;">
                         <div id="t-warn-${i}" style="display:none; margin-top:10px;">
                             <small style="color:var(--red); font-weight:bold; display:block; margin-bottom:4px;">⚠️ High Temp Alert</small>
@@ -1106,9 +1106,9 @@ window.renderChecklistHistory = () => {
     const typeOpts = '<option value="">All Checklists</option>' + types.map(t=>'<option value="'+t+'" '+(filterType===t?'selected':'')+'>'+t+'</option>').join('');
     const rows = filtered.map(l =>
         '<tr style="border-bottom:1px solid var(--border);">'+
-        '<td style="padding:10px;font-size:12px;color:var(--text-muted);">'+l.time+'</td>'+
-        '<td style="padding:10px;font-weight:bold;">'+l.type+'</td>'+
-        '<td style="padding:10px;">'+l.staff+'</td>'+
+        '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">'+l.time+'</td>'+
+        '<td style="padding:6px 8px;font-weight:bold;font-size:13px;">'+l.type+'</td>'+
+        '<td style="padding:6px 8px;font-size:13px;">'+l.staff+'</td>'+
         '</tr>'
     ).join('');
     const html = '<div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
@@ -1228,7 +1228,7 @@ window.delEq = (i) => { if(confirm("Remove this asset?")) { window.equipmentData
 window.renderContractorBoard = () => {
     const active = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => !c.timeOut);
     const history = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => c.timeOut).slice(-10).reverse();
-    return `<h3 style="margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">🟢 Currently On-Site</h3>${active.length === 0 ? '<div class="card"><p style="color:var(--green); margin:0; font-weight:bold;">No contractors currently signed in.</p></div>' : active.map(c => `<div class="card" style="border-left:5px solid var(--green); padding:20px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;"><div><strong style="font-size:18px;">${c.name}</strong> <span style="color:var(--text-muted);">(${c.company})</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Reason: ${c.reason} | <strong>In:</strong> ${c.timeIn}</small></div><button onclick="window.signOutContractor(${c.originalIndex})" class="btn btn-red" style="font-size:16px;">Sign Out</button></div>`).join('')}<h3 style="margin-top:40px; margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">📋 Recent Visits</h3><table style="width:100%; background:var(--card-bg); border-radius:8px; overflow:hidden; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:15px;">Date</th><th style="padding:15px;">Contractor</th><th style="padding:15px;">Reason</th><th style="padding:15px;">Time In/Out</th></tr></thead><tbody>${history.length === 0 ? '<tr><td colspan="4" style="padding:15px; color:var(--text-muted); text-align:center;">No recent logs.</td></tr>' : history.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px; font-size:13px; color:var(--text-muted);">${c.date}</td><td style="padding:15px;"><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.company}</small></td><td style="padding:15px; font-size:13px; color:var(--brand-accent);">${c.reason}</td><td style="padding:15px; font-size:13px;">In: <strong>${c.timeIn}</strong><br>Out: <strong>${c.timeOut}</strong></td></tr>`).join('')}</tbody></table>`;
+    return `<h3 style="margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">🟢 Currently On-Site</h3>${active.length === 0 ? '<div class="card"><p style="color:var(--green); margin:0; font-weight:bold;">No contractors currently signed in.</p></div>' : active.map(c => `<div class="card" style="border-left:5px solid var(--green); padding:20px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;"><div><strong style="font-size:18px;">${c.name}</strong> <span style="color:var(--text-muted);">(${c.company})</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Reason: ${c.reason} | <strong>In:</strong> ${c.timeIn}</small></div><button onclick="window.signOutContractor(${c.originalIndex})" class="btn btn-red" style="font-size:16px;">Sign Out</button></div>`).join('')}<h3 style="margin-top:40px; margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">📋 Recent Visits</h3><table style="width:100%; background:var(--card-bg); border-radius:8px; overflow:hidden; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:15px;">Date</th><th style="padding:15px;">Contractor</th><th style="padding:15px;">Reason</th><th style="padding:15px;">Time In/Out</th></tr></thead><tbody>${history.length === 0 ? '<tr><td colspan="4" style="padding:15px; color:var(--text-muted); text-align:center;">No recent logs.</td></tr>' : history.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px; font-size:13px; color:var(--text-muted);">${c.date}</td><td style="padding:7px 12px;"><strong style="font-size:13px;">${c.name}</strong><br><small style="color:var(--text-muted);">${c.company}</small></td><td style="padding:15px; font-size:13px; color:var(--brand-accent);">${c.reason}</td><td style="padding:15px; font-size:13px;">In: <strong>${c.timeIn}</strong><br>Out: <strong>${c.timeOut}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 window.showContractorForm = () => { 
     let html = `<input type="text" id="con-name" class="input-box" placeholder="Contractor Name (e.g., John Smith)" required><input type="text" id="con-company" class="input-box" placeholder="Company (e.g., Bob's Plumbing)" required><input type="text" id="con-reason" class="input-box" placeholder="Reason for visit (e.g., Fix grease trap)" style="margin-bottom:20px;" required><button onclick="window.submitContractor()" class="btn btn-green" style="width:100%;">Sign In</button>`;
@@ -1578,7 +1578,7 @@ window.renderHACCPHistory = () => {
                 '<button onclick="window.showView(\'compliance\')"\ class="btn btn-outline" style="font-size:12px;">← Temp Logging</button>' +
             '</div>' +
         '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid ' + (compliancePct >= 95 ? 'var(--green)' : 'var(--orange)') + ';">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Compliance Rate</div>' +
                 '<div style="font-size:32px;font-weight:bold;color:' + (compliancePct >= 95 ? 'var(--green)' : 'var(--orange)') + ';">' + compliancePct + '%</div>' +
@@ -1619,11 +1619,11 @@ window.renderStaffDirectoryView = () => {
             '</tr></thead><tbody>' +
             staff.map((s, i) =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:12px 15px;"><strong>' + s.name + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + s.emergency + '</small>' : '') + '</td>' +
+                '<td style="padding:8px 12px;"><strong style="font-size:13px;">' + s.name + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + s.emergency + '</small>' : '') + '</td>' +
                 '<td style="padding:12px 15px;font-size:13px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + (s.role||'Staff') + '</span></td>' +
                 '<td style="padding:12px 15px;font-size:13px;"><a href="tel:' + (s.phone||'') + '" style="color:var(--blue);">' + (s.phone||'No phone') + '</a>' + (s.email ? '<br><a href="mailto:' + s.email + '" style="color:var(--text-muted);font-size:12px;">' + s.email + '</a>' : '') + '</td>' +
-                '<td style="padding:12px 15px;"><span style="font-size:12px;color:' + (s.status==='Active'?'var(--green)':'var(--text-muted)') + ';font-weight:bold;">' + (s.status||'Active') + '</span>' + (s.startDate ? '<br><small style="color:var(--text-muted);font-size:11px;">Since ' + s.startDate + '</small>' : '') + '</td>' +
-                '<td style="padding:12px 15px;text-align:right;">' +
+                '<td style="padding:8px 12px;"><span style="font-size:11px;color:' + (s.status==='Active'?'var(--green)':'var(--text-muted)') + ';font-weight:bold;">' + (s.status||'Active') + '</span>' + (s.startDate ? '<br><small style="color:var(--text-muted);font-size:11px;">Since ' + s.startDate + '</small>' : '') + '</td>' +
+                '<td style="padding:8px 12px;text-align:right;">' +
                     '<button onclick="window.editStaffForm(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;margin-right:4px;">✏️ Edit</button>' +
                     '<button onclick="window.delStaff(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button>' +
                 '</td>' +
@@ -1681,7 +1681,7 @@ window.delStaff = (i) => {
 
 window.renderPhoneBookView = function() { 
     const mergedContacts = [...(window.phoneBook || []).map((c, i) => ({ ...c, originalIndex: i, isSupplier: false })), ...(window.suppliers || []).map(s => ({ name: s.name, category: 'Supplier', phone: s.contact || 'No email/phone', notes: `Order Cutoff: ${s.cutoff}`, isSupplier: true }))].sort((a, b) => a.name.localeCompare(b.name));
-    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Master Phone Book</h2><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:15px;">Name & Category</th><th style="padding:15px;">Contact Detail</th><th style="padding:15px;">Notes</th><th style="text-align:right; padding-right:15px;">Action</th></tr></thead><tbody>${mergedContacts.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">No contacts.</td></tr>' : mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:15px;"><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.category}</small></td><td style="padding:15px;">${c.phone.includes('@') ? `<a href="mailto:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>` : `<a href="tel:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>`}</td><td style="padding:15px; color:var(--brand-accent); font-size:13px; white-space:pre-wrap;">${c.notes || ''}</td><td style="text-align:right; padding-right:15px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('')}</tbody></table></div>`; 
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Master Phone Book</h2><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:8px 12px;">Name</th><th style="padding:8px 12px;">Contact</th><th style="padding:8px 12px;">Notes</th><th style="text-align:right; padding:8px 12px;">Action</th></tr></thead><tbody>${mergedContacts.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">No contacts.</td></tr>' : mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:7px 12px;"><strong style="font-size:13px;">${c.name}</strong><br><small style="color:var(--text-muted);">${c.category}</small></td><td style="padding:7px 12px;font-size:13px;">${c.phone.includes('@') ? `<a href="mailto:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>` : `<a href="tel:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>`}</td><td style="padding:7px 12px; color:var(--brand-accent); font-size:12px; white-space:pre-wrap;">${c.notes || ''}</td><td style="text-align:right; padding:7px 12px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('')}</tbody></table></div>`; 
 }
 window.addContact = () => { 
     let html = `<input type="text" id="c-n" class="input-box" placeholder="Name"><select id="c-c" class="input-box"><option>Staff</option><option>Tradie / Maintenance</option><option>Service Provider</option><option>Other</option></select><input type="text" id="c-p" class="input-box" placeholder="Phone or Email"><textarea id="c-notes" class="input-box" placeholder="Notes..." style="height:80px; margin-bottom:20px;"></textarea><button onclick="window.subContact()" class="btn btn-green" style="width:100%;">Save Contact</button>`;
@@ -1709,7 +1709,7 @@ window.renderIncidentView = function() {
             '<button onclick="window.saveIncident()" class="btn btn-red" style="width:100%;font-size:15px;">Log Incident to Permanent Record</button>' +
         '</div>' +
         (logs.length === 0 ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No incidents logged.</p></div>' :
-        logs.map(l => '<div class="card" style="margin-bottom:12px;padding:20px;border-left:4px solid var(--red);">' +
+        logs.map(l => '<div class="card" style="margin-bottom:10px;padding:14px;border-left:3px solid var(--red);">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
                 '<div><strong style="font-size:15px;">' + l.staff + '</strong>' + (l.type ? ' <span style="font-size:11px;color:var(--red);background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:8px;margin-left:8px;">' + l.type + '</span>' : '') + '</div>' +
                 '<span style="color:var(--text-muted);font-size:12px;">' + l.time + '</span>' +
@@ -1927,7 +1927,7 @@ window.renderCrossVenueDashboard = () => {
     if (!container) return;
 
     container.innerHTML = '<div style="max-width:1200px;margin:auto;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
             '<div><h2 style="margin:0;">🏢 Owner Dashboard</h2>' +
             '<small style="color:var(--text-muted);">Live view across all venues · ' + new Date().toLocaleDateString('en-AU',{weekday:"long",day:"numeric",month:"long"}) + '</small></div>' +
             '<button onclick="window.showView(\'dashboard\')" class="btn btn-outline">← Back</button>' +
@@ -2058,7 +2058,7 @@ function renderCrossContent(venueData, venues) {
     if (!el) return;
     el.innerHTML =
         // Combined KPIs
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Combined Today</div>' +
                 '<div style="font-size:30px;font-weight:bold;color:var(--green);">$' + totalTodayRevenue.toLocaleString('en-AU',{minimumFractionDigits:0}) + '</div>' +
@@ -2130,12 +2130,12 @@ window.renderPrimeCostView = () => {
 
     const weekRows = weeks.map(w =>
         '<tr style="border-bottom:1px solid var(--border);">' +
-        '<td style="padding:10px 15px;font-size:13px;color:var(--text-muted);">' + w.start + ' – ' + w.end + '</td>' +
-        '<td style="padding:10px 15px;font-weight:bold;">$' + Math.round(w.revenue).toLocaleString() + '</td>' +
-        '<td style="padding:10px 15px;color:var(--orange);">' + w.foodPct.toFixed(1) + '%</td>' +
-        '<td style="padding:10px 15px;color:var(--blue);">' + (w.labourPct !== null ? w.labourPct.toFixed(1)+'%' : '<span style="color:var(--text-muted);">No wage data</span>') + '</td>' +
-        '<td style="padding:10px 15px;font-weight:bold;font-size:16px;color:' + pcColor(w.primeCost) + ';">' + (w.primeCost !== null ? w.primeCost.toFixed(1)+'%' : '—') + '</td>' +
-        '<td style="padding:10px 15px;font-size:12px;color:' + pcColor(w.primeCost) + ';">' + pcLabel(w.primeCost) + '</td>' +
+        '<td style="padding:7px 12px;font-size:12px;color:var(--text-muted);">' + w.start + ' – ' + w.end + '</td>' +
+        '<td style="padding:7px 12px;font-weight:bold;font-size:13px;">$' + Math.round(w.revenue).toLocaleString() + '</td>' +
+        '<td style="padding:7px 12px;font-size:12px;color:var(--orange);">' + w.foodPct.toFixed(1) + '%</td>' +
+        '<td style="padding:7px 12px;font-size:12px;color:var(--blue);">' + (w.labourPct !== null ? w.labourPct.toFixed(1)+'%' : '<span style="color:var(--text-muted);">No wage data</span>') + '</td>' +
+        '<td style="padding:7px 12px;font-weight:bold;font-size:14px;color:' + pcColor(w.primeCost) + ';">' + (w.primeCost !== null ? w.primeCost.toFixed(1)+'%' : '—') + '</td>' +
+        '<td style="padding:7px 12px;font-size:11px;color:' + pcColor(w.primeCost) + ';">' + pcLabel(w.primeCost) + '</td>' +
         '</tr>'
     ).join('');
 
@@ -2147,7 +2147,7 @@ window.renderPrimeCostView = () => {
         '</div>' +
 
         // KPI Cards
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:15px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Food Cost %</div>' +
                 '<div style="font-size:32px;font-weight:bold;color:var(--orange);">' + foodCostPct.toFixed(1) + '%</div>' +
@@ -2315,7 +2315,7 @@ window.renderManagerHub = () => {
     '</div>' : '';
 
     return `<div style="max-width: 1100px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <h2 style="margin:0; font-size:22px;">Command Center</h2>
             <div style="text-align:right;">
                 <div style="color:var(--brand-dark); font-size:16px; font-weight:bold;">${today.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
@@ -2403,7 +2403,7 @@ window.renderHandoverView = () => {
         }).join('');
 
     return `<div style="max-width:900px;margin:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
             <div>
                 <h2 style="margin:0;">📝 Shift Debrief</h2>
                 <small style="color:var(--text-muted);">End of night handover — for opening staff, managers and ownership.</small>
@@ -2716,7 +2716,7 @@ window.viewSOP = (i) => {
             </div>
         </div>
         <h2 style="margin:0 0 8px 0;">${k.title}</h2>
-        <div style="display:flex;gap:8px;margin-bottom:25px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
             <span class="tag-pill" style="margin:0;">${k.category || 'General'}</span>
             ${k.lastModified ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Last updated: ${k.lastModified}</span>` : ''}
         </div>
