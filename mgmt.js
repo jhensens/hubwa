@@ -663,9 +663,10 @@ window._staffHubTab = window._staffHubTab || 'directory';
 window.renderStaffHubView = function() {
     const tab = window._staffHubTab;
     const tabs = [
-        { id: 'directory', label: '👥 Directory', view: 'staff-directory' },
-        { id: 'onboarding', label: '🤝 Onboarding', view: 'orientation' },
-        { id: 'phonebook', label: '📞 Phonebook', view: 'phonebook' }
+        { id: 'directory', label: '👥 Directory' },
+        { id: 'onboarding', label: '🤝 Onboarding' },
+        { id: 'qualifications', label: '🎓 Qualifications' },
+        { id: 'phonebook', label: '📞 Phonebook' }
     ];
     const tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
         tabs.map(t => `<span class="tag-pill ${tab===t.id?'active':''}" onclick="window._staffHubTab='${t.id}';window.showView('orientation');">${t.label}</span>`).join('') +
@@ -674,18 +675,142 @@ window.renderStaffHubView = function() {
     let content = '';
     if (tab === 'directory') content = window.renderStaffDirectoryView ? window.renderStaffDirectoryView() : '';
     else if (tab === 'onboarding') content = window.renderOrientationView ? window.renderOrientationView() : '';
+    else if (tab === 'qualifications') content = window.renderQualificationsView ? window.renderQualificationsView() : '';
     else if (tab === 'phonebook') content = window.renderPhoneBookView ? window.renderPhoneBookView() : '';
 
     return `<div style="max-width:1100px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
             <div>
                 <h2 style="margin:0;">👥 Staff Hub</h2>
-                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Team directory, onboarding, and contacts</div>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Team directory, onboarding, qualifications, and contacts</div>
             </div>
         </div>
         ${tabBar}
         ${content}
     </div>`;
+};
+
+// --- QUALIFICATIONS MATRIX VIEW ---
+window.renderQualificationsView = function() {
+    const staff = (window.staffDirectory||[]).filter(s => s.status !== 'Inactive');
+    const quals = window.qualificationTypes || [];
+    const now = new Date();
+
+    const getStatus = (q, qt) => {
+        if (!q) return { cls: 'qual-none', label: 'Not Set' };
+        if (!qt.expiryRequired) return q.verified ? { cls: 'qual-valid', label: 'Verified' } : { cls: 'qual-expiring', label: 'Pending' };
+        if (!q.expiry) return { cls: 'qual-none', label: 'No Date' };
+        const days = (new Date(q.expiry) - now) / 86400000;
+        if (days < 0) return { cls: 'qual-expired', label: 'Expired' };
+        if (days <= 30) return { cls: 'qual-expiring', label: Math.ceil(days) + 'd left' };
+        return { cls: 'qual-valid', label: q.expiry };
+    };
+
+    if (staff.length === 0) {
+        return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">' +
+            '<div style="font-size:36px;margin-bottom:12px;">🎓</div>' +
+            '<div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No active staff</div>' +
+            '<div style="font-size:13px;">Add staff in the Directory tab first.</div></div>';
+    }
+
+    // Summary stats
+    let totalExpired = 0, totalExpiring = 0, totalOk = 0;
+    staff.forEach(s => {
+        quals.forEach(qt => {
+            const q = (s.qualifications||{})[qt.id];
+            const st = getStatus(q, qt);
+            if (st.cls === 'qual-expired') totalExpired++;
+            else if (st.cls === 'qual-expiring') totalExpiring++;
+            else if (st.cls === 'qual-valid') totalOk++;
+        });
+    });
+
+    const summary = '<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">' +
+        '<div class="card" style="flex:1;min-width:120px;padding:12px;text-align:center;border-left:3px solid var(--green);"><div style="font-size:24px;font-weight:700;color:var(--green);">' + totalOk + '</div><div style="font-size:11px;color:var(--text-muted);">Valid</div></div>' +
+        '<div class="card" style="flex:1;min-width:120px;padding:12px;text-align:center;border-left:3px solid var(--orange);"><div style="font-size:24px;font-weight:700;color:var(--orange);">' + totalExpiring + '</div><div style="font-size:11px;color:var(--text-muted);">Expiring Soon</div></div>' +
+        '<div class="card" style="flex:1;min-width:120px;padding:12px;text-align:center;border-left:3px solid var(--red);"><div style="font-size:24px;font-weight:700;color:var(--red);">' + totalExpired + '</div><div style="font-size:11px;color:var(--text-muted);">Expired</div></div>' +
+    '</div>';
+
+    // Matrix table
+    const thead = '<th style="padding:8px 12px;text-align:left;">Staff</th>' +
+        quals.map(qt => '<th style="padding:8px 12px;text-align:center;font-size:11px;">' + esc(qt.name) + '</th>').join('') +
+        '<th style="padding:8px 12px;"></th>';
+
+    const tbody = staff.map((s, i) => {
+        const cells = quals.map(qt => {
+            const q = (s.qualifications||{})[qt.id];
+            const st = getStatus(q, qt);
+            return '<td style="padding:8px 12px;text-align:center;"><span class="' + st.cls + '">' + st.label + '</span></td>';
+        }).join('');
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:8px 12px;"><strong style="font-size:13px;">' + esc(s.name) + '</strong><br><small style="color:var(--text-muted);">' + esc(s.role||'') + '</small></td>' +
+            cells +
+            '<td style="padding:8px 12px;text-align:right;"><button onclick="window.editStaffForm(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">✏️ Edit</button></td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
+        '<div style="font-size:14px;font-weight:600;">Qualification Status Matrix</div>' +
+        '<button onclick="window.editQualTypes()" class="btn btn-outline" style="font-size:12px;">⚙️ Edit Qualification Types</button>' +
+    '</div>' +
+    summary +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+        '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' + thead + '</tr></thead>' +
+        '<tbody>' + tbody + '</tbody>' +
+        '</table>' +
+    '</div>';
+};
+
+// --- EDIT QUALIFICATION TYPES ---
+window.editQualTypes = () => {
+    const quals = window.qualificationTypes || [];
+    const rows = quals.map((qt, i) =>
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:8px;background:var(--bg-main);border-radius:6px;">' +
+            '<input type="text" id="qt-name-' + i + '" class="input-box" value="' + esc(qt.name) + '" style="flex:2;margin:0;font-size:13px;">' +
+            '<label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" id="qt-exp-' + i + '" ' + (qt.expiryRequired?'checked':'') + '> Expiry Date</label>' +
+            '<button onclick="window.delQualType(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button>' +
+        '</div>'
+    ).join('');
+
+    const html = rows +
+        '<div style="display:flex;gap:8px;margin-top:12px;">' +
+            '<input type="text" id="qt-new-name" class="input-box" placeholder="New qualification name..." style="flex:2;margin:0;">' +
+            '<label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" id="qt-new-exp" checked> Expiry Date</label>' +
+            '<button onclick="window.addQualType()" class="btn btn-blue" style="padding:6px 14px;">+ Add</button>' +
+        '</div>' +
+        '<button onclick="window.saveQualTypes()" class="btn btn-green" style="width:100%;margin-top:15px;">Save Qualification Types</button>';
+    window.openModal('⚙️ Edit Qualification Types', html);
+};
+
+window.addQualType = () => {
+    const name = document.getElementById('qt-new-name').value.trim();
+    if (!name) return window.showToast('Name required.','error');
+    const exp = document.getElementById('qt-new-exp').checked;
+    const id = 'q_' + Date.now();
+    window.qualificationTypes.push({ id: id, name: name, expiryRequired: exp });
+    window.saveToDisk();
+    window.editQualTypes(); // Refresh the modal
+};
+
+window.delQualType = (i) => {
+    window.qualificationTypes.splice(i, 1);
+    window.saveToDisk();
+    window.editQualTypes();
+};
+
+window.saveQualTypes = () => {
+    const quals = window.qualificationTypes || [];
+    quals.forEach((qt, i) => {
+        const nameEl = document.getElementById('qt-name-' + i);
+        const expEl = document.getElementById('qt-exp-' + i);
+        if (nameEl) qt.name = nameEl.value.trim() || qt.name;
+        if (expEl) qt.expiryRequired = expEl.checked;
+    });
+    window.saveToDisk();
+    window.closeModal();
+    window.showView('orientation');
+    window.showToast('Qualification types saved!');
 };
 
 window.renderOrientationView = function(showCompleted = false) {
@@ -736,7 +861,7 @@ window.editOnbTemplates = () => {
     window.openModal("⚙️ Edit Training Templates", html + `<button onclick="window.closeModal(); window.showView('orientation')" class="btn btn-blue" style="width:100%; margin-top:15px;">Done</button>`);
 };
 window.addOnbTask = (role, phase) => { const val = document.getElementById(`nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}`).value; if(val) { window.onboardingTemplates[role][phase].push({id: 't_' + Date.now(), label: val}); window.saveToDisk(); window.editOnbTemplates(); } };
-window.delOnbTask = (role, phase, idx) => { if(confirm("Delete this training task?")) { window.onboardingTemplates[role][phase].splice(idx, 1); window.saveToDisk(); window.editOnbTemplates(); } };
+window.delOnbTask = (role, phase, idx) => { window.confirmAction({ title:'Delete Training Task', message:'Remove this task from the template?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.onboardingTemplates[role][phase].splice(idx, 1); window.saveToDisk(); window.editOnbTemplates(); } }); };
 
 window.addOrientationForm = () => { 
     let html = `<input type="text" id="o-name" class="input-box" placeholder="Staff Name" style="margin-bottom:15px;"><label style="font-size:11px; color:var(--text-muted);">Role / Department</label><select id="o-role" class="input-box" style="margin-bottom:15px;"><option>FOH (Front of House)</option><option>BOH (Back of House)</option></select><label style="font-size:11px; color:var(--text-muted);">Start Date</label><input type="date" id="o-date" value="${new Date().toISOString().split('T')[0]}" class="input-box" style="margin-bottom:20px;"><button onclick="window.submitOrientation()" class="btn btn-green" style="width:100%;">Create Training Profile</button>`;
@@ -758,7 +883,7 @@ window.handleStaffUpload = async (index, taskId, category, inputElem) => {
 };
 window.signOrientation = (index) => { const sigName = document.getElementById(`sig-${index}`).value; if(!sigName) return window.showToast("Please type your name.", "error"); window.orientationLogs[index].signature = sigName; window.orientationLogs[index].signDate = new Date().toLocaleString(); window.saveToDisk(); window.showView('orientation'); };
 window.completeOrientation = (index) => { window.orientationLogs[index].status = 'Completed'; window.saveToDisk(); window.showView('orientation'); window.showToast("Staff Fully Trained!"); };
-window.deleteOrientation = (index) => { if(confirm("Remove this staff member's training record?")) { window.orientationLogs.splice(index, 1); window.saveToDisk(); window.showView('orientation'); } };
+window.deleteOrientation = (index) => { window.confirmAction({ title:'Remove Training Record', message:'Remove this staff member\'s training record? This cannot be undone.', confirmLabel:'Remove', tier:'standard', onConfirm:() => { window.orientationLogs.splice(index, 1); window.saveToDisk(); window.showView('orientation'); } }); };
 
 // --- 3. ROTATIONAL TASKS ---
 window.renderTaskView = function() {
@@ -946,7 +1071,7 @@ window._confirmTaskLog = (i, staff, mode) => {
     window.saveToDisk(); window.closeModal(); window.showView('tasks'); window.showToast('Task logged!');
 };
 
-window.delTask = (i) => { if(confirm('Delete this task?')) { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); }};
+window.delTask = (i) => { window.confirmAction({ title:'🔄 Delete Task', message:'Delete this rotational task?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.rotationalTasks.splice(i,1); window.saveToDisk(); window.showView('tasks'); } }); };
 
 // --- 4. COMPLIANCE ---
 
@@ -1232,7 +1357,7 @@ window.editChecklists = () => {
     window.openModal("⚙️ Edit Checklists", html);
 };
 window.addChecklistCat = () => { const v = document.getElementById('new-cat').value; if(v && !window.masterChecklists[v]) { window.masterChecklists[v] = []; window.saveToDisk(); window.editChecklists(); } };
-window.delChecklistCat = (cat) => { if(confirm("Delete entire category?")) { delete window.masterChecklists[cat]; window.saveToDisk(); window.editChecklists(); window.showView('compliance'); } };
+window.delChecklistCat = (cat) => { window.confirmAction({ title:'Delete Checklist Category', message:'Delete the entire <strong>' + window.esc(cat) + '</strong> category? All items in it will be lost.', confirmLabel:'Delete Category', tier:'dangerous', onConfirm:() => { delete window.masterChecklists[cat]; window.saveToDisk(); window.editChecklists(); window.showView('compliance'); } }); };
 window.addChecklistItem = (cat) => { const v = document.getElementById(`add-item-${cat.replace(/\s/g,'')}`).value; if(v) { window.masterChecklists[cat].push(v); window.saveToDisk(); window.editChecklists(); window.showView('compliance'); } };
 window.delChecklistItem = (cat, idx) => { window.masterChecklists[cat].splice(idx, 1); window.saveToDisk(); window.editChecklists(); window.showView('compliance'); };
 
@@ -1323,7 +1448,7 @@ window.editEq = (i = null) => {
 };
 window.subEq = (i) => { let obj = { name: document.getElementById('eq-n').value, code: document.getElementById('eq-c').value, interval: document.getElementById('eq-i').value || 6, lastService: document.getElementById('eq-d').value || new Date().toISOString().split('T')[0] }; if (i !== null) window.equipmentData[i] = obj; else window.equipmentData.push(obj); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); window.showToast("Asset Saved!"); };
 window.logEq = (i) => { window.equipmentData[i].lastService = new Date().toISOString().split('T')[0]; window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); window.showToast("Service Logged!"); };
-window.delEq = (i) => { if(confirm("Remove this asset?")) { window.equipmentData.splice(i,1); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); } };
+window.delEq = (i) => { window.confirmAction({ title:'🛠️ Remove Asset', message:'Remove this asset from tracking?', confirmLabel:'Remove', tier:'standard', onConfirm:() => { window.equipmentData.splice(i,1); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets'); } }); };
 
 window.renderContractorBoard = () => {
     const active = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => !c.timeOut);
@@ -1529,12 +1654,11 @@ window.addSafeCat = () => {
     window.editSafeCategories();
 };
 window.delSafeCat = (i) => {
-    if (confirm('Delete this category? Documents in it will move to General / Other.')) {
-        const cat = window.safeCategories[i];
-        window.digitalSafe.forEach(d => { if (d.category === cat) d.category = 'General / Other'; });
-        window.safeCategories.splice(i, 1);
-        window.saveToDisk(); window.editSafeCategories();
-    }
+    window.confirmAction({
+        title: '📁 Delete Category', message: 'Delete this category? Documents in it will move to <strong>General / Other</strong>.',
+        confirmLabel: 'Delete Category', tier: 'standard',
+        onConfirm: () => { const cat = window.safeCategories[i]; window.digitalSafe.forEach(d => { if (d.category === cat) d.category = 'General / Other'; }); window.safeCategories.splice(i, 1); window.saveToDisk(); window.editSafeCategories(); }
+    });
 };
 
 window.bulkUploadForm = () => {
@@ -1639,7 +1763,7 @@ window.subDoc = async () => {
     }
 };
 window.delDoc = (i) => {
-    if (confirm('Delete this document permanently?')) { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); }
+    window.confirmAction({ title:'🔒 Delete Document', message:'Permanently delete this document from the Digital Safe?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); } });
 };
 
 window.editDocForm = (i) => {
@@ -1878,11 +2002,38 @@ window.editStaffForm = (idx) => {
         '<select id="sd-status" class="input-box"><option ' + (s.status==='Active'?'selected':'') + '>Active</option><option ' + (s.status==='Inactive'?'selected':'') + '>Inactive</option><option ' + (s.status==='Casual'?'selected':'') + '>Casual</option></select>' +
         '<label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
         '<textarea id="sd-notes" class="input-box" style="height:60px;margin-bottom:15px;">' + esc(s.notes||'') + '</textarea>' +
+        // Qualification expiry fields
+        '<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:15px;">' +
+        '<label style="font-size:12px;font-weight:600;color:var(--text-main);margin-bottom:8px;display:block;">🎓 Qualifications</label>' +
+        (window.qualificationTypes||[]).map(qt => {
+            const q = (s.qualifications||{})[qt.id] || {};
+            return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;">' +
+                '<label style="font-size:12px;color:var(--text-muted);width:160px;flex-shrink:0;">' + esc(qt.name) + '</label>' +
+                (qt.expiryRequired
+                    ? '<input type="date" id="sq-' + qt.id + '" class="input-box" value="' + (q.expiry||'') + '" style="margin:0;flex:1;">'
+                    : '<select id="sq-' + qt.id + '" class="input-box" style="margin:0;flex:1;"><option value="">Not provided</option><option value="yes" ' + (q.verified?'selected':'') + '>Verified</option><option value="pending">Pending</option></select>'
+                ) +
+                '</div>';
+        }).join('') +
+        '</div>' +
         '<button onclick="window.saveStaff(' + (isEdit?idx:'undefined') + ')" class="btn btn-green" style="width:100%;">' + (isEdit?'Save Changes':'Add Staff Member') + '</button>';
     window.openModal(isEdit ? '✏️ Edit — ' + esc(s.name) : '+ New Staff Member', html);
 };
 
 window.saveStaff = (idx) => {
+    // Collect qualification data
+    const quals = {};
+    (window.qualificationTypes||[]).forEach(qt => {
+        const el = document.getElementById('sq-' + qt.id);
+        if (!el) return;
+        if (qt.expiryRequired) {
+            if (el.value) quals[qt.id] = { expiry: el.value, verified: true };
+        } else {
+            if (el.value === 'yes') quals[qt.id] = { verified: true };
+            else if (el.value === 'pending') quals[qt.id] = { verified: false };
+        }
+    });
+    const existing = (idx !== undefined && idx !== 'undefined') ? (window.staffDirectory||[])[idx] : {};
     const obj = {
         name: document.getElementById('sd-name').value.trim(),
         role: document.getElementById('sd-role').value,
@@ -1891,7 +2042,8 @@ window.saveStaff = (idx) => {
         emergency: document.getElementById('sd-emerg').value.trim(),
         startDate: document.getElementById('sd-start').value,
         status: document.getElementById('sd-status').value,
-        notes: document.getElementById('sd-notes').value.trim()
+        notes: document.getElementById('sd-notes').value.trim(),
+        qualifications: quals
     };
     if (!obj.name) return window.showToast('Name required.','error');
     if (!window.staffDirectory) window.staffDirectory = [];
@@ -1902,10 +2054,9 @@ window.saveStaff = (idx) => {
 };
 
 window.delStaff = (i) => {
-    if (confirm('Remove this staff member?')) {
-        window.staffDirectory.splice(i,1);
-        window.saveToDisk(); window.showView('staff-directory');
-    }
+    window.confirmAction({ title:'👥 Remove Staff', message:'Remove this staff member from the directory?', confirmLabel:'Remove', tier:'standard',
+        onConfirm:() => { window.staffDirectory.splice(i,1); window.saveToDisk(); window.showView('staff-directory'); }
+    });
 };
 
 window.renderPhoneBookView = function() { 
@@ -1916,8 +2067,8 @@ window.addContact = () => {
     let html = `<input type="text" id="c-n" class="input-box" placeholder="Name"><select id="c-c" class="input-box"><option>Staff</option><option>Tradie / Maintenance</option><option>Service Provider</option><option>Other</option></select><input type="text" id="c-p" class="input-box" placeholder="Phone or Email"><textarea id="c-notes" class="input-box" placeholder="Notes..." style="height:80px; margin-bottom:20px;"></textarea><button onclick="window.subContact()" class="btn btn-green" style="width:100%;">Save Contact</button>`;
     window.openModal("📞 New Contact", html);
 };
-window.subContact = () => { window.phoneBook.push({ name: document.getElementById('c-n').value, category: document.getElementById('c-c').value, phone: document.getElementById('c-p').value, notes: document.getElementById('c-notes').value }); window.saveToDisk(); window.closeModal(); window.showView('phonebook'); window.showToast("Contact Saved!"); };
-window.delContact = (i) => { if(confirm("Delete this contact?")) { window.phoneBook.splice(i,1); window.saveToDisk(); window.showView('phonebook'); } };
+window.subContact = () => { const name = document.getElementById('c-n').value.trim(); if (!name) return window.showToast('Contact name is required.','error'); window.phoneBook.push({ name: name, category: document.getElementById('c-c').value.trim(), phone: document.getElementById('c-p').value.trim(), notes: document.getElementById('c-notes').value.trim() }); window.saveToDisk(); window.closeModal(); window.showView('phonebook'); window.showToast("Contact Saved!"); };
+window.delContact = (i) => { window.confirmAction({ title:'📞 Delete Contact', message:'Remove this contact from the phonebook?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.phoneBook.splice(i,1); window.saveToDisk(); window.showView('phonebook'); } }); };
 
 // --- 8. INCIDENT LOG ---
 window.renderIncidentView = function() {
@@ -2996,12 +3147,11 @@ window.addKbCat = () => {
     window.editKbCategories();
 };
 window.delKbCat = (i) => {
-    if (confirm('Delete this category? SOPs in it will move to General.')) {
-        const cat = window.kbCategories[i];
-        (window.knowledgeBase || []).forEach(k => { if (k.category === cat) k.category = 'General'; });
-        window.kbCategories.splice(i, 1);
-        window.saveToDisk(); window.editKbCategories();
-    }
+    window.confirmAction({
+        title: '📚 Delete Category', message: 'Delete this category? SOPs in it will move to <strong>General</strong>.',
+        confirmLabel: 'Delete Category', tier: 'standard',
+        onConfirm: () => { const cat = window.kbCategories[i]; (window.knowledgeBase || []).forEach(k => { if (k.category === cat) k.category = 'General'; }); window.kbCategories.splice(i, 1); window.saveToDisk(); window.editKbCategories(); }
+    });
 };
 
 window.newSOPForm = () => {
@@ -3127,10 +3277,9 @@ window.updateSOP = async (i) => {
 };
 
 window.deleteSOP = (i) => {
-    if (confirm('Delete this SOP?')) {
-        window.knowledgeBase.splice(i, 1);
-        window.saveToDisk(); window.showView('knowledge'); window.showToast('SOP Deleted.');
-    }
+    window.confirmAction({ title:'📚 Delete SOP', message:'Permanently delete this SOP?', confirmLabel:'Delete', tier:'standard',
+        onConfirm:() => { window.knowledgeBase.splice(i, 1); window.saveToDisk(); window.showView('knowledge'); window.showToast('SOP Deleted.'); }
+    });
 };
 
 
@@ -3156,4 +3305,4 @@ window.handleRosterUpload = async (e) => {
         window.shiftRosters.push({ name: weekName, date: new Date().toLocaleDateString(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster Uploaded successfully!");
     } catch(err) { console.error("Upload failed", err); window.showToast("Upload failed.", "error"); }
 };
-window.deleteRoster = (i) => { if(confirm("Delete roster?")) { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } };
+window.deleteRoster = (i) => { window.confirmAction({ title:'🗓️ Delete Roster', message:'Delete this roster?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } }); };

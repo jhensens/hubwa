@@ -17,7 +17,7 @@
     
     /* Text */
     --text-main: #e4e4e7;
-    --text-muted: #71717a;
+    --text-muted: #a1a1aa;
 }
 
 body { 
@@ -544,6 +544,19 @@ table .btn {
     font-size: 13px;
 }
 .focus-item:hover { background: rgba(255,255,255,0.04); }
+
+/* PIN Pad Dots */
+.pin-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border); background: transparent;
+    transition: all 0.15s ease;
+}
+
+/* Qualification status badges */
+.qual-valid { background: rgba(16,185,129,0.12); color: var(--green); padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.qual-expiring { background: rgba(245,158,11,0.12); color: var(--orange); padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.qual-expired { background: rgba(239,68,68,0.12); color: var(--red); padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.qual-none { background: rgba(161,161,170,0.1); color: var(--text-muted); padding: 3px 10px; border-radius: 20px; font-size: 11px; }
 
 /* Mobile touch target overrides */
 @media (max-width: 768px) {

@@ -153,12 +153,12 @@ window.saveZone = (i) => {
 
 window.deleteZone = (i) => {
     const z = window.storageZones[i];
-    if (confirm(`Delete zone "${z.name}"? Items using this zone will show as Unassigned.`)) {
-        window.storageZones.splice(i, 1);
-        window.saveToDisk();
-        window.showView('zones');
-        window.showToast("Zone deleted.");
-    }
+    window.confirmAction({
+        title: '🗄️ Delete Zone',
+        message: 'Delete zone <strong>' + window.esc(z.name) + '</strong>? Items using this zone will show as Unassigned.',
+        confirmLabel: 'Delete', tier: 'standard',
+        onConfirm: () => { window.storageZones.splice(i, 1); window.saveToDisk(); window.showView('zones'); window.showToast('Zone deleted.'); }
+    });
 };
 
 // Zones view is registered in core.js router — no patch needed here
@@ -272,9 +272,9 @@ window.editSupplierForm = (i = null) => {
 window.subSupplier = (i) => {
     let selectedDays = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter(d => document.getElementById(`sup-day-${d}`).checked);
     let obj = {
-        name: document.getElementById('sup-n').value,
-        contact: document.getElementById('sup-c').value,
-        cutoff: document.getElementById('sup-cut').value,
+        name: document.getElementById('sup-n').value.trim(),
+        contact: document.getElementById('sup-c').value.trim(),
+        cutoff: document.getElementById('sup-cut').value.trim(),
         minSpend: parseFloat(document.getElementById('sup-min').value) || 0,
         deliveryDays: selectedDays
     };
@@ -283,7 +283,12 @@ window.subSupplier = (i) => {
     window.saveToDisk(); window.showView('suppliers');
 };
 window.delSupplier = (i) => {
-    if (confirm("Delete Supplier?")) { window.suppliers.splice(i, 1); window.saveToDisk(); window.showView('suppliers'); }
+    window.confirmAction({
+        title: '🚚 Delete Supplier',
+        message: 'Remove this supplier? Inventory items linked to them will keep their data.',
+        confirmLabel: 'Delete', tier: 'standard',
+        onConfirm: () => { window.suppliers.splice(i, 1); window.saveToDisk(); window.showView('suppliers'); window.showToast('Supplier deleted.'); }
+    });
 };
 
 // =============================================================================
@@ -291,19 +296,19 @@ window.delSupplier = (i) => {
 // =============================================================================
 
 window.resetAllStock = () => {
-    let pin = localStorage.getItem('venuePin');
-    if (pin) {
-        let attempt = prompt("⚠️ DANGER: Enter Manager PIN to wipe ALL stock levels to 0.");
-        if (attempt !== pin) return window.showToast("Incorrect PIN.", "error");
-    } else {
-        if (!confirm("⚠️ DANGER: Wipe all stock levels to 0? (No Master PIN is set!)")) return;
-    }
-    if (!confirm("Are you absolutely sure? This keeps all items but resets stock to ZERO. Cannot be undone.")) return;
-    let count = 0;
-    (window.inventoryItems || []).forEach(i => { i.stock = 0; count++; });
-    window.saveToDisk();
-    window.showView('inventory');
-    window.showToast(`${count} items reset to 0 stock.`, "error");
+    window.confirmAction({
+        title: '⚠️ Reset All Stock',
+        message: 'This will set <strong>every item</strong> in inventory to <strong>0 stock</strong>.<br>All items are kept — only quantities are wiped.<br><br>This <strong>cannot be undone</strong>.',
+        confirmLabel: 'Reset All Stock',
+        confirmColor: 'var(--red)',
+        tier: 'dangerous',
+        onConfirm: () => {
+            let count = 0;
+            (window.inventoryItems || []).forEach(i => { i.stock = 0; count++; });
+            window.saveToDisk(); window.showView('inventory');
+            window.showToast(count + ' items reset to 0 stock.', 'error');
+        }
+    });
 };
 
 window.invFilters = window.invFilters || { search: '', filter: 'Active', groupBy: 'Category' };
@@ -438,7 +443,7 @@ window.renderInventoryView = () => {
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
         </div>
-        <input type="text" class="search-bar" id="inv-search-box" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window._refreshInvList()">
+        <input type="text" class="search-bar" id="inv-search-box" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window._debouncedInvRefresh()">
         <div style="margin-bottom:15px;">${pillsHtml}</div>
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:15px; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted); align-self:center;">Group By:</span>
@@ -466,9 +471,17 @@ window._invBulkAction = (action) => {
     const ids = [...window._invSelected];
     if (!ids.length) return;
     if (action === 'delete') {
-        if (!confirm('Permanently delete ' + ids.length + ' items? This cannot be undone.')) return;
-        window.inventoryItems = window.inventoryItems.filter(i => !ids.includes(i.id));
-        window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items deleted.'); window.showView('inventory'); return;
+        window.confirmAction({
+            title: '🗑️ Bulk Delete',
+            message: 'Permanently delete <strong>' + ids.length + ' items</strong>? This cannot be undone.',
+            confirmLabel: 'Delete ' + ids.length + ' Items',
+            tier: 'dangerous',
+            onConfirm: () => {
+                window.inventoryItems = window.inventoryItems.filter(i => !ids.includes(i.id));
+                window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items deleted.'); window.showView('inventory');
+            }
+        });
+        return;
     }
     if (action === 'archive') {
         ids.forEach(id => { const it = window.inventoryItems.find(i=>i.id===id); if(it) it.archived=true; });
@@ -569,14 +582,16 @@ window.editInvItem = (id = null) => {
 };
 
 window.subInvItem = (id, addAnother, isModal = false) => {
+    const nameVal = document.getElementById('iv-n').value.trim();
+    if (!nameVal) return window.showToast('Item name is required.', 'error');
     let existingIdx = window.inventoryItems.findIndex(i => i.id === id);
     const price = parseFloat(document.getElementById('iv-p').value) || 0;
     let obj = {
         id: id,
-        name: document.getElementById('iv-n').value,
-        category: document.getElementById('iv-cat').value,
-        sku: document.getElementById('iv-sku').value,
-        supplier: document.getElementById('iv-s').value,
+        name: nameVal,
+        category: document.getElementById('iv-cat').value.trim(),
+        sku: document.getElementById('iv-sku').value.trim(),
+        supplier: document.getElementById('iv-s').value.trim(),
         price: price,
         location: document.getElementById('iv-loc').value,
         subcategory: document.getElementById('iv-subcat') ? document.getElementById('iv-subcat').value : '',
@@ -1035,6 +1050,7 @@ window.recFilters = window.recFilters || { search: '', filter: 'All', station: '
 // SEARCH REFRESH HELPERS — update list only, no full page re-render
 // Fixes the "click per letter" bug in search bars
 // -----------------------------------------------------------------------
+window._debouncedInvRefresh = window.debounce ? window.debounce(() => window._refreshInvList(), 250) : () => window._refreshInvList();
 window._refreshInvList = () => {
     const container = document.getElementById('inv-list-container');
     if (!container) { window.showView('inventory'); return; }
@@ -1696,11 +1712,13 @@ window.uploadRecipePhoto = async (recipeId, input) => {
 };
 
 window.subRecipe = (id, totalCost) => {
+    const recipeName = document.getElementById('r-n').value.trim();
+    if (!recipeName) return window.showToast('Recipe name is required.', 'error');
     const existingIdx = window.recipes.findIndex(x=>x.id===id);
     const type = document.getElementById('r-type').value;
     const oldRecipe = existingIdx>=0 ? window.recipes[existingIdx] : {};
     const obj = {
-        id, name: document.getElementById('r-n').value,
+        id, name: recipeName,
         posAlias: type!=='Batch'&&document.getElementById('r-pos')?document.getElementById('r-pos').value:'',
         type, station: document.getElementById('r-station').value, status: document.getElementById('r-status').value,
         ingredients: window.tempIngs, cost: totalCost, method: document.getElementById('r-m').value,
@@ -1718,10 +1736,12 @@ window.subRecipe = (id, totalCost) => {
 };
 
 window.delRecipe = (id) => {
-    if (confirm("Permanently delete this recipe?")) {
-        window.recipes=window.recipes.filter(x=>x.id!==id);
-        window.tempRecipeId=null; window.saveToDisk(); window.showToast("Recipe deleted."); window.showView('recipes');
-    }
+    window.confirmAction({
+        title: '⚖️ Delete Recipe',
+        message: 'Permanently delete this recipe? This cannot be undone.',
+        confirmLabel: 'Delete', tier: 'standard',
+        onConfirm: () => { window.recipes=window.recipes.filter(x=>x.id!==id); window.tempRecipeId=null; window.saveToDisk(); window.showToast('Recipe deleted.'); window.showView('recipes'); }
+    });
 };
 
 // =============================================================================
@@ -3648,15 +3668,21 @@ window._commitInvoice = () => {
     const isHistorical = daysDiff > 7;
 
     if (isHistorical) {
-        const msg = 'This invoice is dated ' + (ai.date||'unknown') + ' (' + daysDiff + ' days ago).\n\n' +
-            'HISTORICAL INVOICE MODE:\n' +
-            '\u2713 Price history will be updated\n' +
-            '\u2713 Item prices updated\n' +
-            '\u2717 Stock levels will NOT change\n\n' +
-            'This prevents inflating stock from old invoices. Proceed?';
-        if (!confirm(msg)) return;
+        window.confirmAction({
+            title: '📜 Historical Invoice',
+            message: 'This invoice is dated <strong>' + window.esc(ai.date||'unknown') + '</strong> (' + daysDiff + ' days ago).<br><br>' +
+                '✓ Price history will be updated<br>✓ Item prices updated<br>✗ Stock levels will NOT change<br><br>' +
+                'This prevents inflating stock from old invoices.',
+            confirmLabel: 'Process Historical', confirmColor: 'var(--orange)', tier: 'standard',
+            onConfirm: () => window._doCommitInvoice(ai, state, true)
+        });
+        return;
     }
 
+    window._doCommitInvoice(ai, state, false);
+};
+
+window._doCommitInvoice = (ai, state, isHistorical) => {
     let updatedCount = 0, skippedCount = 0;
     const changedInvIds = [];
 

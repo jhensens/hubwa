@@ -29,6 +29,13 @@ window.shiftRosters = [];
 window.depletionLogs = [];
 window.orderHistory = [];
 window.staffDirectory = [];
+window.qualificationTypes = [
+    { id: 'rsa', name: 'RSA', expiryRequired: true },
+    { id: 'food-handler', name: 'Food Handler Certificate', expiryRequired: true },
+    { id: 'fire-warden', name: 'Fire Warden', expiryRequired: true },
+    { id: 'first-aid', name: 'First Aid', expiryRequired: true },
+    { id: 'police-check', name: 'Police Check', expiryRequired: false }
+];
 window.shiftChecklistItems = null;
 window.invoiceMatchMap = window.invoiceMatchMap || {};
 window.priceHistory = window.priceHistory || {};
@@ -83,6 +90,87 @@ window.closeModal = () => {
     if(overlay) overlay.style.display = 'none';
 };
 
+// --- 2b. AUTOFOCUS ON MODAL OPEN ---
+// After modal opens, focus first visible input/textarea/select
+window._autoFocusModal = () => {
+    setTimeout(() => {
+        const modal = document.getElementById('global-modal-content');
+        if (!modal) return;
+        const focusable = modal.querySelector('input[type="text"]:not([style*="display:none"]):not([type="hidden"]), textarea, select, input[type="number"], input[type="date"], input[type="email"], input[type="tel"]');
+        if (focusable) focusable.focus();
+    }, 80);
+};
+
+// Patch openModal to auto-focus
+const _origOpenModal = window.openModal;
+window.openModal = (titleHtml, bodyHtml) => {
+    _origOpenModal(titleHtml, bodyHtml);
+    window._autoFocusModal();
+};
+
+// --- 2c. STYLED CONFIRMATION SYSTEM ---
+// Three tiers: standard (just buttons), dangerous (PIN required), critical (PIN + type word)
+window.confirmAction = (opts) => {
+    // opts: { title, message, confirmLabel, confirmColor, tier, typeWord, onConfirm }
+    // tier: 'standard' | 'dangerous' | 'critical'
+    const tier = opts.tier || 'standard';
+    const confirmLabel = opts.confirmLabel || 'Confirm';
+    const confirmColor = opts.confirmColor || 'var(--red)';
+    const typeWord = opts.typeWord || 'WIPE';
+
+    let body = '<div style="margin-bottom:20px;color:var(--text-main);font-size:14px;line-height:1.6;">' + opts.message + '</div>';
+
+    if (tier === 'critical') {
+        body += '<div style="margin-bottom:16px;">' +
+            '<label style="font-size:12px;color:var(--text-muted);font-weight:600;">Type <strong style="color:var(--red);">' + typeWord + '</strong> to confirm:</label>' +
+            '<input type="text" id="confirm-type-input" class="input-box" style="margin-top:6px;" placeholder="Type ' + typeWord + ' here..." autocomplete="off">' +
+            '</div>';
+    }
+
+    body += '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+        '<button onclick="window.closeModal()" class="btn btn-outline" style="min-width:90px;">Cancel</button>' +
+        '<button id="confirm-action-btn" onclick="window._execConfirmAction()" class="btn" style="min-width:90px;background:' + confirmColor + ';color:#fff;border:none;font-weight:600;">' + confirmLabel + '</button>' +
+        '</div>';
+
+    window._pendingConfirmAction = opts.onConfirm;
+    window._pendingConfirmTier = tier;
+    window._pendingConfirmTypeWord = typeWord;
+
+    if (tier === 'dangerous' || tier === 'critical') {
+        // Require PIN first, then show the confirmation modal
+        window.requirePin(() => {
+            _origOpenModal(opts.title || '⚠️ Confirm Action', body);
+            window._autoFocusModal();
+        });
+    } else {
+        _origOpenModal(opts.title || 'Confirm', body);
+        window._autoFocusModal();
+    }
+};
+
+window._execConfirmAction = () => {
+    const tier = window._pendingConfirmTier;
+    if (tier === 'critical') {
+        const input = document.getElementById('confirm-type-input');
+        if (!input || input.value.trim().toUpperCase() !== window._pendingConfirmTypeWord) {
+            return window.showToast('Type ' + window._pendingConfirmTypeWord + ' to confirm.', 'error');
+        }
+    }
+    window.closeModal();
+    if (window._pendingConfirmAction) window._pendingConfirmAction();
+    window._pendingConfirmAction = null;
+};
+
+// --- 2d. DEBOUNCE UTILITY ---
+window.debounce = (fn, delay) => {
+    let timer;
+    return function() {
+        const args = arguments;
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+};
+
 // --- 3. KIOSK PIN SECURITY ---
 window.isLocked = !!localStorage.getItem('venuePin');
 window._lastActivity = Date.now();
@@ -123,35 +211,83 @@ window.checkLockState = () => {
     }
 };
 
+window._showPinModal = (title, subtitle, onSuccess) => {
+    window._pinBuffer = '';
+    window._pinCallback = onSuccess;
+    const body = '<div style="text-align:center;">' +
+        (subtitle ? '<p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;">' + subtitle + '</p>' : '') +
+        '<div id="pin-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;">' +
+            '<div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>' +
+        '</div>' +
+        '<div id="pin-error" style="color:var(--red);font-size:12px;min-height:20px;margin-bottom:12px;"></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;">' +
+            [1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k => {
+                if (k === '') return '<div></div>';
+                if (k === '⌫') return '<button onclick="window._pinKey(\'del\')" class="btn btn-outline" style="font-size:18px;padding:14px;border-radius:12px;">⌫</button>';
+                return '<button onclick="window._pinKey(\'' + k + '\')" class="btn btn-outline" style="font-size:20px;font-weight:600;padding:14px;border-radius:12px;">' + k + '</button>';
+            }).join('') +
+        '</div>' +
+    '</div>';
+    _origOpenModal(title, body);
+};
+
+window._pinKey = (key) => {
+    const errEl = document.getElementById('pin-error');
+    if (errEl) errEl.textContent = '';
+    if (key === 'del') {
+        window._pinBuffer = window._pinBuffer.slice(0, -1);
+    } else if (window._pinBuffer.length < 8) {
+        window._pinBuffer += key;
+    }
+    // Update dots
+    const dots = document.querySelectorAll('.pin-dot');
+    dots.forEach((d, i) => {
+        d.style.background = i < window._pinBuffer.length ? 'var(--brand-dark)' : 'transparent';
+        d.style.border = '2px solid ' + (i < window._pinBuffer.length ? 'var(--brand-dark)' : 'var(--border)');
+    });
+    // Auto-submit at 4+ digits after short delay
+    if (window._pinBuffer.length >= 4) {
+        setTimeout(() => {
+            if (window._pinCallback) window._pinCallback(window._pinBuffer);
+        }, 200);
+    }
+};
+
 window.requirePin = (onSuccess) => {
     const pin = localStorage.getItem('venuePin');
     if (!pin) { onSuccess(); return; }
     if (!window.isLocked) { onSuccess(); return; }
-    const attempt = prompt('Enter Manager PIN:');
-    if (attempt === null) return;
-    if (attempt === pin) {
-        window.isLocked = false;
-        window._lastActivity = Date.now();
-        window.checkLockState();
-        window.showToast('Hub unlocked.');
-        onSuccess();
-    } else {
-        alert('Incorrect PIN.');
-    }
+    window._showPinModal('🔒 Enter PIN', 'Manager PIN required to continue', (attempt) => {
+        if (attempt === pin) {
+            window.isLocked = false;
+            window._lastActivity = Date.now();
+            window.closeModal();
+            window.checkLockState();
+            window.showToast('Hub unlocked.');
+            onSuccess();
+        } else {
+            window._pinBuffer = '';
+            const dots = document.querySelectorAll('.pin-dot');
+            dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+            const errEl = document.getElementById('pin-error');
+            if (errEl) errEl.textContent = 'Incorrect PIN. Try again.';
+        }
+    });
 };
 
 window.toggleLock = () => {
     const pin = localStorage.getItem('venuePin');
     if (!pin) {
-        const newPin = prompt('Set a 4-digit Manager PIN:');
-        if (newPin && newPin.length >= 4) {
-            localStorage.setItem('venuePin', newPin);
-            window.isLocked = true;
-            window.checkLockState();
-            window.showToast('PIN set. Hub locked.');
-        } else if (newPin) {
-            alert('PIN must be at least 4 digits.');
-        }
+        // First time — set up PIN via styled modal
+        window._showPinModal('🔐 Set Manager PIN', 'Choose a 4+ digit PIN to secure restricted areas', (newPin) => {
+            if (newPin.length >= 4) {
+                localStorage.setItem('venuePin', newPin);
+                window.isLocked = true;
+                window.closeModal();
+                window.checkLockState();
+                window.showToast('PIN set. Hub locked.');
+            }
+        });
     } else if (window.isLocked) {
         window.requirePin(() => {});
     } else {
@@ -163,7 +299,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes'];
 
 
 // =============================================================================
@@ -251,20 +387,27 @@ window.renderVenueSwitcher = () => {
 
 window.wipeVenueData = () => {
     const v = window.getCurrentVenue();
-    if (!confirm('⚠️ WIPE ALL DATA for ' + v.name + '?\n\nThis will clear all inventory, recipes, takings, compliance logs, staff data and settings for this venue.\n\nThis CANNOT be undone.\n\nType OK to confirm.')) return;
-    // Clear all saveKeys for this venue
-    const vid = v.id;
-    window.saveKeys.forEach(k => {
-        const emptyVal = Array.isArray(window[k]) ? [] : (typeof window[k] === 'object' ? {} : '');
-        window[k] = emptyVal;
-        localStorage.removeItem(vid + '_' + k);
-        localStorage.removeItem(k); // also clear unversioned just in case
-    });
-    // Save clean state to Firebase
-    window.saveToDisk();
     window.closeModal();
-    window.showToast(v.name + ' data wiped. Starting fresh!');
-    setTimeout(() => location.reload(), 1000);
+    window.confirmAction({
+        title: '⚠️ Wipe All Data',
+        message: 'This will permanently delete <strong>all</strong> inventory, recipes, takings, compliance logs, staff data and settings for <strong>' + window.esc(v.name) + '</strong>.<br><br>This <strong>cannot be undone</strong>.',
+        confirmLabel: 'Wipe Everything',
+        confirmColor: 'var(--red)',
+        tier: 'critical',
+        typeWord: 'WIPE',
+        onConfirm: () => {
+            const vid = v.id;
+            window.saveKeys.forEach(k => {
+                const emptyVal = Array.isArray(window[k]) ? [] : (typeof window[k] === 'object' ? {} : '');
+                window[k] = emptyVal;
+                localStorage.removeItem(vid + '_' + k);
+                localStorage.removeItem(k);
+            });
+            window.saveToDisk();
+            window.showToast(v.name + ' data wiped. Starting fresh!');
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
 };
 
 window.switchVenue = (id) => {
@@ -278,12 +421,20 @@ window.switchVenue = (id) => {
 window.setDeviceVenue = (id) => {
     const venue = window._venues.find(v=>v.id===id);
     if (!venue) return;
-    if (!confirm('Set this device to always default to ' + venue.name + '?\nThis affects what staff see when they open the Hub.')) return;
-    localStorage.setItem('hubDeviceVenue', id);
-    localStorage.setItem('hubActiveVenue', id);
     window.closeModal();
-    window.showToast('Device set to ' + venue.name + '!');
-    setTimeout(() => location.reload(), 600);
+    window.confirmAction({
+        title: '🏢 Set Device Venue',
+        message: 'Set this device to always default to <strong>' + window.esc(venue.name) + '</strong>?<br>This affects what staff see when they open the Hub.',
+        confirmLabel: 'Set Default',
+        confirmColor: 'var(--blue)',
+        tier: 'standard',
+        onConfirm: () => {
+            localStorage.setItem('hubDeviceVenue', id);
+            localStorage.setItem('hubActiveVenue', id);
+            window.showToast('Device set to ' + venue.name + '!');
+            setTimeout(() => location.reload(), 600);
+        }
+    });
 };
 
 window.updateVenueBadge = () => {
@@ -511,8 +662,8 @@ window.importData = (event) => {
         try {
             const data = JSON.parse(e.target.result);
             window.saveKeys.forEach(k => { window[k] = data[k] || window[k]; });
-            window.saveToDisk(); alert("✅ Data successfully restored and beamed to Firebase Cloud!"); window.showView('dashboard');
-        } catch (err) { alert("Error importing file."); console.error(err); }
+            window.saveToDisk(); window.showToast('Data restored and synced to Firebase!'); window.showView('dashboard');
+        } catch (err) { window.showToast('Error importing file.', 'error'); console.error(err); }
     };
     reader.readAsText(file);
 };
@@ -755,6 +906,18 @@ window.getNotifications = function() {
         notifs.push({type:'maint', icon:'🛠️', text: (d.item || 'Issue') + ' — open ticket', view:'maintenance', priority:2});
     });
 
+    // Staff qualification expiry
+    (window.staffDirectory || []).forEach(s => {
+        if (!s.qualifications || s.status === 'Inactive') return;
+        (window.qualificationTypes || []).forEach(qt => {
+            const q = s.qualifications[qt.id];
+            if (!q || !q.expiry) return;
+            const daysLeft = (new Date(q.expiry) - now) / 86400000;
+            if (daysLeft < 0) notifs.push({type:'qual', icon:'🎓', text: (s.name||'Staff') + ' — ' + qt.name + ' EXPIRED', view:'orientation', priority:0});
+            else if (daysLeft <= 30) notifs.push({type:'qual', icon:'🎓', text: (s.name||'Staff') + ' — ' + qt.name + ' expires in ' + Math.ceil(daysLeft) + 'd', view:'orientation', priority:1});
+        });
+    });
+
     // HACCP breaches today
     (window.tempLogs || []).forEach(t => {
         if (t.time && t.time.includes && t.time.includes(todayStr) && parseFloat(t.value) > 5) {
@@ -823,6 +986,21 @@ document.addEventListener('DOMContentLoaded', () => {
     window.showView('dashboard');
     setTimeout(() => window.updateNotifBadge(), 500);
     setTimeout(() => window.loadTandaData(), 2000);
+
+    // Force PIN setup if no PIN exists
+    setTimeout(() => {
+        if (!localStorage.getItem('venuePin')) {
+            window._showPinModal('🔐 Setup Manager PIN', 'A PIN is required to secure restricted areas. Choose a 4+ digit PIN.', (newPin) => {
+                if (newPin.length >= 4) {
+                    localStorage.setItem('venuePin', newPin);
+                    window.isLocked = true;
+                    window.closeModal();
+                    window.checkLockState();
+                    window.showToast('PIN set! Hub is now secured.');
+                }
+            });
+        }
+    }, 800);
 
     // Then sync from Firebase in background and re-render if data differs
     if (typeof db !== 'undefined') {
