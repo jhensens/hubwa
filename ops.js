@@ -53,15 +53,15 @@ window.buildZoneSelect = (selectedZoneName = '', elId = 'iv-loc') => {
 window.renderZoneManager = () => {
     const zonesHtml = (window.storageZones || []).map((z, i) => `
         <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:12px 15px;"><strong>${z.name}</strong></td>
-            <td style="padding:12px 15px;">
+            <td style="padding:8px 12px;"><strong style="font-size:13px;">${z.name}</strong></td>
+            <td style="padding:8px 12px;">
                 <select onchange="window.storageZones[${i}].area = this.value; window.saveToDisk(); window.showView('zones');" class="input-box" style="margin:0; padding:6px; width:120px;">
                     <option ${z.area==='BOH'?'selected':''}>BOH</option>
                     <option ${z.area==='FOH'?'selected':''}>FOH</option>
                     <option ${z.area==='Other'?'selected':''}>Other</option>
                 </select>
             </td>
-            <td style="padding:12px 15px; text-align:right;">
+            <td style="padding:8px 12px; text-align:right;">
                 <button onclick="window.editZoneForm(${i})" class="btn btn-outline" style="font-size:11px; padding:5px 10px; margin-right:5px;">Rename</button>
                 <button onclick="window.deleteZone(${i})" class="btn btn-red" style="font-size:11px; padding:5px 10px;">Delete</button>
             </td>
@@ -151,11 +151,11 @@ window.renderSupplierView = () => {
     let content = activeTab === 'history' ? window.renderOrderHistory() : `
         <table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse; overflow:hidden;">
             <thead>
-                <tr style="text-align:left; border-bottom:1px solid var(--border); background:#111; font-size:13px;">
-                    <th style="padding:15px;">Supplier Name</th>
-                    <th style="padding:15px;">Contact Info</th>
-                    <th style="padding:15px;">Logistics</th>
-                    <th style="text-align:right; padding:15px;">Action</th>
+                <tr style="text-align:left; border-bottom:1px solid var(--border); background:#111; font-size:11px; text-transform:uppercase; color:var(--text-muted);">
+                    <th style="padding:8px 12px;">Supplier</th>
+                    <th style="padding:8px 12px;">Contact</th>
+                    <th style="padding:8px 12px;">Logistics</th>
+                    <th style="text-align:right; padding:8px 12px;">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -163,14 +163,14 @@ window.renderSupplierView = () => {
                     ? '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No suppliers added yet.</td></tr>'
                     : (window.suppliers||[]).map((s, i) => `
                     <tr style="border-bottom:1px solid var(--bg-main);">
-                        <td style="padding:15px;"><strong>${s.name}</strong></td>
-                        <td style="padding:15px; font-size:13px;">${s.contact || 'N/A'}</td>
-                        <td style="padding:15px; font-size:13px; color:var(--brand-accent);">
+                        <td style="padding:8px 12px;"><strong style="font-size:13px;">${s.name}</strong></td>
+                        <td style="padding:8px 12px; font-size:12px;">${s.contact || 'N/A'}</td>
+                        <td style="padding:8px 12px; font-size:12px; color:var(--brand-accent);">
                             Min Spend: <strong>$${s.minSpend || 0}</strong><br>
                             Cutoff: ${s.cutoff || 'N/A'}<br>
                             Days: ${s.deliveryDays && s.deliveryDays.length > 0 ? s.deliveryDays.join(', ') : 'All'}
                         </td>
-                        <td style="text-align:right; padding:15px;">
+                        <td style="text-align:right; padding:8px 12px;">
                             <button onclick="window.editSupplierForm(${i})" class="btn btn-outline" style="font-size:11px; padding:5px 10px;">Edit</button>
                             <button onclick="window.delSupplier(${i})" class="btn btn-red" style="font-size:11px; padding:5px 10px; margin-left:5px;">X</button>
                         </td>
@@ -201,7 +201,7 @@ window.renderOrderHistory = () => {
     }
     return history.map(o =>
         '<div class="card" style="margin-bottom:15px;border-top:4px solid var(--blue);">' +
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:6px;">' +
             '<div><strong style="font-size:16px;">' + o.supplier + '</strong><span style="color:var(--text-muted);font-size:12px;margin-left:10px;">' + o.date + '</span></div>' +
             '<div style="text-align:right;"><strong style="color:var(--green);font-size:18px;">$' + Number(o.estSpend||0).toFixed(2) + '</strong><div style="font-size:11px;color:var(--text-muted);">Est. · ' + (o.items||[]).length + ' items</div></div>' +
         '</div>' +
@@ -879,7 +879,7 @@ window.renderParEditor = () => {
             const parTarget = isWeekend ? parWe : parWd;
             const stockColor = stock < parTarget ? 'var(--red)' : 'var(--green)';
             return '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + item.name + '</strong>' +
+                '<td style="padding:7px 10px;"><strong style="font-size:12px;">' + item.name + '</strong>' +
                 '<br><small style="color:var(--text-muted);">' + (item.supplier || 'No supplier') + ' · ' + (item.buyUnit || 'unit') + '</small></td>' +
                 '<td style="padding:10px 12px;text-align:center;"><span style="color:' + stockColor + ';font-weight:bold;">' + stock.toFixed(1) + '</span></td>' +
                 '<td style="padding:8px;"><input type="number" step="0.5" min="0" ' +
@@ -2173,9 +2173,9 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
         const html = Object.entries(bySup).map(([sup, items]) => { window._aoSup = sup;
             const rows = items.map(item =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:10px 12px;"><strong>' + item.itemName + '</strong><br>' +
+                '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + item.itemName + '</strong><br>' +
                     '<small style="color:var(--text-muted);">Currently: ' + Number(item.currentStock).toFixed(1) + ' ' + item.unit + '</small></td>' +
-                '<td style="padding:10px 12px;font-weight:bold;font-size:16px;color:var(--blue);">' + Number(item.suggestedOrder).toFixed(1) + ' <small style="font-size:12px;color:var(--text-muted);">' + item.unit + '</small></td>' +
+                '<td style="padding:7px 10px;font-weight:bold;font-size:14px;color:var(--blue);">' + Number(item.suggestedOrder).toFixed(1) + ' <small style="font-size:12px;color:var(--text-muted);">' + item.unit + '</small></td>' +
                 '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);">' + (item.orderDay||'ASAP') + '</td>' +
                 '<td style="padding:10px 12px;"><span style="font-size:11px;color:' + (urgencyColor[item.urgency]||'var(--text-muted)') + ';">' + (urgencyLabel[item.urgency]||'') + '</span></td>' +
                 '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);font-style:italic;">' + item.reason + '</td>' +
@@ -2673,9 +2673,9 @@ window.renderPrepListView = () => {
                     <tbody>
                         ${data.items.map(o => `
                         <tr style="border-bottom:1px dashed var(--bg-main);">
-                            <td style="padding:10px 0;"><strong>${o.name}</strong> <small style="color:var(--text-muted);">[${o.sku || 'No SKU'}]</small></td>
-                            <td style="padding:10px 0; color:var(--text-muted);">Stock: ${o.stock} / PAR: ${isWeekend ? o.parWeekend : o.parWeekday}</td>
-                            <td style="padding:10px 0; text-align:right; color:var(--brand-accent); font-weight:bold; font-size:16px;">Order: ${o.toOrder.toFixed(1)} <small>${o.buyUnit || 'Unit'}</small></td>
+                            <td style="padding:7px 0;"><strong style="font-size:13px;">${o.name}</strong> <small style="color:var(--text-muted);">[${o.sku || 'No SKU'}]</small></td>
+                            <td style="padding:7px 0; font-size:12px; color:var(--text-muted);">Stock: ${o.stock} / PAR: ${isWeekend ? o.parWeekend : o.parWeekday}</td>
+                            <td style="padding:7px 0; text-align:right; color:var(--brand-accent); font-weight:bold; font-size:14px;">Order: ${o.toOrder.toFixed(1)} <small>${o.buyUnit || 'Unit'}</small></td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -2741,7 +2741,7 @@ window.renderWastageView = () => {
                 <div><label style="font-size:11px; color:var(--text-muted);">Reason</label><input type="text" id="w-rsn" class="input-box" placeholder="Dropped, Expired, Spilled..."></div>
                 <div><label style="font-size:11px; color:var(--text-muted);">Staff Name</label><input type="text" id="w-staff" class="input-box" placeholder="Initials"></div>
             </div>
-            <button onclick="window.logWastage()" class="btn btn-orange" style="width:100%; margin-top:10px; font-size:16px;">Log Waste & Deduct Stock</button>
+            <button onclick="window.logWastage()" class="btn btn-orange" style="width:100%; margin-top:10px; font-size:14px;">Log Waste & Deduct Stock</button>
         </div>
         <h3 style="margin-top:30px; border-bottom:1px solid var(--border); padding-bottom:10px;">Recent Logs</h3>
         ${(window.wastageLogs || []).slice().reverse().map(w =>
@@ -3312,7 +3312,7 @@ window._renderInvoiceReviewUI = () => {
             const priceChange = inv && inv.price !== s.aiItem.unitPrice && s.aiItem.unitPrice > 0;
             const pctChange = inv && priceChange ? (((s.aiItem.unitPrice - inv.price) / inv.price) * 100).toFixed(1) : null;
             html += `
-            <div id="ir-row-${s.index}" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:12px 15px; border-radius:8px; border-left:4px solid var(--green);">
+            <div id="ir-row-${s.index}" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:6px; border-left:3px solid var(--green);">
                 <div style="flex:2;">
                     <strong style="font-size:13px;">${s.aiItem.itemName}</strong>
                     <small style="color:var(--text-muted); display:block;">${s.aiItem.sku ? `SKU: ${s.aiItem.sku} · ` : ''}Qty: ${s.aiItem.quantity} ${s.aiItem.buyUnit || ''}</small>
@@ -3346,7 +3346,7 @@ window._renderInvoiceReviewUI = () => {
         unmatched.forEach(s => {
             const isSkipped = s.action === 'skip';
             html += `
-            <div id="ir-row-${s.index}" style="background:var(--bg-main); padding:15px; border-radius:8px; border-left:4px solid ${isSkipped ? 'var(--border)' : 'var(--orange)'}; opacity:${isSkipped ? 0.5 : 1};">
+            <div id="ir-row-${s.index}" style="background:var(--bg-main); padding:10px 12px; border-radius:6px; border-left:3px solid ${isSkipped ? 'var(--border)' : 'var(--orange)'}; opacity:${isSkipped ? 0.5 : 1};">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
                     <div style="flex:1; min-width:200px;">
                         <strong style="font-size:13px; color:${isSkipped ? 'var(--text-muted)' : 'var(--orange)'};">${s.aiItem.itemName}</strong>
@@ -3693,13 +3693,13 @@ window.renderAllergenView = () => {
         <p style="color:var(--text-muted);">Displays flags found in Recipe names (GF, VG) or detected by the AI Scan.</p>
         <table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;">
             <tr style="background:#111; text-align:left;">
-                <th style="padding:15px;">Menu Item</th>
-                <th style="padding:15px;">Dietary Flags</th>
+                <th style="padding:8px 12px;">Menu Item</th>
+                <th style="padding:8px 12px;">Dietary Flags</th>
             </tr>
             ${(window.recipes || []).filter(r => r.type === 'Menu' && !r.archived).map(r => {
                 let flags = r.allergens && r.allergens.length > 0 ? r.allergens.join(', ') :
                     `${r.name.includes('GF') ? 'GF ' : ''}${r.name.includes('VG') ? 'VG ' : ''}${r.name.includes('DF') ? 'DF ' : ''}`.trim() || '—';
-                return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:15px;">${r.name}</td><td style="padding:15px; color:var(--brand-accent); font-weight:bold;">${flags}</td></tr>`;
+                return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 12px;font-size:13px;">${r.name}</td><td style="padding:7px 12px; color:var(--brand-accent); font-weight:bold;">${flags}</td></tr>`;
             }).join('')}
         </table>
     </div>`;
