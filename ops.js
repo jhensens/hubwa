@@ -202,7 +202,7 @@ window.renderOrderHistory = () => {
     return history.map(o =>
         '<div class="card" style="margin-bottom:15px;border-top:4px solid var(--blue);">' +
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:6px;">' +
-            '<div><strong style="font-size:16px;">' + o.supplier + '</strong><span style="color:var(--text-muted);font-size:12px;margin-left:10px;">' + o.date + '</span></div>' +
+            '<div><strong style="font-size:16px;">' + esc(o.supplier) + '</strong><span style="color:var(--text-muted);font-size:12px;margin-left:10px;">' + o.date + '</span></div>' +
             '<div style="text-align:right;"><strong style="color:var(--green);font-size:18px;">$' + Number(o.estSpend||0).toFixed(2) + '</strong><div style="font-size:11px;color:var(--text-muted);">Est. · ' + (o.items||[]).length + ' items</div></div>' +
         '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
@@ -211,7 +211,7 @@ window.renderOrderHistory = () => {
         '</tr></thead><tbody>' +
         (o.items||[]).map(item =>
             '<tr style="border-bottom:1px dashed var(--border);">' +
-            '<td style="padding:7px 0;">' + item.name + (item.sku ? ' <small style="color:var(--text-muted);">[' + item.sku + ']</small>' : '') + '</td>' +
+            '<td style="padding:7px 0;">' + esc(item.name) + (item.sku ? ' <small style="color:var(--text-muted);">[' + esc(item.sku) + ']</small>' : '') + '</td>' +
             '<td style="padding:7px 0;text-align:right;">' + item.qty + ' ' + (item.unit||'') + '</td>' +
             '<td style="padding:7px 0;text-align:right;color:var(--brand-accent);">$' + Number(item.price||0).toFixed(2) + '</td>' +
             '<td style="padding:7px 0;text-align:right;font-weight:bold;">$' + (Number(item.qty||0)*Number(item.price||0)).toFixed(2) + '</td>' +
@@ -719,7 +719,7 @@ window.printCountSheet = () => {
             const isWeekend = [0,5,6].includes(new Date().getDay());
             const par = isWeekend ? (item.parWeekend||item.par||0) : (item.parWeekday||item.par||0);
             tableHtml += '<tr>' +
-                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">'+item.name+'</td>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">'+esc(item.name)+'</td>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">'+( item.buyUnit||'unit')+'</td>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">PAR: '+par+'</td>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;"><div style="width:80px;border-bottom:2px solid #333;height:22px;"></div></td>' +
@@ -1270,7 +1270,7 @@ window.renderSellPriceEditor = () => {
             const gp=price>0?((price-cost)/price*100).toFixed(1):0;
             const gpColor=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)';
             return '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + r.name + '</strong>' + (r.posAlias?'<br><small style="color:var(--text-muted);">'+r.posAlias+'</small>':'') + '</td>' +
+                '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + esc(r.name) + '</strong>' + (r.posAlias?'<br><small style="color:var(--text-muted);">'+esc(r.posAlias)+'</small>':'') + '</td>' +
                 '<td style="padding:10px 12px;color:var(--brand-accent);font-size:13px;">$' + cost.toFixed(2) + '</td>' +
                 '<td style="padding:10px 8px;"><div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--text-muted);">$</span>' +
                 '<input type="number" step="0.50" min="0" id="sp-' + r.id + '" value="' + price.toFixed(2) + '" class="input-box" style="margin:0;padding:6px 8px;width:90px;" data-id="' + r.id + '" data-cost="' + cost.toFixed(4) + '" oninput="window._updateSpGp(this.dataset.id,this.dataset.cost,this.value)"></div></td>' +
@@ -1335,7 +1335,7 @@ window.openCostingReport = () => {
         sr.forEach(r=>{
             const gc=r.gp>=GP_TARGET?'#16a34a':r.gp>0?'#dc2626':'#888';
             const raw=(r.ingredients||[]).filter(i=>i.type==='raw').length;
-            rows+='<tr><td style="padding:9px 12px;">'+r.name+(r.posAlias?' <span style="color:#888;font-size:11px;">('+r.posAlias+')</span>':'')+(raw>0?' <span style="color:#f59e0b;font-size:10px;">⚠️ '+raw+' unlinked</span>':'')+'</td>'+
+            rows+='<tr><td style="padding:9px 12px;">'+esc(r.name)+(r.posAlias?' <span style="color:#888;font-size:11px;">('+esc(r.posAlias)+')</span>':'')+(raw>0?' <span style="color:#f59e0b;font-size:10px;">⚠️ '+raw+' unlinked</span>':'')+'</td>'+
                 '<td style="padding:9px 12px;text-align:right;">$'+Number(r.cost||0).toFixed(2)+'</td>'+
                 '<td style="padding:9px 12px;text-align:right;">$'+Number(r.price||0).toFixed(2)+'</td>'+
                 '<td style="padding:9px 12px;text-align:right;font-weight:bold;color:'+gc+';">'+r.gp+'%</td>'+
@@ -1362,7 +1362,7 @@ window.renderBulkCategoryEditor = () => {
     const allCats = [...new Set([...baseCats,...existingCats])];
     const rows = recipes.map(r => {
         const opts = allCats.map(c=>'<option value="'+c+'" '+(c===(r.category||'')?'selected':'')+'>'+( c||'-- No Category --')+'</option>').join('');
-        return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+r.name+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+' · '+(r.type||'Menu')+'</small></td><td style="padding:8px;"><select id="bcat-'+r.id+'" class="input-box" style="margin:0;padding:5px 8px;">'+opts+'</select></td></tr>';
+        return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+esc(r.name)+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+' · '+(r.type||'Menu')+'</small></td><td style="padding:8px;"><select id="bcat-'+r.id+'" class="input-box" style="margin:0;padding:5px 8px;">'+opts+'</select></td></tr>';
     }).join('');
     return '<div style="max-width:900px;margin:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><div><h2 style="margin:0;">Bulk Category Editor</h2><small style="color:var(--text-muted);">Assign categories to all recipes at once.</small></div><div style="display:flex;gap:8px;"><button onclick="window.saveAllCategories()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;color:var(--blue);">Category</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;"><span style="color:var(--text-muted);font-size:13px;">'+recipes.length+' recipes</span><button onclick="window.saveAllCategories()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
 };
@@ -1375,7 +1375,7 @@ window.renderPosAliasEditor = () => {
     const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
     if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3></div></div>';
     const rows = recipes.map(r =>
-        '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+r.name+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+'</small></td><td style="padding:8px;"><input type="text" id="pos-'+r.id+'" class="input-box" value="'+(r.posAlias||'')+'" placeholder="Exact Lightspeed name..." style="margin:0;padding:5px 8px;"></td></tr>'
+        '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+esc(r.name)+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+'</small></td><td style="padding:8px;"><input type="text" id="pos-'+r.id+'" class="input-box" value="'+(r.posAlias||'')+'" placeholder="Exact Lightspeed name..." style="margin:0;padding:5px 8px;"></td></tr>'
     ).join('');
     return '<div style="max-width:900px;margin:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><div><h2 style="margin:0;">POS Alias Editor</h2><small style="color:var(--text-muted);">Set Lightspeed POS names. Must match exactly for EOD depletion.</small></div><div style="display:flex;gap:8px;"><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;color:var(--blue);">Lightspeed POS Alias</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;"><span style="color:var(--text-muted);font-size:13px;">'+recipes.length+' menu recipes</span><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
 };
@@ -1563,14 +1563,14 @@ window._filterIngSearch = (query) => {
         html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 12px 4px;font-weight:bold;">Inventory</div>';
         invItems.slice(0, 10).forEach(inv => {
             var safeName = inv.name.replace(/'/g, '');
-            html += '<div class="search-dropdown-item" data-val="inv_' + inv.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>' + inv.name + '</span><small style="color:var(--blue);">per ' + (inv.useUnit||'Unit') + '</small></div>';
+            html += '<div class="search-dropdown-item" data-val="inv_' + inv.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>' + esc(inv.name) + '</span><small style="color:var(--blue);">per ' + (inv.useUnit||'Unit') + '</small></div>';
         });
     }
     if (batchItems.length > 0) {
         html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 12px 4px;font-weight:bold;">Prep Batches</div>';
         batchItems.slice(0, 5).forEach(b => {
             var safeName = b.name.replace(/'/g, '');
-            html += '<div class="search-dropdown-item" data-val="batch_' + b.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>[Batch] ' + b.name + '</span><small style="color:var(--purple);">per ' + (b.yieldUnit||'Unit') + '</small></div>';
+            html += '<div class="search-dropdown-item" data-val="batch_' + b.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>[Batch] ' + esc(b.name) + '</span><small style="color:var(--purple);">per ' + (b.yieldUnit||'Unit') + '</small></div>';
         });
     }
     dropdown.innerHTML = html;
@@ -2025,7 +2025,7 @@ window.renderBatchLinkQueue = () => {
         const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+x.name+' ('+(x.useUnit||'unit')+')</option>').join('');
         return '<div class="card" style="border-left:4px solid '+(cc[item.confidence]||'var(--border)')+';padding:15px;margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
-            '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+item.recipeName+'</div><strong style="color:var(--orange);">'+item.rawName+'</strong>' +
+            '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
             (item.confidence!=='none'?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
             '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
             '<div style="display:flex;gap:6px;">' +
@@ -2037,7 +2037,7 @@ window.renderBatchLinkQueue = () => {
     if (noMatch.length>0) { html += '<h3 style="color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:15px;">❓ No Match ('+noMatch.length+')</h3>'; noMatch.forEach(i=>{html+=buildRow(i);}); }
     if (accepted.length>0) {
         html += '<h3 style="color:var(--green);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:10px;">✅ Ready to Commit ('+accepted.length+')</h3>';
-        accepted.forEach(item=>{ const inv=(window.inventoryItems||[]).find(x=>x.id===item.suggestedInvId); html+='<div style="padding:8px 12px;font-size:13px;color:var(--green);background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:6px;"><strong>'+item.rawName+'</strong> → <strong>'+(inv?inv.name:item.suggestedInvId)+'</strong> <small style="color:var(--text-muted);">in '+item.recipeName+'</small></div>'; });
+        accepted.forEach(item=>{ const inv=(window.inventoryItems||[]).find(x=>x.id===item.suggestedInvId); html+='<div style="padding:8px 12px;font-size:13px;color:var(--green);background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:6px;"><strong>'+esc(item.rawName)+'</strong> → <strong>'+(inv?esc(inv.name):esc(item.suggestedInvId))+'</strong> <small style="color:var(--text-muted);">in '+esc(item.recipeName)+'</small></div>'; });
         if (pending.length===0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="width:100%;margin-top:15px;font-size:16px;padding:14px;">💾 Commit All '+accepted.length+' Links</button>';
     }
     resultsDiv.innerHTML = html;
@@ -2213,18 +2213,18 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
         const html = Object.entries(bySup).map(([sup, items]) => { window._aoSup = sup;
             const rows = items.map(item =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + item.itemName + '</strong><br>' +
+                '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + esc(item.itemName) + '</strong><br>' +
                     '<small style="color:var(--text-muted);">Currently: ' + Number(item.currentStock).toFixed(1) + ' ' + item.unit + '</small></td>' +
                 '<td style="padding:7px 10px;font-weight:bold;font-size:14px;color:var(--blue);">' + Number(item.suggestedOrder).toFixed(1) + ' <small style="font-size:12px;color:var(--text-muted);">' + item.unit + '</small></td>' +
                 '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);">' + (item.orderDay||'ASAP') + '</td>' +
                 '<td style="padding:10px 12px;"><span style="font-size:11px;color:' + (urgencyColor[item.urgency]||'var(--text-muted)') + ';">' + (urgencyLabel[item.urgency]||'') + '</span></td>' +
-                '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);font-style:italic;">' + item.reason + '</td>' +
+                '<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);font-style:italic;">' + esc(item.reason) + '</td>' +
                 '</tr>'
             ).join('');
 
             return '<div class="card" style="border-top:4px solid var(--purple);margin-bottom:12px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
-                    '<h3 style="margin:0;font-size:15px;">' + sup + '</h3>' +
+                    '<h3 style="margin:0;font-size:15px;">' + esc(sup) + '</h3>' +
                     '<button onclick="window.generateAiOrderEmail(window._aoSup)" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
                 '</div>' +
                 '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
@@ -2596,7 +2596,7 @@ window.showLsResults = (summaries) => {
         if (s.status === 'error') {
             return '<div class="card" style="border-left:4px solid var(--red);padding:15px;margin-bottom:15px;">' +
                 '<div style="font-weight:bold;color:var(--red);">❓ Unknown file type</div>' +
-                '<div style="font-size:13px;color:var(--text-muted);margin-top:5px;">' + s.message + '</div>' +
+                '<div style="font-size:13px;color:var(--text-muted);margin-top:5px;">' + esc(s.message) + '</div>' +
             '</div>';
         }
 
@@ -2605,7 +2605,7 @@ window.showLsResults = (summaries) => {
             const bevPct = s.totalSales > 0 ? (s.bevSales/s.totalSales*100).toFixed(1) : 0;
             const topProducts = s.products.slice(0,5).map(p =>
                 '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);font-size:12px;">' +
-                '<span>' + p.name.substring(0,35) + '</span>' +
+                '<span>' + esc(p.name.substring(0,35)) + '</span>' +
                 '<span style="color:var(--green);">$' + p.saleAmt.toFixed(0) + ' · ' + p.qty + ' sold</span>' +
                 '</div>'
             ).join('');

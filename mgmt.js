@@ -483,9 +483,9 @@ window.renderSalesView = () => {
                     '<div style="display:none;padding:15px;font-size:12px;">' +
                         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">' +
                             '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Recipes Sold</strong>' +
-                            (d.itemsSold||[]).map(l => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span>' + l.recipeName + '</span><strong style="color:var(--green);">' + l.qtySold + '</strong></div>').join('') + '</div>' +
+                            (d.itemsSold||[]).map(l => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span>' + esc(l.recipeName) + '</span><strong style="color:var(--green);">' + l.qtySold + '</strong></div>').join('') + '</div>' +
                             '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Stock Deducted</strong>' +
-                            (d.stockChanges||[]).map(s => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + s.name + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + s.unit + '</small></span></div>').join('') + '</div>' +
+                            (d.stockChanges||[]).map(s => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + esc(s.name) + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + s.unit + '</small></span></div>').join('') + '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>'
@@ -785,8 +785,8 @@ window.renderTaskListTemplate = function() {
         return '<div class="card" style="border-left:3px solid ' + borderColor + ';padding:12px;margin-bottom:8px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
                 '<div style="flex:1;">' +
-                    '<strong style="font-size:14px;">' + t.name + '</strong>' +
-                    (t.notes ? '<br><small style="color:var(--text-muted);font-size:12px;">' + t.notes + '</small>' : '') +
+                    '<strong style="font-size:14px;">' + esc(t.name) + '</strong>' +
+                    (t.notes ? '<br><small style="color:var(--text-muted);font-size:12px;">' + esc(t.notes) + '</small>' : '') +
                     '<br><small style="color:var(--text-muted);">' + nextDueStr + '</small>' +
                     '<br><strong style="font-size:12px;display:inline-block;margin-top:4px;color:' + (isDue?'var(--red)':'var(--green)') + ';">' + daysLeftText + '</strong>' +
                 '</div>' +
@@ -804,7 +804,7 @@ window.renderTaskListTemplate = function() {
 window.renderTaskList = () => { document.getElementById('taskSubContent').innerHTML = window.renderTaskListTemplate(); };
 window.renderTaskHistory = () => {
     const rows = (window.taskHistory||[]).slice().reverse().map(h =>
-        '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:12px 15px;font-size:13px;color:var(--text-muted);">' + h.date + '</td><td style="padding:12px 15px;">' + h.name + '</td><td style="padding:12px 15px;"><strong>' + h.staff + '</strong></td></tr>'
+        '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:12px 15px;font-size:13px;color:var(--text-muted);">' + esc(h.date) + '</td><td style="padding:12px 15px;">' + esc(h.name) + '</td><td style="padding:12px 15px;"><strong>' + esc(h.staff) + '</strong></td></tr>'
     ).join('');
     document.getElementById('taskSubContent').innerHTML = '<table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">' +
         '<thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
@@ -1147,8 +1147,8 @@ window.renderChecklistHistory = () => {
     const rows = filtered.map(l =>
         '<tr style="border-bottom:1px solid var(--border);">'+
         '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">'+l.time+'</td>'+
-        '<td style="padding:6px 8px;font-weight:bold;font-size:13px;">'+l.type+'</td>'+
-        '<td style="padding:6px 8px;font-size:13px;">'+l.staff+'</td>'+
+        '<td style="padding:6px 8px;font-weight:bold;font-size:13px;">'+esc(l.type)+'</td>'+
+        '<td style="padding:6px 8px;font-size:13px;">'+esc(l.staff)+'</td>'+
         '</tr>'
     ).join('');
     const html = '<div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
@@ -1717,10 +1717,10 @@ window.renderHACCPHistory = () => {
         const breachRows = breaches.slice().reverse().slice(0, 5).map(b =>
             '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px;">' +
                 '<span style="color:var(--red);">' + b.value + '°C</span>' +
-                '<span style="color:var(--text-muted);">' + b.staff + '</span>' +
-                '<span style="color:var(--text-muted);font-size:11px;">' + b.time + '</span>' +
+                '<span style="color:var(--text-muted);">' + esc(b.staff) + '</span>' +
+                '<span style="color:var(--text-muted);font-size:11px;">' + esc(b.time) + '</span>' +
             '</div>' +
-            (b.action ? '<div style="font-size:11px;color:var(--orange);padding:2px 0 6px 0;">Action: ' + b.action + '</div>' : '')
+            (b.action ? '<div style="font-size:11px;color:var(--orange);padding:2px 0 6px 0;">Action: ' + esc(b.action) + '</div>' : '')
         ).join('');
         
         return '<div class="card" style="border-top:3px solid ' + statusColor + ';margin-bottom:10px;">' +
@@ -1945,7 +1945,7 @@ window.runIncidentExport = (format) => {
     const win = window.open('', '_blank');
     win.document.write('<!DOCTYPE html><html><head><title>Incident Log</title><style>body{font-family:sans-serif;font-size:13px;max-width:750px;margin:30px auto;}.h{font-size:20px;font-weight:bold;border-bottom:3px solid #dc2626;padding-bottom:8px;margin-bottom:5px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.inc{border-left:4px solid #dc2626;padding:12px 15px;margin-bottom:12px;background:#fff5f5;border-radius:0 6px 6px 0;}.row{display:flex;justify-content:space-between;margin-bottom:6px;}.name{font-weight:bold;}.time{color:#888;font-size:11px;}.type{font-size:11px;background:#fca5a5;color:#dc2626;padding:2px 8px;border-radius:8px;margin-left:8px;}.desc{white-space:pre-wrap;line-height:1.6;}@media print{body{margin:15px;}}</style></head><body>');
     win.document.write('<div class="h">⚠️ Incident Log — ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + '</div><div class="meta">Period: ' + periodLabel + ' · ' + logs.length + ' incident(s) · Printed ' + new Date().toLocaleDateString('en-AU') + '</div>');
-    logs.forEach(l => { win.document.write('<div class="inc"><div class="row"><span><span class="name">' + l.staff + '</span>' + (l.type ? '<span class="type">' + l.type + '</span>' : '') + '</span><span class="time">' + l.time + '</span></div><div class="desc">' + l.desc + '</div></div>'); });
+    logs.forEach(l => { win.document.write('<div class="inc"><div class="row"><span><span class="name">' + esc(l.staff) + '</span>' + (l.type ? '<span class="type">' + esc(l.type) + '</span>' : '') + '</span><span class="time">' + esc(l.time) + '</span></div><div class="desc">' + esc(l.desc) + '</div></div>'); });
     win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
     win.document.close(); window.closeModal();
 };
@@ -2186,10 +2186,10 @@ function renderCrossContent(venueData, venues) {
             return '<div class="card" style="border-top:5px solid var(--border);">' +
                 '<div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">' +
                     '<span style="font-size:28px;">' + v.emoji + '</span>' +
-                    '<div><h3 style="margin:0;color:var(--text-muted);">' + v.name + '</h3>' +
+                    '<div><h3 style="margin:0;color:var(--text-muted);">' + esc(v.name) + '</h3>' +
                     '<small style="color:var(--text-muted);">No data yet — venue not set up</small></div>' +
                 '</div>' +
-                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="width:100%;">Switch to ' + v.name + ' to set up →</button>' +
+                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="width:100%;">Switch to ' + esc(v.name) + ' to set up →</button>' +
             '</div>';
         }
 
@@ -2216,10 +2216,10 @@ function renderCrossContent(venueData, venues) {
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">' +
                 '<div style="display:flex;align-items:center;gap:10px;">' +
                     '<span style="font-size:28px;">' + v.emoji + '</span>' +
-                    '<div><h3 style="margin:0;color:' + v.color + ';">' + v.name + '</h3>' +
+                    '<div><h3 style="margin:0;color:' + v.color + ';">' + esc(v.name) + '</h3>' +
                     '<small style="color:var(--text-muted);">' + s.invCount + ' inventory items</small></div>' +
                 '</div>' +
-                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="font-size:11px;padding:5px 12px;">Go to ' + v.name + ' →</button>' +
+                '<button onclick="window.switchVenue(\'' + v.id + '\')" class="btn btn-outline" style="font-size:11px;padding:5px 12px;">Go to ' + esc(v.name) + ' →</button>' +
             '</div>' +
             // Revenue
             '<div style="background:var(--bg-main);border-radius:8px;padding:15px;margin-bottom:15px;">' +
@@ -2414,7 +2414,7 @@ window.renderManagerHub = () => {
     let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${esc(t.item)}</strong>: ${esc(t.desc)}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy.</p>';
+    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${esc(a.name)}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy.</p>';
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
@@ -2424,7 +2424,7 @@ window.renderManagerHub = () => {
         const nextService = new Date(e.lastService); nextService.setMonth(nextService.getMonth() + Number(e.interval));
         return ((nextService - today) / (1000 * 3600 * 24)) <= 14;
     });
-    let eqHtml = eqAlerts.length > 0 ? eqAlerts.map(e => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚙️ <strong>${e.name}</strong> is due for service soon.</div>`).join('') : '';
+    let eqHtml = eqAlerts.length > 0 ? eqAlerts.map(e => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚙️ <strong>${esc(e.name)}</strong> is due for service soon.</div>`).join('') : '';
 
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const overdueTasks = (window.rotationalTasks || []).filter(t => {
