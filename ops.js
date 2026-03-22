@@ -39,7 +39,7 @@ window.buildZoneSelect = (selectedZoneName = '', elId = 'iv-loc') => {
     const other = (window.storageZones || []).filter(z => z.area !== 'BOH' && z.area !== 'FOH');
 
     const buildOpts = (zones) => zones.map(z =>
-        `<option value="${z.name}" ${z.name === selectedZoneName ? 'selected' : ''}>${z.name}</option>`
+        `<option value="${esc(z.name)}" ${z.name === selectedZoneName ? 'selected' : ''}>${esc(z.name)}</option>`
     ).join('');
 
     return `<select id="${elId}" class="input-box" style="margin:0;">
@@ -101,7 +101,7 @@ window.editZoneForm = (i = null) => {
     const z = i !== null ? window.storageZones[i] : { name: '', area: 'BOH' };
     const html = `
         <label style="font-size:12px; color:var(--text-muted);">Zone Name</label>
-        <input type="text" id="zone-name" class="input-box" value="${z.name}" placeholder="e.g. Beer Fridge, Freezer 2">
+        <input type="text" id="zone-name" class="input-box" value="${esc(z.name)}" placeholder="e.g. Beer Fridge, Freezer 2">
         <label style="font-size:12px; color:var(--text-muted);">Area</label>
         <select id="zone-area" class="input-box">
             <option ${z.area==='BOH'?'selected':''}>BOH</option>
@@ -232,9 +232,9 @@ window.editSupplierForm = (i = null) => {
     <div class="card" style="max-width:500px; margin:auto; border-top:5px solid var(--blue);">
         <h3 style="margin-top:0;">${i !== null ? 'Edit' : 'New'} Supplier</h3>
         <label style="font-size:12px; color:var(--text-muted);">Supplier Name</label>
-        <input type="text" id="sup-n" class="input-box" value="${s.name}" placeholder="e.g. Moco Food Services">
+        <input type="text" id="sup-n" class="input-box" value="${esc(s.name)}" placeholder="e.g. Moco Food Services">
         <label style="font-size:12px; color:var(--text-muted);">Contact (Email/Phone)</label>
-        <input type="text" id="sup-c" class="input-box" value="${s.contact}" placeholder="orders@...">
+        <input type="text" id="sup-c" class="input-box" value="${esc(s.contact)}" placeholder="orders@...">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div><label style="font-size:12px; color:var(--text-muted);">Min Spend ($)</label><input type="number" id="sup-min" class="input-box" value="${s.minSpend}"></div>
             <div><label style="font-size:12px; color:var(--text-muted);">Order Cutoff Time</label><input type="time" id="sup-cut" class="input-box" value="${s.cutoff}"></div>
@@ -340,10 +340,10 @@ window.renderInventoryView = () => {
                     <br><small style="color:var(--text-muted);font-size:11px;">${esc(item.sku) || 'No SKU'} · ${esc(item.supplier) || 'No Supplier'}</small>
                 </td>
                 <td style="padding:7px 8px;font-size:12px;white-space:nowrap;">
-                    <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong>/${item.buyUnit || 'Unit'} <small style="color:var(--blue);">→ ${yieldVal} ${item.useUnit || 'Unit'}</small><br>
-                    <small style="color:var(--text-muted);">$${(price/yieldVal).toFixed(4)} per ${item.useUnit || 'Unit'}</small>
+                    <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong>/${esc(item.buyUnit || 'Unit')} <small style="color:var(--blue);">→ ${yieldVal} ${esc(item.useUnit || 'Unit')}</small><br>
+                    <small style="color:var(--text-muted);">$${(price/yieldVal).toFixed(4)} per ${esc(item.useUnit || 'Unit')}</small>
                 </td>
-                <td style="padding:7px 8px; font-size:12px; color:var(--text-muted);">${item.location || '—'}</td>
+                <td style="padding:7px 8px; font-size:12px; color:var(--text-muted);">${esc(item.location) || '—'}</td>
                 <td style="padding:7px 8px;">
                     <span style="color:${stock<parTarget?'var(--red)':'var(--green)'}; font-weight:bold; font-size:14px; cursor:pointer;" title="Click to edit stock" onclick="window._inlineEditStock('${item.id}')">${stock.toFixed(1)}</span>
                     <small style="color:var(--text-muted);"> / </small>
@@ -363,7 +363,7 @@ window.renderInventoryView = () => {
             <summary style="padding:8px 12px; background:#111; cursor:pointer; font-weight:bold; color:var(--brand-dark); display:flex; justify-content:space-between; align-items:center; outline:none; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0; font-size:14px;">
                 <span style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" ${allChk} onclick="event.stopPropagation(); window._invSelectGroup('${groupName}', this.checked)" style="transform:scale(1.1);">
-                    ${groupName} <span style="color:var(--text-muted); font-size:11px; font-weight:normal;">(${grouped[groupName].length})</span>
+                    ${esc(groupName)} <span style="color:var(--text-muted); font-size:11px; font-weight:normal;">(${grouped[groupName].length})</span>
                 </span>
                 <span style="color:var(--blue); font-size:11px;">▼</span>
             </summary>
@@ -451,10 +451,10 @@ window._invBulkAction = (action) => {
         window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items archived.'); window.showView('inventory'); return;
     }
     const opts = action === 'zone'
-        ? '<option value="">Unassigned</option>' + (window.storageZones||[]).map(z=>'<option value="'+z.name+'">'+z.name+'</option>').join('')
+        ? '<option value="">Unassigned</option>' + (window.storageZones||[]).map(z=>'<option value="'+esc(z.name)+'">'+esc(z.name)+'</option>').join('')
         : action === 'supplier'
-        ? '<option value="">-- None --</option>' + (window.suppliers||[]).map(s=>'<option value="'+s.name+'">'+s.name+'</option>').join('')
-        : ['Food','Beverage','Packaging','Chemicals','Other',...new Set((window.inventoryItems||[]).map(i=>i.category))].map(c=>'<option>'+c+'</option>').join('');
+        ? '<option value="">-- None --</option>' + (window.suppliers||[]).map(s=>'<option value="'+esc(s.name)+'">'+esc(s.name)+'</option>').join('')
+        : ['Food','Beverage','Packaging','Chemicals','Other',...new Set((window.inventoryItems||[]).map(i=>i.category))].map(c=>'<option>'+esc(c)+'</option>').join('');
     const label = action === 'zone' ? 'Zone' : action === 'supplier' ? 'Supplier' : 'Category';
     window.openModal('Change ' + label + ' for ' + ids.length + ' items',
         '<select id="bulk-val" class="input-box">' + opts + '</select>' +
@@ -497,7 +497,7 @@ window.editInvItem = (id = null) => {
     };
     if (cleanId && !found) console.warn('editInvItem: no item found for id:', cleanId, '| available ids:', window.inventoryItems.slice(0,3).map(i=>i.id));
     let supplierOpts = (window.suppliers || []).map(s =>
-        `<option value="${s.name}" ${e.supplier === s.name ? 'selected' : ''}>${s.name}</option>`
+        `<option value="${esc(s.name)}" ${e.supplier === s.name ? 'selected' : ''}>${esc(s.name)}</option>`
     ).join('');
     const allCats = ['Food', 'Beverage', 'Packaging', 'Chemicals', 'Other', ...new Set((window.inventoryItems || []).map(i => i.category))];
     const catOpts = [...new Set(allCats)].map(c => `<option value="${c}">`).join('');
@@ -508,24 +508,24 @@ window.editInvItem = (id = null) => {
     <div class="card" style="max-width:700px; margin:auto; padding-bottom: 80px;">
         <h2 style="margin-top:0;">${id ? 'Edit Product' : 'New Product'}</h2>
         <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:10px; margin-bottom:15px;">
-            <div><label style="font-size:11px; color:var(--text-muted);">Product Name</label><input type="text" id="iv-n" class="input-box" value="${e.name}"></div>
-            <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="${e.category}"><datalist id="cat-list">${catOpts}</datalist></div>
-            <div><label style="font-size:11px; color:var(--text-muted);">Sub-category</label><input type="text" id="iv-subcat" list="subcat-list" class="input-box" value="${e.subcategory || ''}" placeholder="e.g. Proteins, Spirits..."><datalist id="subcat-list">${(() => { const subs = new Set(); (window.inventoryItems||[]).forEach(i => { if (i.subcategory) subs.add(i.subcategory); }); return [...subs].map(s => '<option value="'+s+'">').join(''); })()}</datalist></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Product Name</label><input type="text" id="iv-n" class="input-box" value="${esc(e.name)}"></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="${esc(e.category)}"><datalist id="cat-list">${catOpts}</datalist></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Sub-category</label><input type="text" id="iv-subcat" list="subcat-list" class="input-box" value="${esc(e.subcategory || '')}" placeholder="e.g. Proteins, Spirits..."><datalist id="subcat-list">${(() => { const subs = new Set(); (window.inventoryItems||[]).forEach(i => { if (i.subcategory) subs.add(i.subcategory); }); return [...subs].map(s => '<option value="'+esc(s)+'">').join(''); })()}</datalist></div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><select id="iv-s" class="input-box"><option value="">-- None --</option>${supplierOpts}</select></div>
-            <div><label style="font-size:11px; color:var(--text-muted);">Supplier SKU / Order Code</label><input type="text" id="iv-sku" class="input-box" value="${e.sku || ''}"></div>
+            <div><label style="font-size:11px; color:var(--text-muted);">Supplier SKU / Order Code</label><input type="text" id="iv-sku" class="input-box" value="${esc(e.sku || '')}"></div>
         </div>
         <div style="background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border); margin-bottom:15px;">
             <h4 style="margin:0 0 10px 0; color:var(--brand-accent);">Commercial Math & Yield</h4>
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px;">
                 <div><label style="font-size:11px; color:var(--text-muted);">Buy Price ($)</label><input type="number" step="0.01" id="iv-p" class="input-box" value="${e.price}"></div>
-                <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit (e.g. Box, Keg)</label><input type="text" id="iv-buyUnit" class="input-box" value="${e.buyUnit}"></div>
+                <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit (e.g. Box, Keg)</label><input type="text" id="iv-buyUnit" class="input-box" value="${esc(e.buyUnit)}"></div>
                 <div style="padding-top:20px;"><label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="iv-gst" ${e.gstFree ? 'checked' : ''} style="transform:scale(1.2);"> GST Free</label></div>
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding-top:10px; border-top:1px dashed var(--border);">
                 <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-Units per Buy-Unit)</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="${e.yield}" style="border-color:var(--blue);"></div>
-                <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit (e.g. kg, ml, portion)</label><input type="text" id="iv-useUnit" class="input-box" value="${e.useUnit}" style="border-color:var(--blue);"></div>
+                <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit (e.g. kg, ml, portion)</label><input type="text" id="iv-useUnit" class="input-box" value="${esc(e.useUnit)}" style="border-color:var(--blue);"></div>
             </div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px; margin-bottom:15px;">
@@ -613,7 +613,7 @@ window.viewPriceTrend = (id) => {
     const priceEntries = history.filter(h => h.newPrice !== undefined);
     
     if (priceEntries.length === 0) {
-        window.openModal('📈 Price History — ' + item.name,
+        window.openModal('📈 Price History — ' + esc(item.name),
             '<div style="text-align:center;padding:20px;">' +
             '<p style="color:var(--text-muted);margin:0;">No price history yet.</p>' +
             '<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Price changes are recorded when invoices are committed.</p>' +
@@ -680,7 +680,7 @@ window.viewPriceTrend = (id) => {
     (tableRows ? '<h4 style="margin:15px 0 8px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;">Recent Changes</h4>' +
     '<table style="width:100%;border-collapse:collapse;">' + tableRows + '</table>' : '');
     
-    window.openModal('📈 Price History — ' + item.name, html);
+    window.openModal('📈 Price History — ' + esc(item.name), html);
 };
 
 // =============================================================================
@@ -714,7 +714,7 @@ window.printCountSheet = () => {
     const groupKeys = Object.keys(grouped).sort();
     let tableHtml = '';
     groupKeys.forEach(group => {
-        tableHtml += '<tr><td colspan="4" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;border-top:2px solid #ccc;">'+group+'</td></tr>';
+        tableHtml += '<tr><td colspan="4" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;border-top:2px solid #ccc;">'+esc(group)+'</td></tr>';
         grouped[group].forEach(item => {
             const isWeekend = [0,5,6].includes(new Date().getDay());
             const par = isWeekend ? (item.parWeekend||item.par||0) : (item.parWeekday||item.par||0);
@@ -788,8 +788,8 @@ window.renderQuickStockCount = () => {
             const statusColor = stock < par ? 'var(--red)' : 'var(--green)';
             tabIdx++;
             return '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:10px 12px;"><strong style="font-size:14px;">' + item.name + '</strong>' +
-                '<br><small style="color:var(--text-muted);">' + (item.buyUnit||'unit') + ' · PAR: ' + par + '</small></td>' +
+                '<td style="padding:10px 12px;"><strong style="font-size:14px;">' + esc(item.name) + '</strong>' +
+                '<br><small style="color:var(--text-muted);">' + esc(item.buyUnit||'unit') + ' · ' + (par > 0 ? 'PAR: ' + par : '<span style="color:var(--orange);">No PAR set</span>') + '</small></td>' +
                 '<td style="padding:10px;text-align:center;"><span style="color:' + statusColor + ';font-weight:bold;font-size:14px;">' + stock.toFixed(1) + '</span></td>' +
                 '<td style="padding:8px;width:120px;"><input type="number" step="0.1" min="0" tabindex="' + tabIdx + '" ' +
                     'id="sc-' + item.id + '" ' +
@@ -804,7 +804,7 @@ window.renderQuickStockCount = () => {
         
         return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:15px;">' +
             '<div style="padding:10px 12px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
-                '<strong style="color:var(--brand-dark);">' + zone + '</strong>' +
+                '<strong style="color:var(--brand-dark);">' + esc(zone) + '</strong>' +
                 '<span style="font-size:12px;color:var(--text-muted);">' + zoneItems.length + ' items</span>' +
             '</div>' +
             '<table style="width:100%;border-collapse:collapse;">' +
@@ -879,8 +879,8 @@ window.renderParEditor = () => {
             const parTarget = isWeekend ? parWe : parWd;
             const stockColor = stock < parTarget ? 'var(--red)' : 'var(--green)';
             return '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:7px 10px;"><strong style="font-size:12px;">' + item.name + '</strong>' +
-                '<br><small style="color:var(--text-muted);">' + (item.supplier || 'No supplier') + ' · ' + (item.buyUnit || 'unit') + '</small></td>' +
+                '<td style="padding:7px 10px;"><strong style="font-size:12px;">' + esc(item.name) + '</strong>' +
+                '<br><small style="color:var(--text-muted);">' + esc(item.supplier || 'No supplier') + ' · ' + esc(item.buyUnit || 'unit') + '</small></td>' +
                 '<td style="padding:7px 10px;text-align:center;"><span style="color:' + stockColor + ';font-weight:bold;">' + stock.toFixed(1) + '</span></td>' +
                 '<td style="padding:6px;"><input type="number" step="0.5" min="0" ' +
                 'id="par-wd-' + item.id + '" ' +
@@ -895,7 +895,7 @@ window.renderParEditor = () => {
 
         return '<details class="card" style="padding:0;overflow:hidden;margin-bottom:8px;" open>' +
             '<summary style="padding:8px 14px;background:#111;cursor:pointer;font-weight:bold;color:var(--brand-dark);display:flex;justify-content:space-between;align-items:center;outline:none;border-radius:10px 10px 0 0;font-size:14px;">' +
-                '<span>' + cat + ' <span style="color:var(--text-muted);font-size:11px;font-weight:normal;">(' + catItems.length + ')</span></span>' +
+                '<span>' + esc(cat) + ' <span style="color:var(--text-muted);font-size:11px;font-weight:normal;">(' + catItems.length + ')</span></span>' +
                 '<span style="color:var(--blue);font-size:11px;">▼</span>' +
             '</summary>' +
             '<div style="overflow-x:auto;">' +
@@ -976,15 +976,15 @@ window.viewPriceTrend = (id) => {
                     ? `<span style="color:${change > 0 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${change > 0 ? '▲' : '▼'} ${Math.abs(change)}%</span>`
                     : '<span style="color:var(--text-muted);">—</span>';
                 return `<tr style="border-bottom:1px solid var(--border); font-size:12px;">
-                    <td style="padding:10px;">${h.date}</td>
-                    <td style="padding:10px;">${h.supplier}</td>
+                    <td style="padding:10px;">${esc(h.date)}</td>
+                    <td style="padding:10px;">${esc(h.supplier)}</td>
                     <td style="padding:10px;">${h.qty}</td>
                     <td style="padding:10px; font-weight:bold; color:var(--brand-accent);">$${Number(h.price).toFixed(2)}</td>
                     <td style="padding:10px;">${changeHtml}</td>
                 </tr>`;
             }).join('')}
         </table>`;
-    window.openModal(`📈 Price Trend: ${item.name}`, `<div style="max-height:400px; overflow-y:auto;">${historyHtml}</div><button onclick="window.closeModal()" class="btn btn-dark" style="width:100%; margin-top:20px;">Close</button>`);
+    window.openModal(`📈 Price Trend: ${esc(item.name)}`, `<div style="max-height:400px; overflow-y:auto;">${historyHtml}</div><button onclick="window.closeModal()" class="btn btn-dark" style="width:100%; margin-top:20px;">Close</button>`);
 };
 
 // =============================================================================
@@ -1115,7 +1115,7 @@ window.renderRecipeView = () => {
                         <span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:6px 8px;border-radius:5px;font-size:11px;border:1px solid var(--border);">
-                        <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost||0).toFixed(2)}</strong><br>${r.type==='Menu'?`Sell: $${Number(r.price||0).toFixed(2)}`:`Yield: ${r.yieldQty} ${r.yieldUnit}`}</div>
+                        <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost||0).toFixed(2)}</strong><br>${r.type==='Menu'?`Sell: $${Number(r.price||0).toFixed(2)}`:`Yield: ${r.yieldQty} ${esc(r.yieldUnit)}`}</div>
                         ${r.type==='Menu'&&r.price>0?`<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp||0}%</div>`:''}
                     </div>
                     <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients||[]).filter(i=>i.type==='inv'||i.type==='batch').length} linked · ${(r.ingredients||[]).filter(i=>i.type==='raw').length} raw</div>
@@ -1198,7 +1198,7 @@ window.viewRecipe = (id) => {
         <!-- METHOD -->
         <div class="card" style="padding:18px;margin-bottom:15px;">
             <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Method</h3>
-            <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method||'<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
+            <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method ? E(r.method) : '<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
         </div>
 
         <!-- ALLERGENS -->
@@ -1331,7 +1331,7 @@ window.openCostingReport = () => {
     let rows='';
     stations.forEach(st=>{
         const sr=menuRecipes.filter(r=>(r.station||'Kitchen')===st).sort((a,b)=>a.name.localeCompare(b.name));
-        rows+='<tr><td colspan="5" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;">'+st+' ('+sr.length+')</td></tr>';
+        rows+='<tr><td colspan="5" style="background:#f3f4f6;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;color:#555;">'+esc(st)+' ('+sr.length+')</td></tr>';
         sr.forEach(r=>{
             const gc=r.gp>=GP_TARGET?'#16a34a':r.gp>0?'#dc2626':'#888';
             const raw=(r.ingredients||[]).filter(i=>i.type==='raw').length;
@@ -1375,7 +1375,7 @@ window.renderPosAliasEditor = () => {
     const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
     if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3></div></div>';
     const rows = recipes.map(r =>
-        '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+esc(r.name)+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+'</small></td><td style="padding:8px;"><input type="text" id="pos-'+r.id+'" class="input-box" value="'+(r.posAlias||'')+'" placeholder="Exact Lightspeed name..." style="margin:0;padding:5px 8px;"></td></tr>'
+        '<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;"><strong>'+esc(r.name)+'</strong><br><small style="color:var(--text-muted);">'+(r.station||'Kitchen')+'</small></td><td style="padding:8px;"><input type="text" id="pos-'+r.id+'" class="input-box" value="'+esc(r.posAlias||'')+'" placeholder="Exact Lightspeed name..." style="margin:0;padding:5px 8px;"></td></tr>'
     ).join('');
     return '<div style="max-width:900px;margin:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><div><h2 style="margin:0;">POS Alias Editor</h2><small style="color:var(--text-muted);">Set Lightspeed POS names. Must match exactly for EOD depletion.</small></div><div style="display:flex;gap:8px;"><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 12px;text-align:left;">Recipe</th><th style="padding:10px 12px;text-align:left;color:var(--blue);">Lightspeed POS Alias</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;"><span style="color:var(--text-muted);font-size:13px;">'+recipes.length+' menu recipes</span><button onclick="window.saveAllPosAliases()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>';
 };
@@ -1386,15 +1386,15 @@ window.printRecipe = (id) => {
     const r = window.recipes.find(x => x.id === id);
     if (!r) return;
     let ingText = (r.ingredients||[]).map(ing => {
-        if (ing.type==='raw') return `<li>${ing.name}</li>`;
+        if (ing.type==='raw') return `<li>${esc(ing.name)}</li>`;
         const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
         const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
-        if (inv) return `<li>${ing.qty} ${inv.useUnit} — ${inv.name}</li>`;
-        if (batch) return `<li>${ing.qty} ${batch.yieldUnit} — ${batch.name}</li>`;
-        return `<li>${ing.name}</li>`;
+        if (inv) return `<li>${ing.qty} ${esc(inv.useUnit)} — ${esc(inv.name)}</li>`;
+        if (batch) return `<li>${ing.qty} ${esc(batch.yieldUnit)} — ${esc(batch.name)}</li>`;
+        return `<li>${esc(ing.name)}</li>`;
     }).join('');
     const win = window.open('','_blank');
-    win.document.write(`<!DOCTYPE html><html><head><title>${r.name}</title><style>
+    win.document.write(`<!DOCTYPE html><html><head><title>${esc(r.name)}</title><style>
         body{font-family:sans-serif;font-size:13px;color:#222;max-width:700px;margin:30px auto;line-height:1.6;}
         h1{font-size:22px;border-bottom:3px solid #333;padding-bottom:8px;margin-bottom:5px;}
         h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#666;margin:20px 0 8px 0;}
@@ -1407,12 +1407,12 @@ window.printRecipe = (id) => {
         @media print{body{margin:15px;}}
     </style></head><body>
     ${r.photo?`<img src="${r.photo}">`:''}
-    <h1>${r.name}</h1>
+    <h1>${esc(r.name)}</h1>
     ${r.type==='Menu'&&r.price>0?`<div class="gp">${r.gp||0}% GP</div>`:''}
-    <div class="meta">${r.station||'Kitchen'} · ${r.type} · ${r.status||'Active'}${r.type==='Batch'?` · Yields ${r.yieldQty} ${r.yieldUnit}`:''}</div>
+    <div class="meta">${esc(r.station||'Kitchen')} · ${r.type} · ${r.status||'Active'}${r.type==='Batch'?` · Yields ${r.yieldQty} ${esc(r.yieldUnit)}`:''}</div>
     <h2>Ingredients</h2><ul>${ingText||'<li>No ingredients listed</li>'}</ul>
-    <h2>Method</h2><div class="method">${r.method||'No method written.'}</div>
-    ${r.allergens&&r.allergens.length>0?`<div class="allergens"><strong>⚠️ Allergens:</strong> ${r.allergens.join(', ')}</div>`:''}
+    <h2>Method</h2><div class="method">${esc(r.method||'No method written.')}</div>
+    ${r.allergens&&r.allergens.length>0?`<div class="allergens"><strong>⚠️ Allergens:</strong> ${r.allergens.map(a=>esc(a)).join(', ')}</div>`:''}
     <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">${window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya'} · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
     <script>window.onload=()=>{window.print();}<\/script></body></html>`);
     win.document.close();
@@ -1443,8 +1443,8 @@ window.editRecipeForm = (id = null) => {
         window.tempIngs = JSON.parse(JSON.stringify(r.ingredients||[]));
         window.tempRecipeId = cleanId||'new';
     }
-    let invOpts = (window.inventoryItems||[]).filter(i=>!i.archived).map(inv=>`<option value="inv_${inv.id}">${inv.name} (per ${inv.useUnit||'Unit'})</option>`).join('');
-    let batchOpts = (window.recipes||[]).filter(b=>b.type==='Batch'&&b.id!==cleanId).map(b=>`<option value="batch_${b.id}">[Batch] ${b.name} (per ${b.yieldUnit})</option>`).join('');
+    let invOpts = (window.inventoryItems||[]).filter(i=>!i.archived).map(inv=>`<option value="inv_${inv.id}">${esc(inv.name)} (per ${esc(inv.useUnit||'Unit')})</option>`).join('');
+    let batchOpts = (window.recipes||[]).filter(b=>b.type==='Batch'&&b.id!==cleanId).map(b=>`<option value="batch_${b.id}">[Batch] ${esc(b.name)} (per ${esc(b.yieldUnit)})</option>`).join('');
 
     const renderBuilder = () => {
         let totalCost = 0;
@@ -1457,7 +1457,7 @@ window.editRecipeForm = (id = null) => {
             return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;gap:6px;">
                 <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
                     ${isRaw?`<span style="font-size:10px;color:var(--orange);border:1px solid var(--orange);padding:1px 5px;border-radius:8px;flex-shrink:0;">raw</span>`:`<input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx},this.value)" style="width:65px;margin:0;padding:4px;border-color:var(--blue);flex-shrink:0;">`}
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${displayUnit} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${ing.name}${isErr?' ⚠️':''}</strong></span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${esc(displayUnit)} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${esc(ing.name)}${isErr?' ⚠️':''}</strong></span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                     ${!isRaw&&itemCost>0?`<span style="color:var(--brand-accent);font-size:11px;">$${itemCost.toFixed(3)}</span>`:''}
@@ -1480,15 +1480,15 @@ window.editRecipeForm = (id = null) => {
             <div class="card" style="padding:20px;margin-bottom:15px;">
                 <h3 style="margin:0 0 12px 0;">${cleanId?'Edit':'New'} Recipe</h3>
                 <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-                    <div><label style="font-size:11px;color:var(--text-muted);">Name</label><input type="text" id="r-n" class="input-box" value="${r.name}" style="margin:0;"></div>
+                    <div><label style="font-size:11px;color:var(--text-muted);">Name</label><input type="text" id="r-n" class="input-box" value="${esc(r.name)}" style="margin:0;"></div>
                     <div><label style="font-size:11px;color:var(--text-muted);">Type</label><select id="r-type" class="input-box" style="margin:0;" onchange="window.refreshRB()"><option ${r.type==='Menu'?'selected':''}>Menu</option><option ${r.type==='Batch'?'selected':''}>Batch</option></select></div>
                     <div><label style="font-size:11px;color:var(--text-muted);">Station</label><select id="r-station" class="input-box" style="margin:0;"><option ${(r.station||'Kitchen')==='Kitchen'?'selected':''}>Kitchen</option><option ${r.station==='Bar'?'selected':''}>Bar</option><option ${r.station==='Prep'?'selected':''}>Prep</option></select></div>
                     <div><label style="font-size:11px;color:var(--text-muted);">Status</label><select id="r-status" class="input-box" style="margin:0;"><option ${(r.status||'Active')==='Active'?'selected':''}>Active</option><option ${r.status==="86'd"?'selected':''}>86'd</option><option ${r.status==='Development'?'selected':''}>Development</option></select></div>
                 </div>
                 <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
-                    ${!isBatch?`<div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${r.posAlias||''}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div>`:'<div></div>'}
+                    ${!isBatch?`<div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${esc(r.posAlias||'')}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div>`:'<div></div>'}
                     <div style="display:flex;gap:8px;">
-                        ${isBatch?`<div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Yield Qty</label><input type="number" step="0.1" id="r-yq" class="input-box" value="${r.yieldQty}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div><div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Unit</label><input type="text" id="r-yu" class="input-box" value="${r.yieldUnit}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div>`:`<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);">Sell Price ($)</label><input type="number" step="0.01" id="r-p" class="input-box" value="${r.price}" oninput="window.refreshRB()" style="margin:0;"></div>`}
+                        ${isBatch?`<div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Yield Qty</label><input type="number" step="0.1" id="r-yq" class="input-box" value="${r.yieldQty}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div><div style="flex:1;"><label style="font-size:11px;color:var(--brand-accent);">Unit</label><input type="text" id="r-yu" class="input-box" value="${esc(r.yieldUnit)}" oninput="window.refreshRB()" style="margin:0;border-color:var(--brand-accent);"></div>`:`<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);">Sell Price ($)</label><input type="number" step="0.01" id="r-p" class="input-box" value="${r.price}" oninput="window.refreshRB()" style="margin:0;"></div>`}
                     </div>
                 </div>
             </div>
@@ -1511,11 +1511,11 @@ window.editRecipeForm = (id = null) => {
                 </div>
                 <div style="display:flex;flex-direction:column;gap:12px;">
                     <div class="card" style="padding:15px;text-align:center;border-top:4px solid ${gpColor};">
-                        ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:30px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
+                        ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${esc(r.yieldUnit)}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:30px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
                     </div>
                     <div class="card" style="padding:15px;">
                         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">📹 Training Video URL</label>
-                        <input type="text" id="r-video" class="input-box" value="${r.videoUrl||''}" placeholder="YouTube or Vimeo URL..." style="margin:0 0 10px 0;">
+                        <input type="text" id="r-video" class="input-box" value="${esc(r.videoUrl||'')}" placeholder="YouTube or Vimeo URL..." style="margin:0 0 10px 0;">
                         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">📸 Recipe Photo</label>
                         ${r.photo?`<img src="${r.photo}" style="width:100%;height:70px;object-fit:cover;border-radius:5px;margin-bottom:6px;">`:''}
                         <input type="file" id="r-photo-file" accept="image/*" style="font-size:11px;color:var(--text-muted);" onchange="window.uploadRecipePhoto('${r.id}',this)">
@@ -1524,7 +1524,7 @@ window.editRecipeForm = (id = null) => {
             </div>
             <div class="card" style="padding:15px;margin-bottom:15px;">
                 <label style="font-size:11px;color:var(--text-muted);">Method / Prep Notes</label>
-                <textarea id="r-m" class="input-box" placeholder="Method, plating notes, chef tips..." style="height:100px;margin-top:4px;">${r.method||''}</textarea>
+                <textarea id="r-m" class="input-box" placeholder="Method, plating notes, chef tips..." style="height:100px;margin-top:4px;">${esc(r.method||'')}</textarea>
             </div>
             <div class="sticky-footer">
                 <button onclick="window.subRecipe('${r.id}',${totalCost})" class="btn btn-green" style="flex:2;font-size:15px;">💾 Save Recipe</button>
@@ -1598,8 +1598,8 @@ window.updateUnitHint = () => {
         const sel=document.getElementById('add-sel'); const hint=document.getElementById('unit-hint');
         if (!sel||!hint||!sel.value){if(hint)hint.innerText='';return;}
         const parts=sel.value.split('_');
-        if (parts[0]==='inv'){const inv=window.inventoryItems.find(i=>i.id===sel.value.replace('inv_',''));if(inv)hint.innerHTML=`Enter qty in: <span style="background:var(--blue);color:white;padding:1px 6px;border-radius:4px;">${inv.useUnit}</span>`;}
-        else {const b=window.recipes.find(x=>x.id===sel.value.replace('batch_',''));if(b)hint.innerHTML=`Enter qty in: <span style="background:var(--purple);color:white;padding:1px 6px;border-radius:4px;">${b.yieldUnit}</span>`;}
+        if (parts[0]==='inv'){const inv=window.inventoryItems.find(i=>i.id===sel.value.replace('inv_',''));if(inv)hint.innerHTML=`Enter qty in: <span style="background:var(--blue);color:white;padding:1px 6px;border-radius:4px;">${esc(inv.useUnit)}</span>`;}
+        else {const b=window.recipes.find(x=>x.id===sel.value.replace('batch_',''));if(b)hint.innerHTML=`Enter qty in: <span style="background:var(--purple);color:white;padding:1px 6px;border-radius:4px;">${esc(b.yieldUnit)}</span>`;}
     };
     window.scaleRecipe = () => {
         const mult=parseFloat(prompt("Scale multiplier (e.g. 2=double, 0.5=halve):","2"));
@@ -1620,7 +1620,7 @@ window.updateUnitHint = () => {
     };
     window.openQuickAddIngModal = () => {
         const newId=window.generateId('inv');
-        const supplierOpts=(window.suppliers||[]).map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+        const supplierOpts=(window.suppliers||[]).map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
         const allCats=['Food','Beverage','Packaging','Chemicals','Other',...new Set((window.inventoryItems||[]).map(i=>i.category))];
         const catOpts=[...new Set(allCats)].map(c=>`<option value="${c}">`).join('');
         window.openModal("⚡ Quick Add Ingredient",`
@@ -1742,11 +1742,11 @@ window.renderPriceAlertsView = () => {
         const color = isRise ? 'var(--red)' : 'var(--green)';
         const affected = getAffectedRecipes(a.id);
         return '<tr style="border-bottom:1px solid var(--border);">' +
-            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + a.name + '</strong><br><small style="color:var(--text-muted);">' + a.supplier + ' · ' + a.date + '</small></td>' +
+            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + esc(a.name) + '</strong><br><small style="color:var(--text-muted);">' + esc(a.supplier) + ' · ' + esc(a.date) + '</small></td>' +
             '<td style="padding:7px 10px;font-size:12px;color:var(--text-muted);">$' + Number(a.prevPrice).toFixed(2) + '</td>' +
             '<td style="padding:7px 10px;font-weight:bold;font-size:12px;">$' + Number(a.newPrice).toFixed(2) + '</td>' +
             '<td style="padding:7px 10px;font-weight:bold;font-size:12px;color:' + color + ';">' + (isRise?'▲':'▼') + ' ' + Math.abs(a.changePct).toFixed(1) + '%</td>' +
-            '<td style="padding:7px 10px;font-size:11px;color:var(--text-muted);">' + (affected.length > 0 ? affected.join(', ') + (affected.length===3?'...':'') : 'None') + '</td>' +
+            '<td style="padding:7px 10px;font-size:11px;color:var(--text-muted);">' + (affected.length > 0 ? affected.map(n=>esc(n)).join(', ') + (affected.length===3?'...':'') : 'None') + '</td>' +
             '<td style="padding:12px 15px;text-align:right;"><button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Check GP</button></td>' +
         '</tr>';
     }).join('');
@@ -2022,7 +2022,7 @@ window.renderBatchLinkQueue = () => {
     html += '</div>';
     const buildRow = (item) => {
         const qIdx = queue.indexOf(item);
-        const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+x.name+' ('+(x.useUnit||'unit')+')</option>').join('');
+        const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
         return '<div class="card" style="border-left:4px solid '+(cc[item.confidence]||'var(--border)')+';padding:15px;margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
             '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
@@ -2327,7 +2327,7 @@ window.renderLightspeedImportView = () => {
                 '<p style="color:var(--text-muted);font-size:13px;">No imports yet.</p>' :
                 (window.lsImportLog||[]).slice(-10).reverse().map(log =>
                     '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--border);font-size:13px;">' +
-                        '<span>' + log.icon + ' <strong>' + log.type + '</strong> — ' + log.summary + '</span>' +
+                        '<span>' + esc(log.icon) + ' <strong>' + esc(log.type) + '</strong> — ' + esc(log.summary) + '</span>' +
                         '<span style="color:var(--text-muted);">' + log.time + '</span>' +
                     '</div>'
                 ).join('')
@@ -2646,7 +2646,7 @@ window.showLsResults = (summaries) => {
                 '<div style="font-size:12px;color:var(--red);font-weight:bold;margin-bottom:5px;">⚠️ VARIANCE ALERTS</div>' +
                 s.warnings.map(w =>
                     '<div style="font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;">' +
-                    '<span>' + w.date + ' · ' + w.register + ' · ' + w.staff + '</span>' +
+                    '<span>' + esc(w.date) + ' · ' + esc(w.register) + ' · ' + esc(w.staff) + '</span>' +
                     '<span style="color:var(--red);font-weight:bold;">$' + w.variance.toFixed(2) + '</span>' +
                     '</div>'
                 ).join('') + '</div>' : '';
@@ -2713,7 +2713,7 @@ window.renderPrepListView = () => {
                     <tbody>
                         ${data.items.map(o => `
                         <tr style="border-bottom:1px dashed var(--bg-main);">
-                            <td style="padding:7px 0;"><strong style="font-size:13px;">${o.name}</strong> <small style="color:var(--text-muted);">[${o.sku || 'No SKU'}]</small></td>
+                            <td style="padding:7px 0;"><strong style="font-size:13px;">${esc(o.name)}</strong> <small style="color:var(--text-muted);">[${esc(o.sku || 'No SKU')}]</small></td>
                             <td style="padding:7px 0; font-size:12px; color:var(--text-muted);">Stock: ${o.stock} / PAR: ${isWeekend ? o.parWeekend : o.parWeekday}</td>
                             <td style="padding:7px 0; text-align:right; color:var(--brand-accent); font-weight:bold; font-size:14px;">Order: ${o.toOrder.toFixed(1)} <small>${o.buyUnit || 'Unit'}</small></td>
                         </tr>`).join('')}
@@ -3009,7 +3009,7 @@ window.runAiDepletion = async () => {
 };
 
 window.renderDepletionConfirmation = () => {
-    let recipeOpts = `<option value="">-- Select Hub Recipe --</option>` + (window.recipes || []).filter(r => r.type === 'Menu').map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    let recipeOpts = `<option value="">-- Select Hub Recipe --</option>` + (window.recipes || []).filter(r => r.type === 'Menu').map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
     let html = `<div class="card" style="max-width:800px; margin:auto; border-top:5px solid var(--purple); padding-bottom:80px;">
         <h2 style="margin-top:0;">Map & Deplete Stock</h2>`;
     if (window.pendingMap.unknown.length > 0) {
@@ -3018,7 +3018,7 @@ window.renderDepletionConfirmation = () => {
             <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Map these once. The Hub saves them forever.</p>`;
         window.pendingMap.unknown.forEach((u, i) => {
             html += `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--border);">
-                <div><strong style="color:var(--orange);">${u.posName}</strong><br><small>Sold: ${u.qtySold}</small></div>
+                <div><strong style="color:var(--orange);">${esc(u.posName)}</strong><br><small>Sold: ${u.qtySold}</small></div>
                 <select id="map-unknown-${i}" class="input-box" style="width:250px; margin:0; border-color:var(--orange);">${recipeOpts}</select>
             </div>`;
         });
@@ -3030,7 +3030,7 @@ window.renderDepletionConfirmation = () => {
         window.pendingMap.known.forEach(k => {
             let rName = window.recipes.find(r => r.id === k.recipeId).name;
             html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);">
-                <span><span style="color:var(--text-muted);">${k.posName}</span> ➔ <strong>${rName}</strong></span>
+                <span><span style="color:var(--text-muted);">${esc(k.posName)}</span> ➔ <strong>${esc(rName)}</strong></span>
                 <span style="color:var(--green); font-weight:bold;">${k.qtySold} sold</span>
             </div>`;
         });
@@ -3400,7 +3400,7 @@ window._renderInvoiceReviewUI = () => {
     const ai = window.pendingInvoiceData;
     const state = window._invoiceReviewState;
     const invOpts = `<option value="">-- Map to Existing Item --</option>` +
-        (window.inventoryItems || []).filter(i => !i.archived).map(i => `<option value="${i.id}">${i.name} (${i.buyUnit})</option>`).join('');
+        (window.inventoryItems || []).filter(i => !i.archived).map(i => `<option value="${i.id}">${esc(i.name)} (${esc(i.buyUnit)})</option>`).join('');
 
     const autoMatched = state.filter(s => s.matchedInvId && s.action === 'update');
     const unmatched = state.filter(s => !s.matchedInvId || s.action === 'new' || s.action === 'skip');
@@ -3409,8 +3409,8 @@ window._renderInvoiceReviewUI = () => {
     <div style="border-top:4px solid var(--blue); padding-top:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <div>
-                <h3 style="margin:0; color:var(--brand-dark);">${ai.supplier} — ${ai.date}</h3>
-                <small style="color:var(--text-muted);">Invoice #${ai.invoiceNumber || 'N/A'} | ${ai.items.length} line items extracted | Total: $${Number(ai.invoiceTotal || 0).toFixed(2)}</small>
+                <h3 style="margin:0; color:var(--brand-dark);">${esc(ai.supplier)} — ${esc(ai.date)}</h3>
+                <small style="color:var(--text-muted);">Invoice #${esc(ai.invoiceNumber || 'N/A')} | ${ai.items.length} line items extracted | Total: $${Number(ai.invoiceTotal || 0).toFixed(2)}</small>
             </div>
             <button onclick="window._commitInvoice()" class="btn btn-green" style="font-size:14px; padding:10px 20px;">✓ Commit All & Update Stock</button>
         </div>`;
@@ -3427,11 +3427,11 @@ window._renderInvoiceReviewUI = () => {
             html += `
             <div id="ir-row-${s.index}" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:6px; border-left:3px solid var(--green);">
                 <div style="flex:2;">
-                    <strong style="font-size:13px;">${s.aiItem.itemName}</strong>
-                    <small style="color:var(--text-muted); display:block;">${s.aiItem.sku ? `SKU: ${s.aiItem.sku} · ` : ''}Qty: ${s.aiItem.quantity} ${s.aiItem.buyUnit || ''}</small>
+                    <strong style="font-size:13px;">${esc(s.aiItem.itemName)}</strong>
+                    <small style="color:var(--text-muted); display:block;">${s.aiItem.sku ? `SKU: ${esc(s.aiItem.sku)} · ` : ''}Qty: ${s.aiItem.quantity} ${esc(s.aiItem.buyUnit || '')}</small>
                 </div>
                 <div style="flex:1; text-align:center; font-size:12px; color:var(--text-muted);">
-                    ➔ <strong style="color:var(--green);">${inv ? inv.name : '?'}</strong>
+                    ➔ <strong style="color:var(--green);">${inv ? esc(inv.name) : '?'}</strong>
                     <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">${s.confidence === 'learned' ? '🧠 Learned match' : s.confidence === 'sku' ? '🔑 SKU match' : s.confidence === 'high' ? '✓ Name match' : '~ Fuzzy match'}</div>
                 </div>
                 <div style="flex:1; text-align:right; font-size:13px;">
@@ -3462,8 +3462,8 @@ window._renderInvoiceReviewUI = () => {
             <div id="ir-row-${s.index}" style="background:var(--bg-main); padding:10px 12px; border-radius:6px; border-left:3px solid ${isSkipped ? 'var(--border)' : 'var(--orange)'}; opacity:${isSkipped ? 0.5 : 1};">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
                     <div style="flex:1; min-width:200px;">
-                        <strong style="font-size:13px; color:${isSkipped ? 'var(--text-muted)' : 'var(--orange)'};">${s.aiItem.itemName}</strong>
-                        <small style="color:var(--text-muted); display:block;">${s.aiItem.sku ? `SKU: ${s.aiItem.sku} · ` : ''}Qty: ${s.aiItem.quantity} ${s.aiItem.buyUnit || ''} · $${Number(s.aiItem.unitPrice || 0).toFixed(2)}</small>
+                        <strong style="font-size:13px; color:${isSkipped ? 'var(--text-muted)' : 'var(--orange)'};">${esc(s.aiItem.itemName)}</strong>
+                        <small style="color:var(--text-muted); display:block;">${s.aiItem.sku ? `SKU: ${esc(s.aiItem.sku)} · ` : ''}Qty: ${s.aiItem.quantity} ${esc(s.aiItem.buyUnit || '')} · $${Number(s.aiItem.unitPrice || 0).toFixed(2)}</small>
                     </div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                         <select id="ir-map-${s.index}" class="input-box" style="margin:0; width:220px; font-size:12px; padding:7px; border-color:var(--orange);">${invOpts}</select>
@@ -3516,12 +3516,12 @@ window._irQuickAdd = (index) => {
     const guessedZone = guess.zone || '';
     const html = `
     <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
-        <div><label style="font-size:11px; color:var(--text-muted);">Name</label><input type="text" id="iq-n" class="input-box" value="${aiItem.itemName.replace(/"/g, '&quot;')}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Name</label><input type="text" id="iq-n" class="input-box" value="${esc(aiItem.itemName)}"></div>
         <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iq-cat" list="iq-cat-list" class="input-box" value="${guessedCat}"><datalist id="iq-cat-list">${catOpts}</datalist></div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
-        <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><input type="text" id="iq-sup" class="input-box" value="${supplierName}"></div>
-        <div><label style="font-size:11px; color:var(--text-muted);">SKU</label><input type="text" id="iq-sku" class="input-box" value="${aiItem.sku || ''}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><input type="text" id="iq-sup" class="input-box" value="${esc(supplierName)}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">SKU</label><input type="text" id="iq-sku" class="input-box" value="${esc(aiItem.sku || '')}"></div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Department <small style="color:var(--blue);">(AI guess: ${guess.dept})</small></label>
@@ -3533,7 +3533,7 @@ window._irQuickAdd = (index) => {
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px; background:var(--bg-main); padding:10px; border-radius:6px;">
         <div><label style="font-size:11px; color:var(--text-muted);">Buy Price ($)</label><input type="number" step="0.01" id="iq-p" class="input-box" value="${Number(aiItem.unitPrice || 0).toFixed(2)}"></div>
-        <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit</label><input type="text" id="iq-buyUnit" class="input-box" value="${aiItem.buyUnit || 'CTN'}"></div>
+        <div><label style="font-size:11px; color:var(--text-muted);">Buy Unit</label><input type="text" id="iq-buyUnit" class="input-box" value="${esc(aiItem.buyUnit || 'CTN')}"></div>
         <div style="padding-top:20px;"><label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="iq-gst" ${aiItem.gstFree ? 'checked' : ''} style="transform:scale(1.2);"> GST Free</label></div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; border:1px dashed var(--blue); padding:10px; border-radius:6px;">
@@ -3541,7 +3541,7 @@ window._irQuickAdd = (index) => {
         <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit</label><input type="text" id="iq-useUnit" class="input-box" value="${isBev ? 'ml' : 'kg'}"></div>
     </div>
     <button onclick="window._irSaveNewItem('${newId}', ${index})" class="btn btn-green" style="width:100%; font-size:15px; padding:12px;">Save & Link to Invoice</button>`;
-    window.openModal(`⚡ Quick Add: ${aiItem.itemName}`, html);
+    window.openModal(`⚡ Quick Add: ${esc(aiItem.itemName)}`, html);
 };
 
 window._irSaveNewItem = (newId, index) => {
@@ -3747,7 +3747,7 @@ window.renderVarianceReport = () => {
     const rows = varianceItems.slice(0, 30).map(v => {
         const color = Math.abs(v.variancePct) < 5 ? 'var(--green)' : Math.abs(v.variancePct) < 15 ? 'var(--orange)' : 'var(--red)';
         return '<tr style="border-bottom:1px solid var(--border);">' +
-            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + v.name + '</strong><br><small style="color:var(--text-muted);">' + v.category + '</small></td>' +
+            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + esc(v.name) + '</strong><br><small style="color:var(--text-muted);">' + esc(v.category) + '</small></td>' +
             '<td style="padding:7px 10px;text-align:center;font-size:12px;">' + v.theoretical.toFixed(1) + '</td>' +
             '<td style="padding:7px 10px;text-align:center;font-size:12px;">' + v.actual.toFixed(1) + '</td>' +
             '<td style="padding:7px 10px;text-align:center;font-size:12px;color:' + color + ';font-weight:bold;">' + (v.variance > 0 ? '+' : '') + v.variance.toFixed(1) + ' ' + v.unit + '</td>' +

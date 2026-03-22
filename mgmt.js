@@ -459,7 +459,7 @@ window.renderSalesView = () => {
             '<td style="padding:6px 8px;font-size:13px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
             '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
-            '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + (s.notes || '') + '</td>' +
+            '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + esc(s.notes || '') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -485,7 +485,7 @@ window.renderSalesView = () => {
                             '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Recipes Sold</strong>' +
                             (d.itemsSold||[]).map(l => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span>' + esc(l.recipeName) + '</span><strong style="color:var(--green);">' + l.qtySold + '</strong></div>').join('') + '</div>' +
                             '<div><strong style="color:var(--brand-accent);display:block;margin-bottom:6px;">Stock Deducted</strong>' +
-                            (d.stockChanges||[]).map(s => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + esc(s.name) + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + s.unit + '</small></span></div>').join('') + '</div>' +
+                            (d.stockChanges||[]).map(s => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + esc(s.name) + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + esc(s.unit) + '</small></span></div>').join('') + '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>'
@@ -501,7 +501,7 @@ window.renderSalesView = () => {
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
                 '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +
-                '<button onclick="window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
+                '<button onclick="if(confirm(\'Are you sure you want to clear ALL takings data? This cannot be undone.\'))window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">' + tabHtml + '</div>' +
@@ -561,7 +561,7 @@ window.manualTakingsForm = (editDate) => {
         '<div><label style="font-size:11px;color:var(--text-muted);">Total ($)</label><input type="number" step="0.01" id="mt-total" class="input-box" value="' + (existing ? existing.total||'' : '') + '" placeholder="0.00" style="margin:0;border-color:var(--green);"></div>' +
         '<div><label style="font-size:11px;color:var(--text-muted);">Wages ($)</label><input type="number" step="0.01" id="mt-wages" class="input-box" value="' + (existing ? existing.wages||'' : '') + '" placeholder="0.00" style="margin:0;"></div></div>' +
         '<div><label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
-        '<input type="text" id="mt-notes" class="input-box" value="' + (existing ? existing.notes||'' : '') + '" placeholder="e.g. Public holiday, private event..." style="margin-bottom:20px;"></div>' +
+        '<input type="text" id="mt-notes" class="input-box" value="' + esc(existing ? existing.notes||'' : '') + '" placeholder="e.g. Public holiday, private event..." style="margin-bottom:20px;"></div>' +
         '<button onclick="window.saveManualTakings(window._mtEditDate)" class="btn btn-green" style="width:100%;font-size:15px;">Save Takings Entry</button>';
     window._mtEditDate = editDate || null;
     window.openModal(editDate ? 'Edit Takings — ' + editDate : '+ Manual Takings Entry', html);
@@ -670,12 +670,12 @@ window.renderOrientationView = function(showCompleted = false) {
                 totalTasks++; if (o.tasks && o.tasks[t.id]) completedTasks++;
                 let isDone = o.tasks && o.tasks[t.id];
                 let actionHtml = (t.isUpload && !isDone && o.status !== 'Completed') ? `<input type="file" id="up-${o.originalIndex}-${t.id}" accept="application/pdf,image/*" style="display:none;" onchange="window.handleStaffUpload(${o.originalIndex}, '${t.id}', '${t.cat}', this)"><button onclick="document.getElementById('up-${o.originalIndex}-${t.id}').click()" class="btn btn-blue" style="font-size:10px; padding:3px 8px; margin-left:10px;">Upload File</button>` : '';
-                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--border);"><label style="font-size:13px; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" style="transform: scale(1.2);" ${isDone ? 'checked' : ''} ${o.status === 'Completed' || t.isUpload ? 'disabled' : `onchange="window.toggleOrientationTask(${o.originalIndex}, '${t.id}', this.checked)"`}><span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${t.label}</span></label>${actionHtml}</div>`;
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--border);"><label style="font-size:13px; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" style="transform: scale(1.2);" ${isDone ? 'checked' : ''} ${o.status === 'Completed' || t.isUpload ? 'disabled' : `onchange="window.toggleOrientationTask(${o.originalIndex}, '${t.id}', this.checked)"`}><span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${esc(t.label)}</span></label>${actionHtml}</div>`;
             }).join('');
-            return `<div style="margin-bottom:15px;"><h5 style="margin:0 0 5px 0; color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">${phase}</h5>${phaseTasksHtml}</div>`;
+            return `<div style="margin-bottom:15px;"><h5 style="margin:0 0 5px 0; color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">${esc(phase)}</h5>${phaseTasksHtml}</div>`;
         }).join('');
         const pct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-        return `<div class="card" style="border-left:6px solid ${pct === 100 ? 'var(--green)' : 'var(--purple)'}; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;"><div><h3 style="margin:0;">${esc(o.name)}</h3><span class="tag-pill" style="margin-top:5px;">${o.role}</span><small style="color:var(--text-muted); display:block; margin-top:5px;">Started: ${o.startDate}</small></div><div style="text-align:right;"><strong style="color:${pct === 100 ? 'var(--green)' : 'var(--purple)'}; font-size:24px;">${pct}%</strong>${o.status !== 'Completed' ? `<br><button onclick="window.deleteOrientation(${o.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; margin-top:5px; padding:0; text-decoration:underline;">Remove Staff</button>` : ''}</div></div>${phasesHtml}<div style="margin-top:20px; background:var(--bg-main); padding:15px; border-radius:6px; border:1px solid var(--border);"><h5 style="margin:0 0 10px 0; color:var(--brand-dark);">Staff Acknowledgment</h5><p style="font-size:12px; margin:0 0 10px 0; color:var(--text-muted);">I confirm I have read the venue Handbooks, SOPs, and completed the training checklist above.</p>${o.signature ? `<div style="color:var(--green); font-family:monospace; font-size:14px; padding:10px; border:1px dashed var(--green); background:rgba(16, 185, 129, 0.1);">Signed: ${o.signature} <br><small>${o.signDate}</small></div>` : `<div style="display:flex; gap:10px;"><input type="text" id="sig-${o.originalIndex}" class="input-box" placeholder="Type name to sign..." style="margin:0; flex:1;"><button onclick="window.signOrientation(${o.originalIndex})" class="btn btn-dark">Sign</button></div>`}</div>${pct === 100 && o.signature && o.status !== 'Completed' ? `<button onclick="window.completeOrientation(${o.originalIndex})" class="btn btn-green" style="width:100%; margin-top:20px; font-size:16px;">Approve & Mark as Fully Trained</button>` : ''}</div>`; 
+        return `<div class="card" style="border-left:6px solid ${pct === 100 ? 'var(--green)' : 'var(--purple)'}; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;"><div><h3 style="margin:0;">${esc(o.name)}</h3><span class="tag-pill" style="margin-top:5px;">${esc(o.role)}</span><small style="color:var(--text-muted); display:block; margin-top:5px;">Started: ${o.startDate}</small></div><div style="text-align:right;"><strong style="color:${pct === 100 ? 'var(--green)' : 'var(--purple)'}; font-size:24px;">${pct}%</strong>${o.status !== 'Completed' ? `<br><button onclick="window.deleteOrientation(${o.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; margin-top:5px; padding:0; text-decoration:underline;">Remove Staff</button>` : ''}</div></div>${phasesHtml}<div style="margin-top:20px; background:var(--bg-main); padding:15px; border-radius:6px; border:1px solid var(--border);"><h5 style="margin:0 0 10px 0; color:var(--brand-dark);">Staff Acknowledgment</h5><p style="font-size:12px; margin:0 0 10px 0; color:var(--text-muted);">I confirm I have read the venue Handbooks, SOPs, and completed the training checklist above.</p>${o.signature ? `<div style="color:var(--green); font-family:monospace; font-size:14px; padding:10px; border:1px dashed var(--green); background:rgba(16, 185, 129, 0.1);">Signed: ${esc(o.signature)} <br><small>${esc(o.signDate)}</small></div>` : `<div style="display:flex; gap:10px;"><input type="text" id="sig-${o.originalIndex}" class="input-box" placeholder="Type name to sign..." style="margin:0; flex:1;"><button onclick="window.signOrientation(${o.originalIndex})" class="btn btn-dark">Sign</button></div>`}</div>${pct === 100 && o.signature && o.status !== 'Completed' ? `<button onclick="window.completeOrientation(${o.originalIndex})" class="btn btn-green" style="width:100%; margin-top:20px; font-size:16px;">Approve & Mark as Fully Trained</button>` : ''}</div>`; 
     }).join('')}</div></div>`;
 }
 
@@ -684,10 +684,10 @@ window.renderCompletedOrientations = () => { document.getElementById('mainConten
 window.editOnbTemplates = () => {
     let html = ``;
     Object.keys(window.onboardingTemplates).forEach(role => {
-        html += `<div style="margin-bottom:20px;"><h3 style="color:var(--brand-dark); border-bottom:2px solid var(--border); padding-bottom:5px;">${role}</h3>`;
+        html += `<div style="margin-bottom:20px;"><h3 style="color:var(--brand-dark); border-bottom:2px solid var(--border); padding-bottom:5px;">${esc(role)}</h3>`;
         Object.keys(window.onboardingTemplates[role]).forEach(phase => {
-            html += `<h5 style="margin-top:15px; color:var(--brand-accent);">${phase}</h5>`;
-            window.onboardingTemplates[role][phase].forEach((task, tIdx) => { html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg-main); font-size:13px;"><span>${task.label} ${task.isUpload ? '<span style="color:var(--blue); font-size:10px; border:1px solid var(--blue); padding:2px 4px; border-radius:4px; margin-left:5px;">Upload Required</span>' : ''}</span><button onclick="window.delOnbTask('${role}', '${phase}', ${tIdx})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">&times;</button></div>`; });
+            html += `<h5 style="margin-top:15px; color:var(--brand-accent);">${esc(phase)}</h5>`;
+            window.onboardingTemplates[role][phase].forEach((task, tIdx) => { html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg-main); font-size:13px;"><span>${esc(task.label)} ${task.isUpload ? '<span style="color:var(--blue); font-size:10px; border:1px solid var(--blue); padding:2px 4px; border-radius:4px; margin-left:5px;">Upload Required</span>' : ''}</span><button onclick="window.delOnbTask('${role}', '${phase}', ${tIdx})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">&times;</button></div>`; });
             html += `<div style="display:flex; gap:10px; margin-top:10px;"><input type="text" id="nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}" class="input-box" placeholder="Add new task..." style="flex:1; margin:0;"><button onclick="window.addOnbTask('${role}', '${phase}')" class="btn btn-green">Add Task</button></div>`;
         });
         html += `</div>`;
@@ -751,13 +751,13 @@ window.renderTaskListTemplate = function() {
             const today = new Date(); today.setHours(0,0,0,0);
             const daysUntil = Math.round((dueDate - today) / (1000*3600*24));
             isDue = daysUntil <= 0;
-            daysLeftText = isDue ? (daysUntil < 0 ? Math.abs(daysUntil) + ' days overdue' : 'DUE TODAY') : 'Due in ' + daysUntil + ' days';
+            daysLeftText = isDue ? (daysUntil < 0 ? Math.abs(daysUntil) + (Math.abs(daysUntil)===1?' day':' days') + ' overdue' : 'DUE TODAY') : 'Due in ' + daysUntil + (daysUntil===1?' day':' days');
             nextDueStr = 'Due: ' + dueDate.toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'});
         } else if (t.lastLogIso) {
             const daysSince = (new Date() - new Date(t.lastLogIso)) / (1000*3600*24);
             const interval = freqMap[t.freq] || 7;
             isDue = daysSince >= interval;
-            if (!isDue) daysLeftText = 'Due in ' + Math.ceil(interval - daysSince) + ' days';
+            { const dl = Math.ceil(interval - daysSince); if (!isDue) daysLeftText = 'Due in ' + dl + (dl===1?' day':' days'); }
             nextDueStr = t.freq + ' | Last: ' + (t.lastDate || 'Never');
         } else if (t.anchorDate) {
             // Has anchor date but never done — check if anchor + interval has passed
@@ -767,21 +767,21 @@ window.renderTaskListTemplate = function() {
             if (anchorD > today2) {
                 isDue = false;
                 const daysUntilAnchor = Math.round((anchorD - today2) / (1000*3600*24));
-                daysLeftText = 'Due in ' + daysUntilAnchor + ' days';
+                daysLeftText = 'Due in ' + daysUntilAnchor + (daysUntilAnchor===1?' day':' days');
             } else {
                 const daysSinceAnchor = (today2 - anchorD) / 86400000;
                 const intervalsPassed = Math.floor(daysSinceAnchor / interval);
                 const nextDueDate = new Date(anchorD.getTime() + intervalsPassed * interval * 86400000);
                 const daysUntilNext = Math.round((nextDueDate - today2) / 86400000);
                 isDue = daysUntilNext <= 0;
-                daysLeftText = isDue ? 'DUE NOW' : 'Due in ' + daysUntilNext + ' days';
+                daysLeftText = isDue ? 'DUE NOW' : 'Due in ' + daysUntilNext + (daysUntilNext===1?' day':' days');
             }
             nextDueStr = t.freq + ' | First due: ' + anchorD.toLocaleDateString('en-AU', {day:'numeric',month:'short'});
         } else {
             nextDueStr = (t.dueDateMode === 'specific' ? 'Due: ' + (t.specificDueDate || 'Not set') : (t.freq || 'Weekly')) + ' | Never done';
         }
 
-        const borderColor = isDue ? 'var(--red)' : 'var(--green)';
+        const borderColor = isDue ? 'var(--red)' : (daysLeftText.match(/Due in [12] day/) ? 'var(--orange)' : 'var(--green)');
         return '<div class="card" style="border-left:3px solid ' + borderColor + ';padding:12px;margin-bottom:8px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
                 '<div style="flex:1;">' +
@@ -817,9 +817,9 @@ window.addTaskForm = (editIdx) => {
     const isEdit = editIdx !== undefined;
     const today = new Date().toISOString().split('T')[0];
     const html = '<label style="font-size:11px;color:var(--text-muted);">Task Name</label>' +
-        '<input type="text" id="t-n" class="input-box" value="' + (t.name||'') + '" placeholder="e.g. Grease Trap Clean">' +
+        '<input type="text" id="t-n" class="input-box" value="' + esc(t.name||'') + '" placeholder="e.g. Grease Trap Clean">' +
         '<label style="font-size:11px;color:var(--text-muted);">Notes (optional)</label>' +
-        '<input type="text" id="t-notes" class="input-box" value="' + (t.notes||'') + '" placeholder="e.g. Check gasket seal">' +
+        '<input type="text" id="t-notes" class="input-box" value="' + esc(t.notes||'') + '" placeholder="e.g. Check gasket seal">' +
         '<label style="font-size:11px;color:var(--text-muted);">Schedule Type</label>' +
         '<select id="t-mode" class="input-box" onchange="document.getElementById(\'t-recurring\').style.display=this.value===\'recurring\'?\'block\':\'none\';document.getElementById(\'t-specific\').style.display=this.value===\'specific\'?\'block\':\'none\'">' +
             '<option value="recurring" ' + ((t.dueDateMode||'recurring')==='recurring'?'selected':'') + '>Recurring (Weekly/Monthly etc)</option>' +
@@ -872,7 +872,7 @@ window.logTaskCompletion = (i) => {
     if (!s) return window.showToast('Enter staff initials.', 'error');
     const today = new Date().toISOString().split('T')[0];
     window._taskLogStaff = s;
-    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Logging: <strong>' + window.rotationalTasks[i].name + '</strong></p>' +
+    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Logging: <strong>' + esc(window.rotationalTasks[i].name) + '</strong></p>' +
         '<label style="font-size:11px;color:var(--text-muted);">Completion Date</label>' +
         '<div style="display:flex;gap:8px;margin-bottom:15px;">' +
             '<button onclick="window._confirmTaskLog(' + i + ',window._taskLogStaff,\'today\')" class="btn btn-green" style="flex:1;">✓ Today</button>' +
@@ -965,7 +965,7 @@ window.renderShiftChecklists = () => {
         const checked = saved.includes(i);
         return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);">' +
             '<input type="checkbox" id="sc-' + i + '" ' + (checked?'checked':'') + ' onchange="window.saveShiftCheckItem(' + i + ',window._scStateKey)" style="transform:scale(1.3);flex-shrink:0;">' +
-            '<label for="sc-' + i + '" style="cursor:pointer;font-size:13px;' + (checked?'text-decoration:line-through;color:var(--text-muted);':'') + '">' + item + '</label>' +
+            '<label for="sc-' + i + '" style="cursor:pointer;font-size:13px;' + (checked?'text-decoration:line-through;color:var(--text-muted);':'') + '">' + esc(item) + '</label>' +
         '</div>';
     }).join('');
 
@@ -1019,7 +1019,7 @@ window.editShiftChecklist = (type) => {
     const label = { opening:'Opening', preservice:'Pre-Service', closing:'Closing' }[type];
     const rows = items.map((item, i) =>
         '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);">' +
-        '<span style="font-size:13px;flex:1;">' + item + '</span>' +
+        '<span style="font-size:13px;flex:1;">' + esc(item) + '</span>' +
         '<button onclick="window.removeShiftItem(window._scType,' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button>' +
         '</div>'
     ).join('');
@@ -1143,7 +1143,7 @@ window.renderChecklistHistory = () => {
     const types = [...new Set((window.complianceLogs||[]).map(l=>l.type))].sort();
     const filterType = window._checkHistFilter || '';
     const filtered = filterType ? logs.filter(l=>l.type===filterType) : logs;
-    const typeOpts = '<option value="">All Checklists</option>' + types.map(t=>'<option value="'+t+'" '+(filterType===t?'selected':'')+'>'+t+'</option>').join('');
+    const typeOpts = '<option value="">All Checklists</option>' + types.map(t=>'<option value="'+esc(t)+'" '+(filterType===t?'selected':'')+'>'+esc(t)+'</option>').join('');
     const rows = filtered.map(l =>
         '<tr style="border-bottom:1px solid var(--border);">'+
         '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">'+l.time+'</td>'+
@@ -1174,7 +1174,7 @@ window.exportChecklistHistory = () => {
 };
 
 window.editFridges = () => { 
-    let html = `<div style="margin-bottom:20px;">${(window.fridgeUnits || []).map((f, i) => `<div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid var(--border); align-items:center;"><span style="font-size:14px;">${f}</span> <button onclick="window.delFridge(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div>`).join('')}</div><div style="display:flex; gap:10px;"><input type="text" id="new-fridge" class="input-box" placeholder="New Unit Name" style="margin:0;"><button onclick="window.addFridge()" class="btn btn-green">Add Unit</button></div>`;
+    let html = `<div style="margin-bottom:20px;">${(window.fridgeUnits || []).map((f, i) => `<div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid var(--border); align-items:center;"><span style="font-size:14px;">${esc(f)}</span> <button onclick="window.delFridge(${i})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:18px;">&times;</button></div>`).join('')}</div><div style="display:flex; gap:10px;"><input type="text" id="new-fridge" class="input-box" placeholder="New Unit Name" style="margin:0;"><button onclick="window.addFridge()" class="btn btn-green">Add Unit</button></div>`;
     window.openModal("⚙️ Setup Fridges/Freezers", html);
 };
 window.addFridge = () => { const v = document.getElementById('new-fridge').value; if(v) { window.fridgeUnits.push(v); window.saveToDisk(); window.editFridges(); } };
@@ -1182,7 +1182,7 @@ window.delFridge = (i) => { window.fridgeUnits.splice(i,1); window.saveToDisk();
 
 window.editChecklists = () => {
     let html = `<div style="display:flex; gap:10px; margin-bottom:20px;"><input type="text" id="new-cat" class="input-box" placeholder="New Category (e.g. Weekly Deep Clean)" style="margin:0;"><button onclick="window.addChecklistCat()" class="btn btn-blue">Add Category</button></div><div style="max-height:60vh; overflow-y:auto; padding-right:10px;">`;
-    Object.keys(window.masterChecklists || {}).forEach(cat => { html += `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><h4 style="margin:0; color:var(--brand-accent);">${cat}</h4><button onclick="window.delChecklistCat('${cat}')" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; text-decoration:underline;">Delete Category</button></div>${(window.masterChecklists[cat] || []).map((item, idx) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);"><span style="font-size:13px;">${item}</span><button onclick="window.delChecklistItem('${cat}', ${idx})" style="color:var(--red); background:none; border:none; cursor:pointer;">&times;</button></div>`).join('')}<div style="display:flex; gap:10px; margin-top:15px;"><input type="text" id="add-item-${cat.replace(/\s/g,'')}" class="input-box" placeholder="New task..." style="margin:0; font-size:12px; padding:6px;"><button onclick="window.addChecklistItem('${cat}')" class="btn btn-green" style="padding:6px 12px; font-size:11px;">Add Task</button></div></div>`; });
+    Object.keys(window.masterChecklists || {}).forEach(cat => { html += `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><h4 style="margin:0; color:var(--brand-accent);">${esc(cat)}</h4><button onclick="window.delChecklistCat('${cat.replace(/'/g,"\\'")}')" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; text-decoration:underline;">Delete Category</button></div>${(window.masterChecklists[cat] || []).map((item, idx) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);"><span style="font-size:13px;">${esc(item)}</span><button onclick="window.delChecklistItem('${cat.replace(/'/g,"\\'")}', ${idx})" style="color:var(--red); background:none; border:none; cursor:pointer;">&times;</button></div>`).join('')}<div style="display:flex; gap:10px; margin-top:15px;"><input type="text" id="add-item-${cat.replace(/\s/g,'')}" class="input-box" placeholder="New task..." style="margin:0; font-size:12px; padding:6px;"><button onclick="window.addChecklistItem('${cat.replace(/'/g,"\\'")}' )" class="btn btn-green" style="padding:6px 12px; font-size:11px;">Add Task</button></div></div>`; });
     html += `</div>`;
     window.openModal("⚙️ Edit Checklists", html);
 };
@@ -1261,13 +1261,13 @@ window.renderFixItBoard = () => {
 window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: new Date().toLocaleDateString() }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
 window.resolveDefect = (index) => { const costInput = document.getElementById(`def-cost-${index}`).value; window.defectLogs[index].status = 'Resolved'; window.defectLogs[index].cost = costInput ? parseFloat(costInput) : 0; window.defectLogs[index].resolvedDate = new Date().toLocaleDateString(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Resolved!"); };
 
-window.renderAssetRegister = () => { return (window.equipmentData || []).length === 0 ? '<p style="color:var(--text-muted);">No assets tracked yet.</p>' : window.equipmentData.map((e, idx) => `<div class="card" style="border-left:3px solid var(--blue); padding:12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${e.name}</strong> <span style="color:var(--text-muted); font-size:13px; margin-left:10px;">[Code: ${e.code}]</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Service Interval: ${e.interval} months | Last Service: <strong style="color:white;">${e.lastService}</strong></small></div><div style="display:flex; gap:10px;"><button onclick="window.editEq(${idx})" class="btn btn-outline">Edit</button><button onclick="window.logEq(${idx})" class="btn btn-green">Log Service Today</button><button onclick="window.delEq(${idx})" style="background:none; color:var(--red); border:none; cursor:pointer; font-size:18px;">&times;</button></div></div></div>`).join(''); };
+window.renderAssetRegister = () => { return (window.equipmentData || []).length === 0 ? '<p style="color:var(--text-muted);">No assets tracked yet.</p>' : window.equipmentData.map((e, idx) => `<div class="card" style="border-left:3px solid var(--blue); padding:12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${esc(e.name)}</strong> <span style="color:var(--text-muted); font-size:13px; margin-left:10px;">[Code: ${esc(e.code)}]</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Service Interval: ${e.interval} months | Last Service: <strong style="color:white;">${e.lastService}</strong></small></div><div style="display:flex; gap:10px;"><button onclick="window.editEq(${idx})" class="btn btn-outline">Edit</button><button onclick="window.logEq(${idx})" class="btn btn-green">Log Service Today</button><button onclick="window.delEq(${idx})" style="background:none; color:var(--red); border:none; cursor:pointer; font-size:18px;">&times;</button></div></div></div>`).join(''); };
 
 window.editEq = (i = null) => { 
     let e = i !== null ? window.equipmentData[i] : {name: '', code: '', interval: 6, lastService: new Date().toISOString().split('T')[0]}; 
     let html = `
-        <label style="font-size:11px; color:var(--text-muted);">Equipment Name</label><input type="text" id="eq-n" class="input-box" value="${e.name}">
-        <label style="font-size:11px; color:var(--text-muted);">Asset/Serial Code</label><input type="text" id="eq-c" class="input-box" value="${e.code}">
+        <label style="font-size:11px; color:var(--text-muted);">Equipment Name</label><input type="text" id="eq-n" class="input-box" value="${esc(e.name)}">
+        <label style="font-size:11px; color:var(--text-muted);">Asset/Serial Code</label><input type="text" id="eq-c" class="input-box" value="${esc(e.code)}">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Interval (Months)</label><input type="number" id="eq-i" class="input-box" value="${e.interval}"></div>
             <div><label style="font-size:11px; color:var(--text-muted);">Last Service Date</label><input type="date" id="eq-d" class="input-box" value="${e.lastService}"></div>
@@ -1283,7 +1283,7 @@ window.delEq = (i) => { if(confirm("Remove this asset?")) { window.equipmentData
 window.renderContractorBoard = () => {
     const active = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => !c.timeOut);
     const history = (window.contractorLogs || []).map((c, i) => ({...c, originalIndex: i})).filter(c => c.timeOut).slice(-10).reverse();
-    return `<h3 style="margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">🟢 Currently On-Site</h3>${active.length === 0 ? '<div class="card"><p style="color:var(--green); margin:0; font-weight:bold;">No contractors currently signed in.</p></div>' : active.map(c => `<div class="card" style="border-left:3px solid var(--green); padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${c.name}</strong> <span style="color:var(--text-muted);">(${c.company})</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Reason: ${c.reason} | <strong>In:</strong> ${c.timeIn}</small></div><button onclick="window.signOutContractor(${c.originalIndex})" class="btn btn-red" style="font-size:12px;">Sign Out</button></div>`).join('')}<h3 style="margin-top:20px; margin-bottom:10px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">📋 Recent Visits</h3><table style="width:100%; background:var(--card-bg); border-radius:8px; overflow:hidden; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:8px 12px;">Date</th><th style="padding:8px 12px;">Contractor</th><th style="padding:8px 12px;">Reason</th><th style="padding:8px 12px;">Time</th></tr></thead><tbody>${history.length === 0 ? '<tr><td colspan="4" style="padding:15px; color:var(--text-muted); text-align:center;">No recent logs.</td></tr>' : history.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:7px 10px; font-size:12px; color:var(--text-muted);">${c.date}</td><td style="padding:7px 12px;"><strong style="font-size:13px;">${c.name}</strong><br><small style="color:var(--text-muted);">${c.company}</small></td><td style="padding:7px 10px; font-size:12px; color:var(--brand-accent);">${c.reason}</td><td style="padding:7px 10px; font-size:12px;">In: <strong>${c.timeIn}</strong><br>Out: <strong>${c.timeOut}</strong></td></tr>`).join('')}</tbody></table>`;
+    return `<h3 style="margin-bottom:15px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">🟢 Currently On-Site</h3>${active.length === 0 ? '<div class="card"><p style="color:var(--green); margin:0; font-weight:bold;">No contractors currently signed in.</p></div>' : active.map(c => `<div class="card" style="border-left:3px solid var(--green); padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${esc(c.name)}</strong> <span style="color:var(--text-muted);">(${esc(c.company)})</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Reason: ${esc(c.reason)} | <strong>In:</strong> ${c.timeIn}</small></div><button onclick="window.signOutContractor(${c.originalIndex})" class="btn btn-red" style="font-size:12px;">Sign Out</button></div>`).join('')}<h3 style="margin-top:20px; margin-bottom:10px; color:var(--brand-dark); border-bottom:1px solid var(--border); padding-bottom:5px;">📋 Recent Visits</h3><table style="width:100%; background:var(--card-bg); border-radius:8px; overflow:hidden; border-collapse:collapse;"><thead><tr style="text-align:left; background:#111; border-bottom:1px solid var(--border);"><th style="padding:8px 12px;">Date</th><th style="padding:8px 12px;">Contractor</th><th style="padding:8px 12px;">Reason</th><th style="padding:8px 12px;">Time</th></tr></thead><tbody>${history.length === 0 ? '<tr><td colspan="4" style="padding:15px; color:var(--text-muted); text-align:center;">No recent logs.</td></tr>' : history.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:7px 10px; font-size:12px; color:var(--text-muted);">${c.date}</td><td style="padding:7px 12px;"><strong style="font-size:13px;">${esc(c.name)}</strong><br><small style="color:var(--text-muted);">${esc(c.company)}</small></td><td style="padding:7px 10px; font-size:12px; color:var(--brand-accent);">${esc(c.reason)}</td><td style="padding:7px 10px; font-size:12px;">In: <strong>${c.timeIn}</strong><br>Out: <strong>${c.timeOut}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 window.showContractorForm = () => { 
     let html = `<input type="text" id="con-name" class="input-box" placeholder="Contractor Name (e.g., John Smith)" required><input type="text" id="con-company" class="input-box" placeholder="Company (e.g., Bob's Plumbing)" required><input type="text" id="con-reason" class="input-box" placeholder="Reason for visit (e.g., Fix grease trap)" style="margin-bottom:20px;" required><button onclick="window.submitContractor()" class="btn btn-green" style="width:100%;">Sign In</button>`;
@@ -1300,7 +1300,7 @@ window._safeSortCol = window._safeSortCol || 'expiry';
 window._safeSortAsc = window._safeSortAsc !== undefined ? window._safeSortAsc : true;
 
 window._safeGetStatus = function(d) {
-    if (!d.expiry) return { label: 'OK', color: 'var(--green)' };
+    if (!d.expiry) return { label: 'No Expiry', color: 'var(--text-muted)' };
     const daysLeft = (new Date(d.expiry) - new Date()) / 86400000;
     if (daysLeft < 0) return { label: 'EXPIRED', color: 'var(--red)' };
     if (daysLeft <= 30) return { label: 'Expiring', color: 'var(--orange)' };
@@ -1684,7 +1684,7 @@ window.renderHACCPHistory = () => {
         const avgTemp = totalLogs > 0 ? (last30.reduce((s, l) => s + Number(l.value), 0) / totalLogs).toFixed(1) : 'N/A';
         const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
         const statusColor = breaches.length === 0 ? 'var(--green)' : breaches.length <= 2 ? 'var(--orange)' : 'var(--red)';
-        const statusLabel = breaches.length === 0 ? 'Compliant' : breaches.length + ' breach(es)';
+        const statusLabel = breaches.length === 0 ? 'Compliant' : breaches.length + (breaches.length === 1 ? ' breach' : ' breaches');
         
         // Mini sparkline of last 14 readings
         const recent14 = last30.slice(-14);
@@ -1725,7 +1725,7 @@ window.renderHACCPHistory = () => {
         
         return '<div class="card" style="border-top:3px solid ' + statusColor + ';margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
-                '<div><h3 style="margin:0;font-size:15px;">' + unit + '</h3>' +
+                '<div><h3 style="margin:0;font-size:15px;">' + esc(unit) + '</h3>' +
                 '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + totalLogs + ' readings in 30 days</div></div>' +
                 '<div style="text-align:right;"><span class="breach-indicator ' + (breaches.length === 0 ? 'ok' : breaches.length <= 2 ? 'warn' : 'breach') + '"></span>' +
                 '<span style="font-weight:bold;color:' + statusColor + ';">' + statusLabel + '</span></div>' +
@@ -1804,8 +1804,8 @@ window.renderStaffDirectoryView = () => {
             staff.map((s, i) =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
                 '<td style="padding:8px 12px;"><strong style="font-size:13px;">' + esc(s.name) + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + esc(s.emergency) + '</small>' : '') + '</td>' +
-                '<td style="padding:12px 15px;font-size:13px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + (s.role||'Staff') + '</span></td>' +
-                '<td style="padding:12px 15px;font-size:13px;"><a href="tel:' + (s.phone||'') + '" style="color:var(--blue);">' + (s.phone||'No phone') + '</a>' + (s.email ? '<br><a href="mailto:' + s.email + '" style="color:var(--text-muted);font-size:12px;">' + s.email + '</a>' : '') + '</td>' +
+                '<td style="padding:12px 15px;font-size:13px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + esc(s.role||'Staff') + '</span></td>' +
+                '<td style="padding:12px 15px;font-size:13px;"><a href="tel:' + esc(s.phone||'') + '" style="color:var(--blue);">' + esc(s.phone||'No phone') + '</a>' + (s.email ? '<br><a href="mailto:' + esc(s.email) + '" style="color:var(--text-muted);font-size:12px;">' + esc(s.email) + '</a>' : '') + '</td>' +
                 '<td style="padding:8px 12px;"><span style="font-size:11px;color:' + (s.status==='Active'?'var(--green)':'var(--text-muted)') + ';font-weight:bold;">' + (s.status||'Active') + '</span>' + (s.startDate ? '<br><small style="color:var(--text-muted);font-size:11px;">Since ' + s.startDate + '</small>' : '') + '</td>' +
                 '<td style="padding:8px 12px;text-align:right;">' +
                     '<button onclick="window.editStaffForm(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;margin-right:4px;">✏️ Edit</button>' +
@@ -1822,19 +1822,19 @@ window.editStaffForm = (idx) => {
     const s = idx !== undefined ? (window.staffDirectory||[])[idx] : { name:'', role:'FOH', phone:'', email:'', emergency:'', status:'Active', startDate:'', notes:'' };
     const isEdit = idx !== undefined;
     const html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-        '<div><label style="font-size:11px;color:var(--text-muted);">Full Name</label><input type="text" id="sd-name" class="input-box" value="' + (s.name||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Full Name</label><input type="text" id="sd-name" class="input-box" value="' + esc(s.name||'') + '" style="margin:0;"></div>' +
         '<div><label style="font-size:11px;color:var(--text-muted);">Role</label><select id="sd-role" class="input-box" style="margin:0;"><option ' + (s.role==='FOH'?'selected':'') + '>FOH</option><option ' + (s.role==='BOH'?'selected':'') + '>BOH</option><option ' + (s.role==='Bar'?'selected':'') + '>Bar</option><option ' + (s.role==='Manager'?'selected':'') + '>Manager</option><option ' + (s.role==='Kitchen Hand'?'selected':'') + '>Kitchen Hand</option></select></div>' +
-        '<div><label style="font-size:11px;color:var(--text-muted);">Phone</label><input type="text" id="sd-phone" class="input-box" value="' + (s.phone||'') + '" style="margin:0;"></div>' +
-        '<div><label style="font-size:11px;color:var(--text-muted);">Email</label><input type="text" id="sd-email" class="input-box" value="' + (s.email||'') + '" style="margin:0;"></div>' +
-        '<div><label style="font-size:11px;color:var(--text-muted);">Emergency Contact</label><input type="text" id="sd-emerg" class="input-box" value="' + (s.emergency||'') + '" placeholder="Name & number" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Phone</label><input type="text" id="sd-phone" class="input-box" value="' + esc(s.phone||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Email</label><input type="text" id="sd-email" class="input-box" value="' + esc(s.email||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Emergency Contact</label><input type="text" id="sd-emerg" class="input-box" value="' + esc(s.emergency||'') + '" placeholder="Name & number" style="margin:0;"></div>' +
         '<div><label style="font-size:11px;color:var(--text-muted);">Start Date</label><input type="date" id="sd-start" class="input-box" value="' + (s.startDate||'') + '" style="margin:0;"></div>' +
         '</div>' +
         '<label style="font-size:11px;color:var(--text-muted);">Status</label>' +
         '<select id="sd-status" class="input-box"><option ' + (s.status==='Active'?'selected':'') + '>Active</option><option ' + (s.status==='Inactive'?'selected':'') + '>Inactive</option><option ' + (s.status==='Casual'?'selected':'') + '>Casual</option></select>' +
         '<label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
-        '<textarea id="sd-notes" class="input-box" style="height:60px;margin-bottom:15px;">' + (s.notes||'') + '</textarea>' +
+        '<textarea id="sd-notes" class="input-box" style="height:60px;margin-bottom:15px;">' + esc(s.notes||'') + '</textarea>' +
         '<button onclick="window.saveStaff(' + (isEdit?idx:'undefined') + ')" class="btn btn-green" style="width:100%;">' + (isEdit?'Save Changes':'Add Staff Member') + '</button>';
-    window.openModal(isEdit ? '✏️ Edit — ' + s.name : '+ New Staff Member', html);
+    window.openModal(isEdit ? '✏️ Edit — ' + esc(s.name) : '+ New Staff Member', html);
 };
 
 window.saveStaff = (idx) => {
@@ -2478,7 +2478,7 @@ window.renderManagerHub = () => {
             expiringDocs.map(d => {
                 const isExpired = new Date(d.expiry) < today;
                 return '<div style="font-size:13px;padding:6px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;">' +
-                    '<span>' + (isExpired ? '🔴 ' : '🟡 ') + d.name + '</span>' +
+                    '<span>' + (isExpired ? '🔴 ' : '🟡 ') + esc(d.name) + '</span>' +
                     '<span style="color:' + (isExpired ? 'var(--red)' : 'var(--orange)') + ';font-size:12px;">' + (isExpired ? 'EXPIRED' : 'Expires ' + d.expiry) + '</span>' +
                 '</div>';
             }).join('') +
@@ -2666,7 +2666,7 @@ window.renderHandoverView = () => {
         if (isExpanded) {
             const urgentHtml = h.urgent ? `<div style="margin-top:12px;padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:13px;color:var(--red);"><strong>⚠️ Needs attention:</strong> ${E(h.urgent)}</div>` : '';
             const debriefHtml = h.debrief
-                ? `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;color:var(--text-main);">${h.debrief}</div>`
+                ? `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;color:var(--text-main);">${E(h.debrief)}</div>`
                 : `<p style="color:var(--text-muted);font-size:13px;font-style:italic;">No AI debrief — raw notes only.</p><div style="white-space:pre-wrap;font-size:14px;line-height:1.7;">${E(h.notes||'')}</div>`;
             expandedContent = `<tr><td colspan="5" style="padding:15px 20px;background:${isFirst?'rgba(139,92,246,0.04)':'var(--bg-main)'};border-bottom:2px solid var(--border);">
                 <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Closed ${h.closeTime||'—'} · Out ${h.outTime||'—'} · KH ${h.khTime||'—'}</div>
@@ -2817,7 +2817,7 @@ ${todayRevenue ? '- It was a ' + (todayRevenue > 25000 ? 'big' : todayRevenue > 
 - Total open maintenance tickets: ${openTickets.length}${openTickets.length > 0 ? ' (' + openTickets.slice(0,3).map(t=>t.item).join(', ') + ')' : ''}
 - Stock below par: ${belowPar.length} items${belowPar.length > 0 ? ' (' + topBelowPar + ')' : ''}
 - Incidents today: ${todayIncidents.length}${todayIncidents.length > 0 ? ' — ' + todayIncidents.map(i=>i.type||'General').join(', ') : ''}
-- Temp logs today: ${todayTemps.length} readings, ${tempBreaches.length} breach(es) above 5°C
+- Temp logs today: ${todayTemps.length} readings, ${tempBreaches.length} ${tempBreaches.length===1?'breach':'breaches'} above 5°C
 ${urgent ? '- URGENT for opening team: ' + urgent : ''}
 
 Write a clear, friendly shift debrief that the opening team and management will read tomorrow.
@@ -2898,7 +2898,7 @@ window.renderKnowledgeView = () => {
         `<span class="tag-pill ${activeTab==='all'?'active':''}" onclick="window._kbActiveTab='all';window.showView('knowledge');">All (${kb.length})</span>`
     ].concat(cats.map(c => {
         const count = kb.filter(k => k.category === c).length;
-        return `<span class="tag-pill ${activeTab===c?'active':''}" onclick="window._kbActiveTab='${c.replace(/'/g,"\\'")}';window.showView('knowledge');">${c} (${count})</span>`;
+        return `<span class="tag-pill ${activeTab===c?'active':''}" onclick="window._kbActiveTab='${c.replace(/'/g,"\\'")}';window.showView('knowledge');">${esc(c)} (${count})</span>`;
     })).join('');
 
     const cardsHtml = filtered.length === 0
@@ -2909,8 +2909,8 @@ window.renderKnowledgeView = () => {
                     <h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">${esc(k.title)}</h4>
                     ${k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : ''}
                 </div>
-                <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">${k.category || 'General'}</span>
-                ${k.content ? `<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">${k.content.substring(0,80)}${k.content.length>80?'...':''}</p>` : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>'}
+                <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">${esc(k.category || 'General')}</span>
+                ${k.content ? `<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">${esc(k.content.substring(0,80))}${k.content.length>80?'...':''}</p>` : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>'}
             </div>`
         ).join('')}</div>`;
 
@@ -2932,7 +2932,7 @@ window.editKbCategories = () => {
     let html = `<div style="margin-bottom:15px;">
         ${cats.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;">No categories yet.</p>' : cats.map((c, i) => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);">
-                <span style="font-size:14px;">${c}</span>
+                <span style="font-size:14px;">${esc(c)}</span>
                 <button onclick="window.delKbCat(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;">&times;</button>
             </div>`).join('')}
     </div>
@@ -2961,7 +2961,7 @@ window.delKbCat = (i) => {
 
 window.newSOPForm = () => {
     const cats = window.kbCategories || [];
-    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const catOpts = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     const html = `
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
             <div><label style="font-size:11px;color:var(--text-muted);">SOP Title</label>
@@ -3022,33 +3022,33 @@ window.viewSOP = (i) => {
                 <button onclick="window.deleteSOP(${i})" class="btn btn-red" style="font-size:12px;">🗑️ Delete</button>
             </div>
         </div>
-        <h2 style="margin:0 0 8px 0;">${k.title}</h2>
+        <h2 style="margin:0 0 8px 0;">${esc(k.title)}</h2>
         <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
-            <span class="tag-pill" style="margin:0;">${k.category || 'General'}</span>
+            <span class="tag-pill" style="margin:0;">${esc(k.category || 'General')}</span>
             ${k.lastModified ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Last updated: ${k.lastModified}</span>` : ''}
         </div>
         ${k.fileUrl ? `<div style="margin-bottom:20px;padding:15px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
             <span style="font-size:13px;color:var(--text-muted);">📎 Attached file</span>
             <a href="${k.fileUrl}" target="_blank" download class="btn btn-outline" style="text-decoration:none;font-size:12px;">Download / View</a>
         </div>` : ''}
-        ${k.content ? `<div style="white-space:pre-wrap;line-height:1.8;font-size:15px;color:var(--text-main);">${k.content}</div>` : '<p style="color:var(--text-muted);font-style:italic;">No written content — see attached file above.</p>'}
+        ${k.content ? `<div style="white-space:pre-wrap;line-height:1.8;font-size:15px;color:var(--text-main);">${esc(k.content)}</div>` : '<p style="color:var(--text-muted);font-style:italic;">No written content — see attached file above.</p>'}
     </div>`;
 };
 
 window.editSOPForm = (i) => {
     const k = window.knowledgeBase[i];
     const cats = window.kbCategories || [];
-    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const catOpts = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     const html = `
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
             <div><label style="font-size:11px;color:var(--text-muted);">Title</label>
-            <input type="text" id="k-edit-title" class="input-box" value="${k.title.replace(/"/g,'&quot;')}" style="margin:0;"></div>
+            <input type="text" id="k-edit-title" class="input-box" value="${esc(k.title)}" style="margin:0;"></div>
             <div><label style="font-size:11px;color:var(--text-muted);">Category</label>
-            <input type="text" id="k-edit-cat" class="input-box" value="${k.category||''}" list="kb-edit-cats" style="margin:0;">
+            <input type="text" id="k-edit-cat" class="input-box" value="${esc(k.category||'')}" list="kb-edit-cats" style="margin:0;">
             <datalist id="kb-edit-cats">${catOpts}</datalist></div>
         </div>
         <label style="font-size:11px;color:var(--text-muted);">Content</label>
-        <textarea id="k-edit-content" class="input-box" style="height:200px;margin-bottom:15px;line-height:1.6;">${k.content||''}</textarea>
+        <textarea id="k-edit-content" class="input-box" style="height:200px;margin-bottom:15px;line-height:1.6;">${esc(k.content||'')}</textarea>
         ${k.fileUrl ? `<div style="margin-bottom:15px;padding:10px;background:var(--bg-main);border-radius:6px;font-size:13px;display:flex;justify-content:space-between;">
             <span>📎 Existing file attached</span>
             <a href="${k.fileUrl}" target="_blank" style="color:var(--blue);text-decoration:none;">View</a>
@@ -3099,7 +3099,7 @@ window.renderRosterView = () => {
             if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${r.data}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; } 
             else { displayHtml = `<iframe src="${r.data}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
         }
-        return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${esc(r.name)}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
+        return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${esc(r.name)}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${esc(r.name)}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
     }).join('')}</div>`;
 };
 window.handleRosterUpload = async (e) => {
