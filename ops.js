@@ -72,7 +72,7 @@ window.renderZoneManager = () => {
     <div style="max-width: 800px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div>
-                <h2 style="margin:0;">Storage Zones</h2>
+                <h2 style="margin:0;font-size:20px;">Storage Zones</h2>
                 <p style="margin:5px 0 0 0; color:var(--text-muted); font-size:13px;">These zones appear in Inventory, Invoice Ripper, and Recipe Quick-Add.</p>
             </div>
             <button onclick="window.editZoneForm()" class="btn btn-blue">+ Add Zone</button>
@@ -881,32 +881,30 @@ window.renderParEditor = () => {
             return '<tr style="border-bottom:1px solid var(--border);">' +
                 '<td style="padding:7px 10px;"><strong style="font-size:12px;">' + item.name + '</strong>' +
                 '<br><small style="color:var(--text-muted);">' + (item.supplier || 'No supplier') + ' · ' + (item.buyUnit || 'unit') + '</small></td>' +
-                '<td style="padding:10px 12px;text-align:center;"><span style="color:' + stockColor + ';font-weight:bold;">' + stock.toFixed(1) + '</span></td>' +
-                '<td style="padding:8px;"><input type="number" step="0.5" min="0" ' +
+                '<td style="padding:7px 10px;text-align:center;"><span style="color:' + stockColor + ';font-weight:bold;">' + stock.toFixed(1) + '</span></td>' +
+                '<td style="padding:6px;"><input type="number" step="0.5" min="0" ' +
                 'id="par-wd-' + item.id + '" ' +
                 'value="' + parWd + '" ' +
-                'class="input-box" style="margin:0;padding:6px 8px;text-align:center;width:80px;" ' +
-                'onkeydown="if(event.key==="Enter"||event.key==="Tab"){event.preventDefault();var next=document.getElementById("par-we-" + item.id);if(next)next.focus();}"></td>' +
-                '<td style="padding:8px;"><input type="number" step="0.5" min="0" ' +
+                'class="input-box" style="margin:0;padding:5px 6px;text-align:center;width:70px;font-size:13px;"></td>' +
+                '<td style="padding:6px;"><input type="number" step="0.5" min="0" ' +
                 'id="par-we-' + item.id + '" ' +
                 'value="' + parWe + '" ' +
-                'class="input-box" style="margin:0;padding:6px 8px;text-align:center;width:80px;" ' +
-                'onkeydown="if(event.key==="Enter"||event.key==="Tab"){event.preventDefault();var rows=document.querySelectorAll("[id^=par-wd-]");var arr=Array.from(rows);var cur=arr.findIndex(el=>el.id==="par-wd-"+item.id);if(arr[cur+1])arr[cur+1].focus();}"></td>' +
+                'class="input-box" style="margin:0;padding:5px 6px;text-align:center;width:70px;font-size:13px;"></td>' +
             '</tr>';
         }).join('');
 
-        return '<details class="card" style="padding:0;overflow:hidden;margin-bottom:12px;" open>' +
-            '<summary style="padding:12px 18px;background:#111;cursor:pointer;font-weight:bold;color:var(--brand-dark);display:flex;justify-content:space-between;align-items:center;outline:none;border-radius:10px 10px 0 0;">' +
-                '<span>' + cat + ' <span style="color:var(--text-muted);font-size:12px;font-weight:normal;">(' + catItems.length + ' items)</span></span>' +
-                '<span style="color:var(--blue);font-size:12px;">▼</span>' +
+        return '<details class="card" style="padding:0;overflow:hidden;margin-bottom:8px;" open>' +
+            '<summary style="padding:8px 14px;background:#111;cursor:pointer;font-weight:bold;color:var(--brand-dark);display:flex;justify-content:space-between;align-items:center;outline:none;border-radius:10px 10px 0 0;font-size:14px;">' +
+                '<span>' + cat + ' <span style="color:var(--text-muted);font-size:11px;font-weight:normal;">(' + catItems.length + ')</span></span>' +
+                '<span style="color:var(--blue);font-size:11px;">▼</span>' +
             '</summary>' +
             '<div style="overflow-x:auto;">' +
                 '<table style="width:100%;border-collapse:collapse;">' +
-                    '<thead><tr style="background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-                        '<th style="padding:10px 12px;text-align:left;">Item</th>' +
-                        '<th style="padding:10px 12px;text-align:center;">Stock</th>' +
-                        '<th style="padding:10px 12px;text-align:center;color:var(--blue);">Weekday PAR</th>' +
-                        '<th style="padding:10px 12px;text-align:center;color:var(--orange);">Weekend PAR</th>' +
+                    '<thead><tr style="background:#0a0a0c;font-size:10px;color:var(--text-muted);text-transform:uppercase;">' +
+                        '<th style="padding:6px 10px;text-align:left;">Item</th>' +
+                        '<th style="padding:6px 10px;text-align:center;">Stock</th>' +
+                        '<th style="padding:6px 10px;text-align:center;color:var(--blue);">Weekday PAR</th>' +
+                        '<th style="padding:6px 10px;text-align:center;color:var(--orange);">Weekend PAR</th>' +
                     '</tr></thead>' +
                     '<tbody>' + rows + '</tbody>' +
                 '</table>' +
@@ -1429,7 +1427,7 @@ window.editRecipeForm = (id = null) => {
         const gp=r.price>0?((r.price-totalCost)/r.price*100).toFixed(1):0;
         const gpColor=gp>=GP_TARGET?'var(--green)':gp>0?'var(--red)':'var(--text-muted)';
         document.getElementById('mainContent').innerHTML = `
-        <div style="max-width:880px;margin:auto;padding-bottom:60px;">
+        <div style="max-width:880px;margin:auto;padding-bottom:50px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
                 <button onclick="window.tempRecipeId=null;window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
                 <div style="display:flex;gap:8px;">
@@ -1484,7 +1482,7 @@ window.editRecipeForm = (id = null) => {
             </div>
             <div class="card" style="padding:15px;margin-bottom:15px;">
                 <label style="font-size:11px;color:var(--text-muted);">Method / Prep Notes</label>
-                <textarea id="r-m" class="input-box" placeholder="Method, plating notes, chef tips..." style="height:140px;margin-top:5px;">${r.method||''}</textarea>
+                <textarea id="r-m" class="input-box" placeholder="Method, plating notes, chef tips..." style="height:100px;margin-top:4px;">${r.method||''}</textarea>
             </div>
             <div class="sticky-footer">
                 <button onclick="window.subRecipe('${r.id}',${totalCost})" class="btn btn-green" style="flex:2;font-size:15px;">💾 Save Recipe</button>
@@ -2713,7 +2711,7 @@ window.renderWastageView = () => {
     return `
     <div style="max-width: 800px; margin: auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h2 style="margin:0;">Wastage Tracker</h2>
+            <h2 style="margin:0;font-size:20px;">Wastage Tracker</h2>
             <button onclick="window.showWastageReport()" class="btn btn-outline" style="font-size:12px;">📊 Wastage Report</button>
         </div>
         <div class="card" style="border-top:5px solid var(--orange);">
@@ -3634,12 +3632,12 @@ window.renderVarianceReport = () => {
     const rows = varianceItems.slice(0, 30).map(v => {
         const color = Math.abs(v.variancePct) < 5 ? 'var(--green)' : Math.abs(v.variancePct) < 15 ? 'var(--orange)' : 'var(--red)';
         return '<tr style="border-bottom:1px solid var(--border);">' +
-            '<td style="padding:10px 12px;"><strong>' + v.name + '</strong><br><small style="color:var(--text-muted);">' + v.category + '</small></td>' +
-            '<td style="padding:10px 12px;text-align:center;">' + v.theoretical.toFixed(1) + '</td>' +
-            '<td style="padding:10px 12px;text-align:center;">' + v.actual.toFixed(1) + '</td>' +
-            '<td style="padding:10px 12px;text-align:center;color:' + color + ';font-weight:bold;">' + (v.variance > 0 ? '+' : '') + v.variance.toFixed(1) + ' ' + v.unit + '</td>' +
-            '<td style="padding:10px 12px;text-align:center;color:' + color + ';">' + (v.variancePct > 0 ? '+' : '') + v.variancePct.toFixed(1) + '%</td>' +
-            '<td style="padding:10px 12px;text-align:right;font-weight:bold;color:' + color + ';">$' + Math.abs(v.varianceCost).toFixed(2) + '</td>' +
+            '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + v.name + '</strong><br><small style="color:var(--text-muted);">' + v.category + '</small></td>' +
+            '<td style="padding:7px 10px;text-align:center;font-size:12px;">' + v.theoretical.toFixed(1) + '</td>' +
+            '<td style="padding:7px 10px;text-align:center;font-size:12px;">' + v.actual.toFixed(1) + '</td>' +
+            '<td style="padding:7px 10px;text-align:center;font-size:12px;color:' + color + ';font-weight:bold;">' + (v.variance > 0 ? '+' : '') + v.variance.toFixed(1) + ' ' + v.unit + '</td>' +
+            '<td style="padding:7px 10px;text-align:center;font-size:12px;color:' + color + ';">' + (v.variancePct > 0 ? '+' : '') + v.variancePct.toFixed(1) + '%</td>' +
+            '<td style="padding:7px 10px;text-align:right;font-weight:bold;font-size:12px;color:' + color + ';">$' + Math.abs(v.varianceCost).toFixed(2) + '</td>' +
         '</tr>';
     }).join('');
     
@@ -3686,7 +3684,7 @@ window.renderVarianceReport = () => {
 window.renderAllergenView = () => {
     return `<div style="max-width: 800px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;">Allergen Matrix</h2>
+            <h2 style="margin:0;font-size:20px;">Allergen Matrix</h2>
             <button onclick="window.runAiAllergenScan()" class="btn btn-purple">✨ AI Scan Menu</button>
         </div>
         <div id="allergen-status" style="margin-bottom:15px;"></div>
@@ -3742,13 +3740,13 @@ Recipes: ${JSON.stringify(recipeData)}`;
 window.renderSheetGenView = () => {
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;">AI Run Sheet Generator</h2>
+            <h2 style="margin:0;font-size:20px;">AI Run Sheet Generator</h2>
             <button onclick="window.print()" class="btn btn-outline" style="background:white; color:black; font-weight:bold;">🖨️ Print Run Sheet</button>
         </div>
         <div style="display:flex; gap:20px; flex-wrap:wrap;">
             <div class="card no-print" style="flex:1; min-width:300px;">
                 <label style="font-size:12px; color:var(--text-muted);">Paste SevenRooms / booking data below</label>
-                <textarea id="raw-bookings" class="input-box" style="height:300px; font-size:12px; white-space:pre; margin-top:8px;" placeholder="Paste booking text or CSV from SevenRooms..."></textarea>
+                <textarea id="raw-bookings" class="input-box" style="height:200px; font-size:12px; white-space:pre; margin-top:8px;" placeholder="Paste booking text or CSV from SevenRooms..."></textarea>
                 <button onclick="window.generateRunSheet()" class="btn btn-purple" style="width:100%; font-size:16px; margin-top:10px;">✨ Generate Smart Sheet</button>
             </div>
             <div class="card" id="print-section" style="flex:2; background:white; color:black; min-height:600px; min-width:550px; padding:30px;">
