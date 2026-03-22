@@ -2757,7 +2757,18 @@ window.saveAndGenerateDebrief = async () => {
     const mgr = document.getElementById('h-mgr').value.trim();
     const notes = document.getElementById('h-notes').value.trim();
     if (!mgr) return window.showToast('Enter your name.', 'error');
-    if (!notes) return window.showToast('Add some shift notes.', 'error');
+
+    // Gather structured section data before validation
+    const sections = (window.handoverTemplateConfig || {}).sections || [];
+    const sectionData = {};
+    sections.forEach((sec, i) => {
+        const el = document.getElementById('h-sec-' + i);
+        if (el && el.value.trim()) sectionData[sec] = el.value.trim();
+    });
+    const structuredNotes = Object.entries(sectionData).map(([k, v]) => k + ':\n' + v).join('\n\n');
+    const combinedNotes = structuredNotes || notes;
+
+    if (!combinedNotes) return window.showToast('Add some shift notes or fill in the sections above.', 'error');
 
     const btn = document.getElementById('btn-debrief');
     btn.innerText = '✨ Writing debrief...';
@@ -2770,16 +2781,6 @@ window.saveAndGenerateDebrief = async () => {
     const urgent = document.getElementById('h-urgent').value.trim();
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-AU');
-    
-    // Gather structured section data
-    const sections = (window.handoverTemplateConfig || {}).sections || [];
-    const sectionData = {};
-    sections.forEach((sec, i) => {
-        const el = document.getElementById('h-sec-' + i);
-        if (el && el.value.trim()) sectionData[sec] = el.value.trim();
-    });
-    const structuredNotes = Object.entries(sectionData).map(([k, v]) => k + ':\n' + v).join('\n\n');
-    const combinedNotes = structuredNotes || notes;
 
     // D5: Pull richer ops data for AI context
     const todaySales = (window.salesData||[]).find(s => s.date === today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/'));
