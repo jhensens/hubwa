@@ -109,7 +109,7 @@ window.renderForecastView = () => {
         const barColor = isWeekend ? 'var(--green)' : 'var(--blue)';
         const fmt = n => '$' + Math.round(n).toLocaleString('en-AU');
         return '<div style="text-align:center;flex:1;">' +
-            '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">' + d.dayShort + '</div>' +
+            '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">' + d.dayShort + '</div>' +
             '<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">' + d.date.getDate() + '/' + (d.date.getMonth()+1) + '</div>' +
             '<div style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;">' +
                 '<div style="font-size:11px;color:var(--text-muted);">' + fmt(d.high) + '</div>' +
@@ -147,7 +147,7 @@ window.renderForecastView = () => {
             '<small style="color:var(--text-muted);">Based on ' + sales.length + ' days of historical data · Day-of-week patterns + seasonal adjustment</small></div>' +
             '<div style="text-align:right;">' +
                 '<div style="font-size:12px;color:var(--text-muted);">YoY Trend</div>' +
-                '<div style="font-size:20px;font-weight:bold;color:' + yoyColor + ';">' + (yoyTrend>=0?'▲':'▼') + ' ' + Math.abs(yoyPct) + '%</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:' + yoyColor + ';">' + (yoyTrend>=0?'▲':'▼') + ' ' + Math.abs(yoyPct) + '%</div>' +
             '</div>' +
         '</div>' +
         // KPI cards
@@ -960,7 +960,7 @@ window.renderShiftChecklists = () => {
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
             '<h3 style="margin:0;color:' + shiftColor + ';">' + shiftLabel + ' Checklist</h3>' +
             '<div style="text-align:right;">' +
-                '<div style="font-size:20px;font-weight:bold;color:' + (pct===100?'var(--green)':shiftColor) + ';">' + pct + '%</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:' + (pct===100?'var(--green)':shiftColor) + ';">' + pct + '%</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">' + doneCount + ' / ' + activeList.length + ' done</div>' +
             '</div>' +
         '</div>' +
@@ -1034,7 +1034,7 @@ window.renderComplianceView = function() {
     return `<div style="max-width: 900px; margin: auto;">
         <div class="card" style="border-top:5px solid var(--blue);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 style="margin:0;">Fridge/Freezer Temp Log</h3><button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Setup Units</button></div>
-            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:15px; margin-bottom:20px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:10px; margin-bottom:15px;">
                 ${(window.fridgeUnits || []).map((f, i) => `
                     <div style="background:var(--bg-main); padding:10px; border-radius:6px; border:1px solid var(--border);">
                         <strong style="font-size:12px; display:block; margin-bottom:8px; color:var(--brand-dark);">${f}</strong>
@@ -1539,25 +1539,25 @@ window.renderHACCPHistory = () => {
             (b.action ? '<div style="font-size:11px;color:var(--orange);padding:2px 0 6px 0;">Action: ' + b.action + '</div>' : '')
         ).join('');
         
-        return '<div class="card" style="border-top:4px solid ' + statusColor + ';margin-bottom:15px;">' +
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">' +
-                '<div><h3 style="margin:0;">' + unit + '</h3>' +
+        return '<div class="card" style="border-top:3px solid ' + statusColor + ';margin-bottom:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
+                '<div><h3 style="margin:0;font-size:15px;">' + unit + '</h3>' +
                 '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + totalLogs + ' readings in 30 days</div></div>' +
                 '<div style="text-align:right;"><span class="breach-indicator ' + (breaches.length === 0 ? 'ok' : breaches.length <= 2 ? 'warn' : 'breach') + '"></span>' +
                 '<span style="font-weight:bold;color:' + statusColor + ';">' + statusLabel + '</span></div>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">' +
-                '<div style="background:var(--bg-main);padding:10px;border-radius:6px;text-align:center;">' +
-                    '<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Avg Temp</div>' +
-                    '<div style="font-size:20px;font-weight:bold;color:var(--blue);">' + avgTemp + '°C</div>' +
+                '<div style="background:var(--bg-main);padding:8px;border-radius:6px;text-align:center;">' +
+                    '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;">Avg Temp</div>' +
+                    '<div style="font-size:16px;font-weight:bold;color:var(--blue);">' + avgTemp + '°C</div>' +
                 '</div>' +
-                '<div style="background:var(--bg-main);padding:10px;border-radius:6px;text-align:center;">' +
-                    '<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Breaches</div>' +
-                    '<div style="font-size:20px;font-weight:bold;color:' + (breaches.length > 0 ? 'var(--red)' : 'var(--green)') + ';">' + breaches.length + '</div>' +
+                '<div style="background:var(--bg-main);padding:8px;border-radius:6px;text-align:center;">' +
+                    '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;">Breaches</div>' +
+                    '<div style="font-size:16px;font-weight:bold;color:' + (breaches.length > 0 ? 'var(--red)' : 'var(--green)') + ';">' + breaches.length + '</div>' +
                 '</div>' +
-                '<div style="background:var(--bg-main);padding:10px;border-radius:6px;text-align:center;">' +
-                    '<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Last Reading</div>' +
-                    '<div style="font-size:20px;font-weight:bold;color:' + (lastLog && lastLog.value > 5 ? 'var(--red)' : 'var(--green)') + ';">' + (lastLog ? lastLog.value + '°C' : '—') + '</div>' +
+                '<div style="background:var(--bg-main);padding:8px;border-radius:6px;text-align:center;">' +
+                    '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;">Last Reading</div>' +
+                    '<div style="font-size:16px;font-weight:bold;color:' + (lastLog && lastLog.value > 5 ? 'var(--red)' : 'var(--green)') + ';">' + (lastLog ? lastLog.value + '°C' : '—') + '</div>' +
                 '</div>' +
             '</div>' +
             sparkHtml +
@@ -2792,7 +2792,7 @@ window.renderRosterView = () => {
             if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${r.data}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; } 
             else { displayHtml = `<iframe src="${r.data}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
         }
-        return `<div class="card" style="margin-bottom:20px; border-top: 5px solid var(--blue); padding:30px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${r.name}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
+        return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${r.name}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
     }).join('')}</div>`;
 };
 window.handleRosterUpload = async (e) => {
