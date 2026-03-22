@@ -1098,13 +1098,13 @@ window.renderRecipeView = () => {
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Station</small><div style="margin-top:5px;">${stationPills}</div></div>
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
         </div>
-        <div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:15px;">
+        <div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;">
             ${filtered.length===0?'<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);grid-column:1/-1;">No recipes found.</div>':filtered.map(r=>{
                 const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
                 const station=r.station||'Kitchen';
                 const status=r.status||'Active';
                 const statusColor=status==='Active'?'var(--green)':status==="86'd"?'var(--red)':'var(--orange)';
-                return `<div class="card" style="border-top:4px solid ${stationColor[station]||'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:15px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                return `<div class="card" style="border-top:4px solid ${stationColor[station]||'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:12px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
                     ${r.photo?`<img src="${r.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">`:''}
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
                         <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${r.name}</h4>
@@ -1114,7 +1114,7 @@ window.renderRecipeView = () => {
                         <span style="font-size:11px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:2px 7px;border-radius:8px;">${station}</span>
                         <span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span>
                     </div>
-                    <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:8px 10px;border-radius:6px;font-size:12px;border:1px solid var(--border);">
+                    <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:6px 8px;border-radius:5px;font-size:11px;border:1px solid var(--border);">
                         <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost||0).toFixed(2)}</strong><br>${r.type==='Menu'?`Sell: $${Number(r.price||0).toFixed(2)}`:`Yield: ${r.yieldQty} ${r.yieldUnit}`}</div>
                         ${r.type==='Menu'&&r.price>0?`<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp||0}%</div>`:''}
                     </div>
@@ -1148,11 +1148,11 @@ window.viewRecipe = (id) => {
                 <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
             </div>
         </div>
-        <div class="card" style="border-top:5px solid ${stationColor[station]};padding:30px;">
-            ${r.photo?`<img src="${r.photo}" style="width:100%;max-height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px;">`:''}
+        <div class="card" style="border-top:4px solid ${stationColor[station]};padding:18px;">
+            ${r.photo?`<img src="${r.photo}" style="width:100%;max-height:200px;object-fit:cover;border-radius:6px;margin-bottom:14px;">`:''}
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:15px;margin-bottom:20px;">
                 <div>
-                    <h2 style="margin:0 0 8px 0;">${r.name}</h2>
+                    <h2 style="margin:0 0 6px 0;font-size:20px;">${r.name}</h2>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <span style="font-size:12px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:3px 10px;border-radius:12px;">${station}</span>
                         <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.type}</span>
@@ -1160,11 +1160,11 @@ window.viewRecipe = (id) => {
                     </div>
                 </div>
                 <div style="text-align:right;">
-                    ${r.type==='Menu'&&r.price>0?`<div style="font-size:36px;font-weight:bold;color:${gpColor};line-height:1;">${r.gp||0}% GP</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)} · Sell $${Number(r.price||0).toFixed(2)}</div>`:''}
+                    ${r.type==='Menu'&&r.price>0?`<div style="font-size:26px;font-weight:bold;color:${gpColor};line-height:1;">${r.gp||0}% GP</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)} · Sell $${Number(r.price||0).toFixed(2)}</div>`:''}
                     ${r.type==='Batch'?`<div style="font-size:18px;font-weight:bold;color:var(--purple);">Yields ${r.yieldQty} ${r.yieldUnit}</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)}</div>`:''}
                 </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 2fr;gap:30px;">
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;">
                 <div>
                     <h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
                     ${ingListHtml||'<p style="color:var(--text-muted);font-size:13px;">No ingredients yet.</p>'}
@@ -1174,7 +1174,7 @@ window.viewRecipe = (id) => {
                     <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method||'<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
                 </div>
             </div>
-            ${r.videoUrl?`<div style="margin-top:25px;border-top:1px solid var(--border);padding-top:20px;"><h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">📹 Training Video</h3><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`:''}
+            ${r.videoUrl?`<div style="margin-top:15px;border-top:1px solid var(--border);padding-top:12px;"><h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">📹 Training Video</h3><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`:''}
             ${r.allergens&&r.allergens.length>0?`<div style="margin-top:15px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);padding:12px 15px;border-radius:8px;"><strong style="font-size:12px;color:var(--red);">⚠️ Allergens:</strong> <span style="font-size:13px;color:var(--red);">${r.allergens.join(', ')}</span></div>`:''}
         </div>
     </div>`;
@@ -1467,7 +1467,7 @@ window.editRecipeForm = (id = null) => {
                     </div>
                     <div id="unit-hint" style="font-size:11px;font-weight:bold;color:var(--blue);margin-top:5px;text-align:right;"></div>
                 </div>
-                <div style="display:flex;flex-direction:column;gap:15px;">
+                <div style="display:flex;flex-direction:column;gap:12px;">
                     <div class="card" style="padding:15px;text-align:center;border-top:4px solid ${gpColor};">
                         ${isBatch?`<div style="font-size:11px;color:var(--text-muted);">Total Batch Cost</div><div style="font-size:30px;font-weight:bold;color:var(--brand-dark);">$${totalCost.toFixed(2)}</div><div style="font-size:11px;color:var(--purple);">$${(totalCost/(r.yieldQty||1)).toFixed(4)} per ${r.yieldUnit}</div>`:`<div style="font-size:11px;color:var(--text-muted);">Cost $${totalCost.toFixed(2)} · Sell $${r.price}</div><div style="font-size:30px;font-weight:bold;color:${gpColor};line-height:1.1;">${gp}%</div><div style="font-size:11px;color:var(--text-muted);">GP (Target: ${GP_TARGET}%)</div>`}
                     </div>
@@ -2182,7 +2182,7 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
 
             return '<div class="card" style="border-top:4px solid var(--purple);margin-bottom:12px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
-                    '<h3 style="margin:0;">' + sup + '</h3>' +
+                    '<h3 style="margin:0;font-size:15px;">' + sup + '</h3>' +
                     '<button onclick="window.generateAiOrderEmail(window._aoSup)" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
                 '</div>' +
                 '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
