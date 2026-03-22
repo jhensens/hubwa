@@ -2759,7 +2759,7 @@ window.saveAndGenerateDebrief = async () => {
     if (!mgr) return window.showToast('Enter your name.', 'error');
 
     // Gather structured section data before validation
-    const sections = (window.handoverTemplateConfig || {}).sections || [];
+    const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
     const sectionData = {};
     sections.forEach((sec, i) => {
         const el = document.getElementById('h-sec-' + i);
