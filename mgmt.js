@@ -1055,7 +1055,7 @@ window.renderComplianceView = function() {
                 <h4 style="margin:0 0 10px 0; font-size:13px; color:var(--text-muted); text-transform:uppercase;">Recent Logs</h4>
                 <table style="width:100%; font-size:13px; text-align:left; border-collapse:collapse;">
                     <tbody>
-                        ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:8px 0;">${t.unit}</td><td style="color:${t.value > 5 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${t.staff}</td><td>${t.action ? `<span style="color:var(--red); font-size:11px;">Action: ${t.action}</span><br>` : ''}<span style="color:var(--text-muted); font-size:11px;">${t.time}</span></td></tr>`).join('')}
+                        ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:5px 0;font-size:12px;">${t.unit}</td><td style="color:${t.value > 5 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${t.staff}</td><td>${t.action ? `<span style="color:var(--red); font-size:11px;">Action: ${t.action}</span><br>` : ''}<span style="color:var(--text-muted); font-size:11px;">${t.time}</span></td></tr>`).join('')}
                     </tbody>
                 </table>
                 <button onclick="window.showTempHistory()" class="btn btn-outline" style="width:100%;margin-top:12px;font-size:12px;">📋 View Full History</button>
@@ -1071,7 +1071,7 @@ window.renderComplianceView = function() {
         </div>
         ${window.renderShiftChecklists()}
         <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px; margin-top:20px;">
-            ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:20px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
+            ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:14px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
         </div>
     </div>`;
 }
@@ -1611,11 +1611,11 @@ window.renderStaffDirectoryView = () => {
             '<div class="card" style="padding:0;overflow:hidden;">' +
             '<table style="width:100%;border-collapse:collapse;">' +
             '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-            '<th style="padding:12px 15px;text-align:left;">Name</th>' +
-            '<th style="padding:12px 15px;text-align:left;">Role</th>' +
-            '<th style="padding:12px 15px;text-align:left;">Contact</th>' +
-            '<th style="padding:12px 15px;text-align:left;">Status</th>' +
-            '<th style="padding:12px 15px;"></th>' +
+            '<th style="padding:8px 12px;text-align:left;">Name</th>' +
+            '<th style="padding:8px 12px;text-align:left;">Role</th>' +
+            '<th style="padding:8px 12px;text-align:left;">Contact</th>' +
+            '<th style="padding:8px 12px;text-align:left;">Status</th>' +
+            '<th style="padding:8px 12px;"></th>' +
             '</tr></thead><tbody>' +
             staff.map((s, i) =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
@@ -2338,7 +2338,7 @@ window.renderManagerHub = () => {
     
     ${expiringHtml}
     ${checklistWidget}
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
         <div class="card" style="border-top:5px solid var(--green); padding:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
                 <div>
@@ -2364,7 +2364,7 @@ window.renderManagerHub = () => {
         </div>
     </div>
 
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
         <div class="card" style="border-top:5px solid var(--blue);"><h3 style="margin-top:0; color:var(--brand-accent);">📦 Inventory Alerts <small style="color:var(--text-muted); font-weight:normal;">(${isWeekend?'Weekend':'Weekday'} PAR)</small></h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${stockHtml}</div></div>
         <div class="card" style="border-top:5px solid var(--orange);"><h3 style="margin-top:0; color:var(--brand-accent);">🛠️ Maintenance Tickets</h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${ticketHtml}${eqHtml}</div></div>
     </div>
@@ -2439,7 +2439,7 @@ window.newHandoverForm = () => {
         if (sec.toLowerCase().includes('opening')) placeholder = 'What does the opening team need to know?';
         if (sec.toLowerCase().includes('issue') || sec.toLowerCase().includes('follow')) placeholder = 'Equipment issues, booking follow-ups, staff matters...';
         
-        return '<div class="handover-section"><h4>' + sec + '</h4>' +
+        return '<div class="handover-section" style="padding:12px;margin-bottom:8px;"><h4 style="margin:0 0 6px 0;font-size:12px;">' + sec + '</h4>' +
             '<textarea id="h-sec-' + i + '" class="input-box" placeholder="' + placeholder + '" style="height:70px;margin:0;line-height:1.5;">' + prefill + '</textarea></div>';
     }).join('');
     
