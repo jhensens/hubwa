@@ -2755,7 +2755,8 @@ window.newHandoverForm = () => {
 
 window.saveAndGenerateDebrief = async () => {
     const mgr = document.getElementById('h-mgr').value.trim();
-    const notes = document.getElementById('h-notes').value.trim();
+    const notesEl = document.getElementById('h-notes');
+    const notes = notesEl ? notesEl.value.trim() : '';
     if (!mgr) return window.showToast('Enter your name.', 'error');
 
     // Gather structured section data before validation
