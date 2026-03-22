@@ -53,7 +53,7 @@ window.buildZoneSelect = (selectedZoneName = '', elId = 'iv-loc') => {
 window.renderZoneManager = () => {
     const zonesHtml = (window.storageZones || []).map((z, i) => `
         <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px 12px;"><strong style="font-size:13px;">${z.name}</strong></td>
+            <td style="padding:8px 12px;"><strong style="font-size:13px;">${esc(z.name)}</strong></td>
             <td style="padding:8px 12px;">
                 <select onchange="window.storageZones[${i}].area = this.value; window.saveToDisk(); window.showView('zones');" class="input-box" style="margin:0; padding:6px; width:120px;">
                     <option ${z.area==='BOH'?'selected':''}>BOH</option>
@@ -72,8 +72,8 @@ window.renderZoneManager = () => {
     <div style="max-width: 800px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div>
-                <h2 style="margin:0;font-size:20px;">Storage Zones</h2>
-                <p style="margin:5px 0 0 0; color:var(--text-muted); font-size:13px;">These zones appear in Inventory, Invoice Ripper, and Recipe Quick-Add.</p>
+                <h2 style="margin:0">🗄️ Storage Zones</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">These zones appear in Inventory, Invoice Ripper, and Recipe Quick-Add</div>
             </div>
             <button onclick="window.editZoneForm()" class="btn btn-blue">+ Add Zone</button>
         </div>
@@ -87,7 +87,7 @@ window.renderZoneManager = () => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${zonesHtml.length ? zonesHtml : '<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--text-muted);">No zones yet. Add one above.</td></tr>'}
+                    ${zonesHtml.length ? zonesHtml : '<tr><td colspan="3" style="padding:40px;text-align:center;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px">🗄️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No storage zones</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Set up your walk-in, dry store, and bar areas for stock organisation</div></td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -160,11 +160,11 @@ window.renderSupplierView = () => {
             </thead>
             <tbody>
                 ${(window.suppliers||[]).length === 0
-                    ? '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No suppliers added yet.</td></tr>'
+                    ? '<tr><td colspan="4" style="padding:48px 20px;text-align:center;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px">🚚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No suppliers added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add your suppliers to enable ordering and invoice matching</div></td></tr>'
                     : (window.suppliers||[]).map((s, i) => `
                     <tr style="border-bottom:1px solid var(--bg-main);">
-                        <td style="padding:8px 12px;"><strong style="font-size:13px;">${s.name}</strong></td>
-                        <td style="padding:8px 12px; font-size:12px;">${s.contact || 'N/A'}</td>
+                        <td style="padding:8px 12px;"><strong style="font-size:13px;">${esc(s.name)}</strong></td>
+                        <td style="padding:8px 12px; font-size:12px;">${esc(s.contact) || 'N/A'}</td>
                         <td style="padding:8px 12px; font-size:12px; color:var(--brand-accent);">
                             Min Spend: <strong>$${s.minSpend || 0}</strong><br>
                             Cutoff: ${s.cutoff || 'N/A'}<br>
@@ -180,7 +180,7 @@ window.renderSupplierView = () => {
     return `
     <div style="max-width: 1000px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-            <h2 style="margin:0;">Suppliers & Ordering</h2>
+            <div><h2 style="margin:0">🚚 Suppliers & Ordering</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Manage suppliers, delivery schedules, and order history</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button onclick="window._supTab='suppliers';window.showView('suppliers')" class="btn ${btnS}">Suppliers</button>
                 <button onclick="window._supTab='history';window.showView('suppliers')" class="btn ${btnH}">📋 Order History</button>
@@ -336,8 +336,8 @@ window.renderInventoryView = () => {
                     <input type="checkbox" ${isSelected?'checked':''} onchange="window._invToggleSelect('${item.id}', this.checked)" style="transform:scale(1.1); cursor:pointer;">
                 </td>
                 <td style="padding:7px 8px;">
-                    <strong style="cursor:pointer;font-size:13px;" onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}">${item.name}</strong>
-                    <br><small style="color:var(--text-muted);font-size:11px;">${item.sku || 'No SKU'} · ${item.supplier || 'No Supplier'}</small>
+                    <strong style="cursor:pointer;font-size:13px;" onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}">${esc(item.name)}</strong>
+                    <br><small style="color:var(--text-muted);font-size:11px;">${esc(item.sku) || 'No SKU'} · ${esc(item.supplier) || 'No Supplier'}</small>
                 </td>
                 <td style="padding:7px 8px;font-size:12px;white-space:nowrap;">
                     <strong style="color:var(--brand-accent);">$${price.toFixed(2)}</strong>/${item.buyUnit || 'Unit'} <small style="color:var(--blue);">→ ${yieldVal} ${item.useUnit || 'Unit'}</small><br>
@@ -384,7 +384,7 @@ window.renderInventoryView = () => {
     }).join('');
 
     if (Object.keys(grouped).length === 0) {
-        accordionHtml = '<div class="card" style="text-align:center; padding:30px; color:var(--text-muted);">No products found matching filters.</div>';
+        accordionHtml = '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📦</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No inventory items yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add your first item with "+ Add Product" or bulk import from a spreadsheet</div></div>';
     }
 
     const selCount = window._invSelected.size;
@@ -405,7 +405,7 @@ window.renderInventoryView = () => {
     return `
     <div style="max-width:1100px; margin:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-            <h2 style="margin:0;">Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2>
+            <div><h2 style="margin:0">📦 Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
                 <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
@@ -1080,7 +1080,7 @@ window.renderRecipeView = () => {
     return `
     <div style="max-width:1200px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
-            <h2 style="margin:0;">Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2>
+            <div><h2 style="margin:0">⚖️ Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Create and manage recipes to track food costs and GP%</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button onclick="window.showView('sell-price-editor')" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">💰 Sell Prices</button>
                 <button onclick="window.showView('bulk-category-editor')" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">🏷️ Categories</button>
@@ -1099,7 +1099,7 @@ window.renderRecipeView = () => {
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
         </div>
         <div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;">
-            ${filtered.length===0?'<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);grid-column:1/-1;">No recipes found.</div>':filtered.map(r=>{
+            ${filtered.length===0?'<div style="text-align:center;padding:48px 20px;color:var(--text-muted);grid-column:1/-1;"><div style="font-size:36px;margin-bottom:12px">⚖️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No recipes yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create your first recipe to start tracking food costs and GP%</div></div>':filtered.map(r=>{
                 const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
                 const station=r.station||'Kitchen';
                 const status=r.status||'Active';
@@ -1107,7 +1107,7 @@ window.renderRecipeView = () => {
                 return `<div class="card" style="border-top:4px solid ${stationColor[station]||'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:12px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
                     ${r.photo?`<img src="${r.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">`:''}
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-                        <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${r.name}</h4>
+                        <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${esc(r.name)}</h4>
                         <span style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};padding:2px 5px;border-radius:8px;white-space:nowrap;">${status}</span>
                     </div>
                     <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
@@ -1126,57 +1126,99 @@ window.renderRecipeView = () => {
 };
 
 window.viewRecipe = (id) => {
+    const E = window.esc;
     const r = window.recipes.find(x => x.id === id);
     if (!r) return;
     const stationColor = {'Kitchen':'var(--orange)','Bar':'var(--blue)','Prep':'var(--purple)'};
     const station = r.station||'Kitchen';
     const gpColor = r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
-    let ingListHtml = (r.ingredients||[]).map(ing => {
-        if (ing.type==='raw') return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text-muted);">• ${ing.name}</div>`;
+
+    // Ingredients table
+    const ingRows = (r.ingredients||[]).map(ing => {
         const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
         const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
-        const label = inv?`${ing.qty} ${inv.useUnit} ${inv.name}`:batch?`${ing.qty} ${batch.yieldUnit} ${batch.name}`:`${ing.name}`;
-        const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):null;
-        return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:14px;"><span>• ${label}</span>${cost?`<span style="color:var(--brand-accent);font-size:12px;">$${cost}</span>`:''}</div>`;
+        const name = inv?E(inv.name):batch?E(batch.name):E(ing.name||'Unknown');
+        const qty = ing.qty||'';
+        const unit = inv?(inv.useUnit||''):batch?(batch.yieldUnit||''):'';
+        const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):'—';
+        const source = ing.type==='inv'?'Inventory':ing.type==='batch'?'Batch':'<span style="color:var(--orange);">Unlinked</span>';
+        return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;">${name}</td><td style="padding:8px 12px;font-size:13px;text-align:center;">${qty}</td><td style="padding:8px 12px;font-size:13px;text-align:center;">${E(unit)}</td><td style="padding:8px 12px;font-size:13px;text-align:right;">$${cost}</td><td style="padding:8px 12px;font-size:11px;color:var(--text-muted);">${source}</td></tr>`;
     }).join('');
+
+    const ingTable = (r.ingredients||[]).length > 0
+        ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:var(--bg-main);border-radius:8px;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:8px 12px;text-align:left;">Ingredient</th><th style="padding:8px 12px;text-align:center;">Qty</th><th style="padding:8px 12px;text-align:center;">Unit</th><th style="padding:8px 12px;text-align:right;">Cost</th><th style="padding:8px 12px;text-align:left;">Source</th></tr></thead><tbody>${ingRows}</tbody></table></div>`
+        : '<p style="color:var(--text-muted);font-size:13px;">No ingredients yet.</p>';
+
+    // Allergen pills
+    const allergenColors = {GF:'var(--green)',VG:'var(--green)',VE:'var(--green)',DF:'var(--blue)',NF:'var(--orange)'};
+    const allergenHtml = (r.allergens&&r.allergens.length>0)
+        ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${r.allergens.map(a => `<span style="font-size:12px;padding:4px 12px;border-radius:12px;background:${allergenColors[a]||'var(--red)'};color:#fff;font-weight:600;">${E(a)}</span>`).join('')}</div>`
+        : '<span style="color:var(--text-muted);font-size:13px;">No allergens flagged</span>';
+
+    // Media section
+    let mediaHtml = '';
+    if (r.photo && r.videoUrl) {
+        mediaHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><img src="${r.photo}" style="width:100%;max-height:250px;object-fit:cover;border-radius:8px;"><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`;
+    } else if (r.photo) {
+        mediaHtml = `<img src="${r.photo}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:20px;">`;
+    } else if (r.videoUrl) {
+        mediaHtml = `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:20px;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`;
+    }
+
     document.getElementById('mainContent').innerHTML = `
     <div style="max-width:900px;margin:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-            <button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Back</button>
+        <!-- HEADER -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+            <div>
+                <button onclick="window.showView('recipes')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;margin-bottom:6px;">← Back to Recipes</button>
+                <h2 style="margin:0 0 8px 0;font-size:22px;">${E(r.name)}</h2>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:12px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:3px 10px;border-radius:12px;">${E(station)}</span>
+                    <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.type}</span>
+                    ${r.category?`<span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${E(r.category)}</span>`:''}
+                    ${r.type==='Menu'&&r.gp?`<span style="font-size:12px;font-weight:bold;color:#fff;background:${gpColor};padding:3px 10px;border-radius:12px;">${r.gp}% GP</span>`:''}
+                </div>
+            </div>
             <div style="display:flex;gap:8px;">
+                <button onclick="window.duplicateRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">📋 Duplicate</button>
                 <button onclick="window.printRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>
                 <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-blue" style="font-size:12px;">✏️ Edit</button>
             </div>
         </div>
-        <div class="card" style="border-top:4px solid ${stationColor[station]};padding:18px;">
-            ${r.photo?`<img src="${r.photo}" style="width:100%;max-height:200px;object-fit:cover;border-radius:6px;margin-bottom:14px;">`:''}
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:15px;margin-bottom:20px;">
-                <div>
-                    <h2 style="margin:0 0 6px 0;font-size:20px;">${r.name}</h2>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <span style="font-size:12px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:3px 10px;border-radius:12px;">${station}</span>
-                        <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.type}</span>
-                        <span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${r.status||'Active'}</span>
-                    </div>
-                </div>
-                <div style="text-align:right;">
-                    ${r.type==='Menu'&&r.price>0?`<div style="font-size:26px;font-weight:bold;color:${gpColor};line-height:1;">${r.gp||0}% GP</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)} · Sell $${Number(r.price||0).toFixed(2)}</div>`:''}
-                    ${r.type==='Batch'?`<div style="font-size:18px;font-weight:bold;color:var(--purple);">Yields ${r.yieldQty} ${r.yieldUnit}</div><div style="font-size:12px;color:var(--text-muted);">Cost $${Number(r.cost||0).toFixed(2)}</div>`:''}
-                </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;">
-                <div>
-                    <h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
-                    ${ingListHtml||'<p style="color:var(--text-muted);font-size:13px;">No ingredients yet.</p>'}
-                </div>
-                <div>
-                    <h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Method</h3>
-                    <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method||'<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
-                </div>
-            </div>
-            ${r.videoUrl?`<div style="margin-top:15px;border-top:1px solid var(--border);padding-top:12px;"><h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">📹 Training Video</h3><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`:''}
-            ${r.allergens&&r.allergens.length>0?`<div style="margin-top:15px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);padding:12px 15px;border-radius:8px;"><strong style="font-size:12px;color:var(--red);">⚠️ Allergens:</strong> <span style="font-size:13px;color:var(--red);">${r.allergens.join(', ')}</span></div>`:''}
+
+        <!-- MEDIA -->
+        ${mediaHtml}
+
+        <!-- INGREDIENTS -->
+        <div class="card" style="padding:18px;margin-bottom:15px;">
+            <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
+            ${ingTable}
         </div>
+
+        <!-- METHOD -->
+        <div class="card" style="padding:18px;margin-bottom:15px;">
+            <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Method</h3>
+            <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${r.method||'<span style="color:var(--text-muted);">No method written yet.</span>'}</div>
+        </div>
+
+        <!-- ALLERGENS -->
+        <div class="card" style="padding:18px;margin-bottom:15px;">
+            <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Allergens & Dietary</h3>
+            ${allergenHtml}
+        </div>
+
+        <!-- COSTING FOOTER -->
+        ${r.type==='Menu'?`<div class="card" style="padding:18px;border-top:4px solid ${gpColor};display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:15px;">
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Food Cost</div><div style="font-size:20px;font-weight:bold;">$${Number(r.cost||0).toFixed(2)}</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Sell Price</div><div style="font-size:20px;font-weight:bold;">$${Number(r.price||0).toFixed(2)}</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Gross Profit</div><div style="font-size:20px;font-weight:bold;color:${gpColor};">${r.gp||0}%</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Status</div><div style="font-size:14px;font-weight:bold;color:${gpColor};">${(r.gp||0)>=GP_TARGET?'✅ Healthy':'⚠️ Below Target'}</div></div>
+        </div>`:''}
+        ${r.type==='Batch'?`<div class="card" style="padding:18px;border-top:4px solid var(--purple);display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:15px;">
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Batch Cost</div><div style="font-size:20px;font-weight:bold;">$${Number(r.cost||0).toFixed(2)}</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Yield</div><div style="font-size:20px;font-weight:bold;">${r.yieldQty||0} ${E(r.yieldUnit||'')}</div></div>
+            <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Cost per Unit</div><div style="font-size:20px;font-weight:bold;">$${(r.yieldQty>0?(r.cost/r.yieldQty):0).toFixed(4)}</div></div>
+        </div>`:''}
     </div>`;
 };
 
@@ -1765,7 +1807,7 @@ window.renderMarginView = () => {
     const rowHtml=(recipes)=>recipes.map(r=>{
         const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>=GP_TARGET-5?'var(--orange)':'var(--red)';
         return `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:12px 15px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${r.name}</strong> <small style="color:${stationColor[r.station||'Kitchen']};font-size:11px;">${r.station||'Kitchen'}</small></td>
+            <td style="padding:12px 15px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${esc(r.name)}</strong> <small style="color:${stationColor[r.station||'Kitchen']};font-size:11px;">${r.station||'Kitchen'}</small></td>
             <td style="padding:12px 15px;font-size:13px;color:var(--brand-accent);">$${Number(r.cost||0).toFixed(2)}</td>
             <td style="padding:12px 15px;font-size:13px;">$${Number(r.price||0).toFixed(2)}</td>
             <td style="padding:12px 15px;min-width:140px;"><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;"><div style="width:${Math.min(100,Math.max(0,r.gp))}%;background:${gpColor};height:100%;border-radius:4px;"></div></div><strong style="color:${gpColor};font-size:14px;min-width:38px;">${r.gp}%</strong></div></td>
@@ -2034,7 +2076,7 @@ window.renderMenuEngineeringView = () => {
         const cat=cats[key]; const items=menuRecipes.filter(r=>classify(r)===key);
         const rows=items.map(r=>{
             const gc=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--orange)':'var(--red)';
-            return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 12px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.editRecipeForm(this.dataset.id)" data-id="'+r.id+'">'+r.name+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td><td style="padding:10px 12px;color:'+gc+';font-weight:bold;">'+r.gp+'%</td><td style="padding:10px 12px;color:var(--brand-accent);">$'+Number(r.price||0).toFixed(2)+'</td><td style="padding:10px 12px;font-weight:bold;">'+(r.coversPerWeek||0)+'/wk</td></tr>';
+            return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 12px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.editRecipeForm(this.dataset.id)" data-id="'+r.id+'">'+esc(r.name)+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td><td style="padding:10px 12px;color:'+gc+';font-weight:bold;">'+r.gp+'%</td><td style="padding:10px 12px;color:var(--brand-accent);">$'+Number(r.price||0).toFixed(2)+'</td><td style="padding:10px 12px;font-weight:bold;">'+(r.coversPerWeek||0)+'/wk</td></tr>';
         }).join('');
         return '<div class="card" style="padding:0;overflow:hidden;border-top:4px solid '+cat.color+';background:'+cat.bg+';">' +
             '<div style="padding:15px 20px;border-bottom:1px solid var(--border);"><h3 style="margin:0;color:'+cat.color+';">'+cat.label+' <span style="font-size:13px;background:'+cat.color+';color:white;padding:2px 8px;border-radius:10px;font-weight:normal;">'+items.length+'</span></h3><p style="margin:4px 0 0 0;font-size:12px;color:var(--text-muted);">'+cat.desc+'</p></div>' +
@@ -2644,8 +2686,8 @@ window.renderPrepListView = () => {
     <div style="max-width: 900px; margin: auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div>
-                <h2 style="margin:0;">Auto-Order List</h2>
-                <small style="color:var(--brand-accent);">Targeting <strong style="color:var(--blue);">${isWeekend ? 'WEEKEND' : 'WEEKDAY'}</strong> PAR levels today.</small>
+                <h2 style="margin:0">📝 Auto-Order List</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Targeting <strong style="color:var(--blue);">${isWeekend ? 'WEEKEND' : 'WEEKDAY'}</strong> PAR levels — items below par grouped by supplier</div>
             </div>
             <button onclick="window.showView(\'inventory\')" class="btn btn-outline">Update Stock Levels</button>
         </div>
@@ -2662,7 +2704,7 @@ window.renderPrepListView = () => {
             <div class="card" style="border-top:4px solid var(--blue); margin-bottom:14px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:10px;">
                     <div>
-                        <h3 style="margin:0;">${supName === 'null' || supName === '' ? 'Unassigned Supplier' : supName}</h3>
+                        <h3 style="margin:0;">${supName === 'null' || supName === '' ? 'Unassigned Supplier' : esc(supName)}</h3>
                         <div style="margin-top:5px;">${warningHtml || `<span style="color:var(--green); font-size:12px;">✓ Ready to Order (Est. $${data.totalSpend.toFixed(2)})</span>`}</div>
                     </div>
                     <button onclick="window.copyOrderText('${supName}', ${data.totalSpend})" class="btn btn-outline" style="font-size:11px; padding:6px 12px;">📋 Copy Order Text</button>
@@ -2704,16 +2746,84 @@ window.copyOrderText = (supName, estSpend) => {
 // 6. WASTAGE TRACKER
 // =============================================================================
 
+window._buildWasteChart = () => {
+    const logs = window.wastageLogs || [];
+    const now = new Date();
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    // Find Monday of current week
+    const monday = new Date(now);
+    monday.setHours(0,0,0,0);
+    const dow = monday.getDay();
+    monday.setDate(monday.getDate() - ((dow + 6) % 7));
+
+    const daily = [0,0,0,0,0,0,0]; // Mon-Sun
+    logs.forEach(w => {
+        const d = new Date(w.time);
+        if (isNaN(d)) return;
+        const diff = Math.floor((d - monday) / 86400000);
+        if (diff >= 0 && diff < 7) daily[diff] += Number(w.value || 0);
+    });
+
+    const maxVal = Math.max(...daily, 1);
+    const W = 100, H = 150, pad = 30, barGap = 4;
+    const barW = (W - pad - 5) / 7 - barGap;
+    const chartH = H - pad - 10;
+
+    const bars = daily.map((v, i) => {
+        const x = pad + i * (barW + barGap) + barGap / 2;
+        const bH = (v / maxVal) * chartH;
+        const y = H - pad - bH;
+        const col = v === 0 ? 'rgba(255,255,255,0.08)' : v < 20 ? '#22c55e' : v <= 50 ? '#f59e0b' : '#ef4444';
+        const dayIdx = (1 + i) % 7; // Mon=1..Sun=0
+        const label = dayNames[dayIdx];
+        const isToday = i === ((now.getDay() + 6) % 7);
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bH, 1)}" rx="2" fill="${col}" opacity="${v === 0 ? 0.3 : 0.85}"/>` +
+            (v > 0 ? `<text x="${x + barW/2}" y="${y - 3}" text-anchor="middle" fill="var(--text-muted)" font-size="3.5">$${v.toFixed(0)}</text>` : '') +
+            `<text x="${x + barW/2}" y="${H - pad + 9}" text-anchor="middle" fill="${isToday ? '#fff' : 'var(--text-muted)'}" font-size="3.5" font-weight="${isToday ? '700' : '400'}">${label}</text>`;
+    }).join('');
+
+    // Y-axis labels
+    const yLabels = [0, Math.round(maxVal/2), Math.round(maxVal)].map((v, i) => {
+        const y = H - pad - (v / maxVal) * chartH;
+        return `<text x="${pad - 2}" y="${y + 1.5}" text-anchor="end" fill="var(--text-muted)" font-size="3.2">$${v}</text>` +
+            `<line x1="${pad}" y1="${y}" x2="${W - 2}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="0.3"/>`;
+    }).join('');
+
+    const weekTotal = daily.reduce((s, v) => s + v, 0);
+    return `<div class="card" style="padding:12px 10px 8px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;">This Week's Waste</span>
+            <span style="font-size:14px;font-weight:700;color:${weekTotal > 200 ? 'var(--red)' : weekTotal > 100 ? 'var(--orange)' : 'var(--green)'};">$${weekTotal.toFixed(2)}</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:150px;">
+            ${yLabels}${bars}
+        </svg>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:4px;">
+            <span style="font-size:10px;color:var(--text-muted);"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:3px;vertical-align:middle;"></span>&lt;$20</span>
+            <span style="font-size:10px;color:var(--text-muted);"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:3px;vertical-align:middle;"></span>$20-50</span>
+            <span style="font-size:10px;color:var(--text-muted);"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ef4444;margin-right:3px;vertical-align:middle;"></span>&gt;$50</span>
+        </div>
+    </div>`;
+};
+
 window.renderWastageView = () => {
     const invOpts = (window.inventoryItems || []).filter(i => !i.archived).map(i =>
-        `<option value="${i.id}">${i.name} (Buy: ${i.buyUnit} / Use: ${i.useUnit})</option>`
+        `<option value="${esc(i.id)}">${esc(i.name)} (Buy: ${esc(i.buyUnit)} / Use: ${esc(i.useUnit)})</option>`
     ).join('');
+    const logs = window.wastageLogs || [];
+    const recentLogs = logs.slice().reverse().slice(0, 50);
     return `
     <div style="max-width: 800px; margin: auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h2 style="margin:0;font-size:20px;">Wastage Tracker</h2>
-            <button onclick="window.showWastageReport()" class="btn btn-outline" style="font-size:12px;">📊 Wastage Report</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div>
+                <h2 style="margin:0">🗑️ Wastage Tracker</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Log spoilage, breakage, and expired stock to track and reduce waste</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="window.showWastageReport()" class="btn btn-outline" style="font-size:12px;">📊 Wastage Report</button>
+            </div>
         </div>
+        ${window._buildWasteChart()}
         <div class="card" style="border-top:5px solid var(--orange);">
             <div style="margin-bottom:15px;">
                 <label style="font-size:11px; color:var(--text-muted);">Select Live Inventory Item</label>
@@ -2741,11 +2851,12 @@ window.renderWastageView = () => {
             </div>
             <button onclick="window.logWastage()" class="btn btn-orange" style="width:100%; margin-top:10px; font-size:14px;">Log Waste & Deduct Stock</button>
         </div>
-        <h3 style="margin-top:30px; border-bottom:1px solid var(--border); padding-bottom:10px;">Recent Logs</h3>
-        ${(window.wastageLogs || []).slice().reverse().map(w =>
+        ${recentLogs.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🗑️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No wastage logged</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Log spoilage, breakage, or expired stock to track and reduce waste</div></div>' :
+        '<h3 style="margin-top:30px; border-bottom:1px solid var(--border); padding-bottom:10px;">Recent Logs</h3>' +
+        recentLogs.map(w =>
             `<div class="card" style="margin-bottom:10px; padding:15px; display:flex; justify-content:space-between; align-items:center;">
-                <div><strong>${w.itemName}</strong> <span style="color:var(--orange); font-size:13px;">(${w.logQty} ${w.unitLog})</span><br><small style="color:var(--text-muted);">${w.staff} - ${w.reason}</small></div>
-                <div style="text-align:right;"><strong style="color:var(--red);">$${Number(w.value).toFixed(2)} Lost</strong><br><small style="color:var(--text-muted);">${w.time}</small></div>
+                <div><strong>${esc(w.itemName)}</strong> <span style="color:var(--orange); font-size:13px;">(${esc(String(w.logQty))} ${esc(w.unitLog)})</span><br><small style="color:var(--text-muted);">${esc(w.staff)} - ${esc(w.reason)}</small></div>
+                <div style="text-align:right;"><strong style="color:var(--red);">$${Number(w.value).toFixed(2)} Lost</strong><br><small style="color:var(--text-muted);">${esc(w.time)}</small></div>
             </div>`
         ).join('')}
     </div>`;
@@ -2784,7 +2895,7 @@ window.showWastageReport = () => {
 
     const rows = topItems.map(([name, d]) =>
         '<tr style="border-bottom:1px solid var(--border);">' +
-        '<td style="padding:8px 12px;">' + name + '</td>' +
+        '<td style="padding:8px 12px;">' + esc(name) + '</td>' +
         '<td style="padding:8px 12px;text-align:center;">' + d.count + '</td>' +
         '<td style="padding:8px 12px;text-align:right;color:var(--red);font-weight:bold;">$' + d.value.toFixed(2) + '</td>' +
         '<td style="padding:8px 12px;"><div style="background:var(--red);height:6px;border-radius:3px;width:' + Math.min(100,(d.value/totalVal*100)).toFixed(0) + '%;opacity:0.7;"></div></td>' +
@@ -2807,7 +2918,7 @@ window.showWastageReport = () => {
     '<th style="padding:8px 12px;text-align:left;">Item</th><th style="padding:8px 12px;text-align:center;">Count</th><th style="padding:8px 12px;text-align:right;">Value Lost</th><th style="padding:8px 12px;">Bar</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>' +
     '<h4 style="margin:0 0 10px 0;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Top Reasons</h4>' +
-    topReasons.map(([r,v]) => '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span>' + r + '</span><span style="color:var(--red);font-weight:bold;">$' + v.toFixed(2) + '</span></div>').join('');
+    topReasons.map(([r,v]) => '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span>' + esc(r) + '</span><span style="color:var(--red);font-weight:bold;">$' + v.toFixed(2) + '</span></div>').join('');
 
     window.openModal('🗑️ Wastage Report — Last 30 Days', html);
 };
@@ -2837,7 +2948,10 @@ window.logWastage = () => {
         staff: document.getElementById('w-staff').value,
         time: new Date().toLocaleString()
     });
-    window.saveToDisk(); window.showToast("Wastage Logged & Stock Deducted!"); window.showView('wastage');
+    window.saveToDisk();
+    const remainStock = invMatch.stock;
+    window.showToast(`Logged: ${qtyInput} ${displayUnit} wasted ($${dollarVal.toFixed(2)}). ${invMatch.name} stock now ${remainStock.toFixed(1)} ${invMatch.buyUnit}.`);
+    window.showView('wastage');
 };
 
 // =============================================================================
@@ -3000,11 +3114,12 @@ window._guessZoneFromName = (name) => {
 window.renderInvoiceView = () => {
     return `
     <div style="max-width: 1300px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-            <h2 style="margin:0;">Invoice Ripper Pro</h2>
-            <div style="font-size:12px; color:var(--text-muted);">Supports PDF (text or scanned) and image files</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div>
+                <h2 style="margin:0">🧾 Invoice Ripper Pro</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Upload a supplier invoice — AI extracts line items, matches inventory, flags price changes</div>
+            </div>
         </div>
-        <p style="color:var(--text-muted); font-size:13px; margin:0 0 20px 0;">Upload a supplier invoice. AI will extract all line items, match to inventory, flag price changes, and update stock — after you confirm.</p>
 
         <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
 
@@ -3683,12 +3798,14 @@ window.renderVarianceReport = () => {
 
 window.renderAllergenView = () => {
     return `<div style="max-width: 800px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;font-size:20px;">Allergen Matrix</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div>
+                <h2 style="margin:0">🧪 Allergen Matrix</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Dietary flags from recipe names or AI scan — GF, VG, DF, NF and more</div>
+            </div>
             <button onclick="window.runAiAllergenScan()" class="btn btn-purple">✨ AI Scan Menu</button>
         </div>
         <div id="allergen-status" style="margin-bottom:15px;"></div>
-        <p style="color:var(--text-muted);">Displays flags found in Recipe names (GF, VG) or detected by the AI Scan.</p>
         <table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;">
             <tr style="background:#111; text-align:left;">
                 <th style="padding:8px 12px;">Menu Item</th>
@@ -3697,7 +3814,7 @@ window.renderAllergenView = () => {
             ${(window.recipes || []).filter(r => r.type === 'Menu' && !r.archived).map(r => {
                 let flags = r.allergens && r.allergens.length > 0 ? r.allergens.join(', ') :
                     `${r.name.includes('GF') ? 'GF ' : ''}${r.name.includes('VG') ? 'VG ' : ''}${r.name.includes('DF') ? 'DF ' : ''}`.trim() || '—';
-                return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 12px;font-size:13px;">${r.name}</td><td style="padding:7px 12px; color:var(--brand-accent); font-weight:bold;">${flags}</td></tr>`;
+                return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 12px;font-size:13px;">${esc(r.name)}</td><td style="padding:7px 12px; color:var(--brand-accent); font-weight:bold;">${esc(flags)}</td></tr>`;
             }).join('')}
         </table>
     </div>`;
@@ -3739,8 +3856,11 @@ Recipes: ${JSON.stringify(recipeData)}`;
 
 window.renderSheetGenView = () => {
     return `<div style="max-width: 1100px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h2 style="margin:0;font-size:20px;">AI Run Sheet Generator</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div>
+                <h2 style="margin:0">📄 AI Run Sheet Generator</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Paste booking data to generate a smart run sheet for tonight's service</div>
+            </div>
             <button onclick="window.print()" class="btn btn-outline" style="background:white; color:black; font-weight:bold;">🖨️ Print Run Sheet</button>
         </div>
         <div style="display:flex; gap:20px; flex-wrap:wrap;">

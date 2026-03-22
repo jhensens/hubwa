@@ -41,7 +41,11 @@ window.handoverTemplateConfig = window.handoverTemplateConfig || {
 };
 window.lsImportLog = [];
 window.lsSalesByData = {};
-window.safeCategories = ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
+window.safeCategories = [
+    'Licenses & Permits', 'Insurance', 'Fire Safety & Emergency', 'Food Safety & HACCP',
+    'Staff RSAs & Certs', 'Employment & HR', 'Lease & Property', 'Supplier Agreements',
+    'Financial & Tax', 'Training & Procedures', 'Health & Safety (WHS)', 'Menus & Marketing', 'General / Other'
+];
 window.kbCategories = [];
 window.onboardingTemplates = {
     'FOH (Front of House)': { 'Day 1: Basics': [{id: 'foh1', label: 'Venue Tour & Safety'}], 'Compliance': [{id: 'foh3', label: 'Upload RSA', isUpload: true, cat: 'Staff RSAs'}] },
@@ -49,6 +53,12 @@ window.onboardingTemplates = {
 };
 window.fridgeUnits = ["Walk-in Coolroom", "Kitchen Fridge 1", "Bar Reach-in"];
 window.masterChecklists = { "Opening Duties": ["Unlock doors", "Check coffee machine"], "Closing Kitchen": ["Deep clean grill", "Empty bins"] };
+
+// --- 1b. HTML ESCAPE UTILITY (XSS Prevention) ---
+window.esc = function(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+};
 
 // --- 2. GLOBAL MODAL SYSTEM (Zero Context Switching) ---
 window.openModal = (titleHtml, bodyHtml) => {
@@ -447,6 +457,7 @@ window.saveToDisk = () => {
     });
 
     if (syncLabel) { syncLabel.innerHTML = '💾 Saved Local'; syncLabel.style.color = 'var(--blue)'; }
+    window.updateNotifBadge();
 
     // Debounce Firebase — only write if 4+ seconds since last write
     if (window._saveTimer) clearTimeout(window._saveTimer);
@@ -644,9 +655,9 @@ window.globalSearch = (query) => {
         }
     });
     
-    // Search Digital Safe
+    // Search Digital Safe (name + notes)
     (window.digitalSafe || []).forEach((d, i) => {
-        if (d.name.toLowerCase().includes(q) || (d.category && d.category.toLowerCase().includes(q))) {
+        if (d.name.toLowerCase().includes(q) || (d.category && d.category.toLowerCase().includes(q)) || (d.notes && d.notes.toLowerCase().includes(q))) {
             results.push({ type: 'document', icon: '🔒', label: d.name, sub: d.category || 'General', action: "window.showView('safe')" });
         }
     });
@@ -702,6 +713,97 @@ document.addEventListener('click', (e) => {
 });
 
 
+// --- 8. NOTIFICATION CENTER ---
+window._notifOpen = false;
+window.getNotifications = function() {
+    const notifs = [];
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-AU');
+    const freqDays = { Weekly: 7, Fortnightly: 14, Monthly: 30, Quarterly: 90 };
+
+    // Overdue rotational tasks
+    (window.rotationalTasks || []).forEach(t => {
+        if (t.dueDateMode === 'specific') {
+            if (t.specificDueDate && new Date(t.specificDueDate) <= now) notifs.push({type:'task', icon:'🔄', text: t.name + ' is overdue', view:'tasks', priority:1});
+        } else if (t.lastLogIso) {
+            const days = (now - new Date(t.lastLogIso)) / 86400000;
+            if (days >= (freqDays[t.freq] || 7)) notifs.push({type:'task', icon:'🔄', text: t.name + ' is overdue', view:'tasks', priority:1});
+        } else if (t.anchorDate) {
+            const anchor = new Date(t.anchorDate);
+            if (anchor <= now) notifs.push({type:'task', icon:'🔄', text: t.name + ' is due', view:'tasks', priority:1});
+        } else {
+            notifs.push({type:'task', icon:'🔄', text: t.name + ' needs attention', view:'tasks', priority:2});
+        }
+    });
+
+    // Expiring documents (<30 days)
+    (window.digitalSafe || []).forEach(d => {
+        if (!d.expiry) return;
+        const exp = new Date(d.expiry);
+        const daysLeft = (exp - now) / 86400000;
+        if (daysLeft < 0) notifs.push({type:'doc', icon:'📄', text: d.name + ' has EXPIRED', view:'safe', priority:0});
+        else if (daysLeft <= 30) notifs.push({type:'doc', icon:'📄', text: d.name + ' expires in ' + Math.ceil(daysLeft) + 'd', view:'safe', priority:1});
+    });
+
+    // Below par stock
+    (window.inventoryItems || []).filter(i => !i.archived && i.par && i.stock < i.par).forEach(i => {
+        notifs.push({type:'stock', icon:'📦', text: i.name + ' below par (' + (i.stock||0) + '/' + i.par + ')', view:'inventory', priority:2});
+    });
+
+    // Open maintenance tickets
+    (window.defectLogs || []).filter(d => d.status !== 'Resolved').forEach(d => {
+        notifs.push({type:'maint', icon:'🛠️', text: (d.item || 'Issue') + ' — open ticket', view:'maintenance', priority:2});
+    });
+
+    // HACCP breaches today
+    (window.tempLogs || []).forEach(t => {
+        if (t.time && t.time.includes && t.time.includes(todayStr) && parseFloat(t.value) > 5) {
+            notifs.push({type:'haccp', icon:'🌡️', text: (t.unit||'Unit') + ' temp breach: ' + t.value + '°C', view:'compliance', priority:0});
+        }
+    });
+
+    // Sort by priority (0=critical first)
+    notifs.sort((a, b) => a.priority - b.priority);
+    return notifs;
+};
+
+window.updateNotifBadge = function() {
+    const badge = document.getElementById('notif-badge');
+    if (!badge) return;
+    const count = window.getNotifications().length;
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = count > 0 ? 'flex' : 'none';
+};
+
+window.toggleNotifPanel = function() {
+    window._notifOpen = !window._notifOpen;
+    let panel = document.getElementById('notif-panel');
+    if (!window._notifOpen) { if (panel) panel.remove(); return; }
+
+    const notifs = window.getNotifications();
+    const items = notifs.length === 0
+        ? '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">✅ All clear — nothing needs attention</div>'
+        : notifs.slice(0, 12).map(n =>
+            `<div onclick="window.showView('${n.view}');window.toggleNotifPanel();" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);font-size:13px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+                <span style="font-size:16px;flex-shrink:0;">${n.icon}</span>
+                <span style="color:${n.priority===0?'var(--red)':n.priority===1?'var(--orange)':'var(--text-main)'}">${window.esc(n.text)}</span>
+            </div>`
+        ).join('');
+
+    if (panel) panel.remove();
+    panel = document.createElement('div');
+    panel.id = 'notif-panel';
+    panel.innerHTML = `<div style="padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:700;border-bottom:1px solid var(--border);">Notifications (${notifs.length})</div>${items}`;
+    panel.style.cssText = 'position:absolute;top:100%;right:0;width:340px;max-height:420px;overflow-y:auto;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.4);z-index:500;';
+    const bell = document.getElementById('notif-bell');
+    if (bell) bell.appendChild(panel);
+};
+
+// Close notif panel on outside click
+document.addEventListener('click', (e) => {
+    if (window._notifOpen && !e.target.closest('#notif-bell')) { window._notifOpen = false; const p = document.getElementById('notif-panel'); if (p) p.remove(); }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Show loading state immediately
     const content = document.getElementById('mainContent');
@@ -719,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.checkLockState();
     window.updateVenueBadge();
     window.showView('dashboard');
+    setTimeout(() => window.updateNotifBadge(), 500);
     setTimeout(() => window.loadTandaData(), 2000);
 
     // Then sync from Firebase in background and re-render if data differs

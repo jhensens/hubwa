@@ -650,17 +650,19 @@ window.handleSalesCSV = (event) => {
 window.renderOrientationView = function(showCompleted = false) {
     const filtered = (window.orientationLogs || []).map((o, i) => ({...o, originalIndex: i})).filter(o => (o.status === 'Completed') === showCompleted);
     return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
             <div>
-                <button onclick="window.showView('orientation')" class="btn ${!showCompleted ? 'btn-dark' : 'btn-outline'}">Active Training</button>
-                <button onclick="window.renderCompletedOrientations()" class="btn ${showCompleted ? 'btn-dark' : 'btn-outline'}" style="margin-left:10px;">Fully Trained</button>
+                <h2 style="margin:0">🤝 Staff Onboarding</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track new hire training progress, certifications, and acknowledgments</div>
             </div>
-            <div>
-                <button onclick="window.editOnbTemplates()" class="btn btn-outline" style="margin-right:10px;">⚙️ Edit Templates</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="window.showView('orientation')" class="btn ${!showCompleted ? 'btn-dark' : 'btn-outline'}">Active Training</button>
+                <button onclick="window.renderCompletedOrientations()" class="btn ${showCompleted ? 'btn-dark' : 'btn-outline'}">Fully Trained</button>
+                <button onclick="window.editOnbTemplates()" class="btn btn-outline">⚙️ Templates</button>
                 <button onclick="window.addOrientationForm()" class="btn btn-blue">+ New Hire</button>
             </div>
         </div>
-        <div id="orientationContent">${filtered.length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No staff in this view.</p></div>' : filtered.map(o => {
+        <div id="orientationContent">${filtered.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🤝</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No staff in this view</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add a new hire to start tracking their onboarding progress</div></div>' : filtered.map(o => {
         const template = window.onboardingTemplates[o.role] || window.onboardingTemplates['FOH (Front of House)'];
         let totalTasks = 0; let completedTasks = 0;
         let phasesHtml = Object.keys(template).map(phase => {
@@ -673,7 +675,7 @@ window.renderOrientationView = function(showCompleted = false) {
             return `<div style="margin-bottom:15px;"><h5 style="margin:0 0 5px 0; color:var(--brand-accent); border-bottom:1px solid var(--border); padding-bottom:5px;">${phase}</h5>${phaseTasksHtml}</div>`;
         }).join('');
         const pct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-        return `<div class="card" style="border-left:6px solid ${pct === 100 ? 'var(--green)' : 'var(--purple)'}; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;"><div><h3 style="margin:0;">${o.name}</h3><span class="tag-pill" style="margin-top:5px;">${o.role}</span><small style="color:var(--text-muted); display:block; margin-top:5px;">Started: ${o.startDate}</small></div><div style="text-align:right;"><strong style="color:${pct === 100 ? 'var(--green)' : 'var(--purple)'}; font-size:24px;">${pct}%</strong>${o.status !== 'Completed' ? `<br><button onclick="window.deleteOrientation(${o.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; margin-top:5px; padding:0; text-decoration:underline;">Remove Staff</button>` : ''}</div></div>${phasesHtml}<div style="margin-top:20px; background:var(--bg-main); padding:15px; border-radius:6px; border:1px solid var(--border);"><h5 style="margin:0 0 10px 0; color:var(--brand-dark);">Staff Acknowledgment</h5><p style="font-size:12px; margin:0 0 10px 0; color:var(--text-muted);">I confirm I have read the venue Handbooks, SOPs, and completed the training checklist above.</p>${o.signature ? `<div style="color:var(--green); font-family:monospace; font-size:14px; padding:10px; border:1px dashed var(--green); background:rgba(16, 185, 129, 0.1);">Signed: ${o.signature} <br><small>${o.signDate}</small></div>` : `<div style="display:flex; gap:10px;"><input type="text" id="sig-${o.originalIndex}" class="input-box" placeholder="Type name to sign..." style="margin:0; flex:1;"><button onclick="window.signOrientation(${o.originalIndex})" class="btn btn-dark">Sign</button></div>`}</div>${pct === 100 && o.signature && o.status !== 'Completed' ? `<button onclick="window.completeOrientation(${o.originalIndex})" class="btn btn-green" style="width:100%; margin-top:20px; font-size:16px;">Approve & Mark as Fully Trained</button>` : ''}</div>`; 
+        return `<div class="card" style="border-left:6px solid ${pct === 100 ? 'var(--green)' : 'var(--purple)'}; margin-bottom:15px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;"><div><h3 style="margin:0;">${esc(o.name)}</h3><span class="tag-pill" style="margin-top:5px;">${o.role}</span><small style="color:var(--text-muted); display:block; margin-top:5px;">Started: ${o.startDate}</small></div><div style="text-align:right;"><strong style="color:${pct === 100 ? 'var(--green)' : 'var(--purple)'}; font-size:24px;">${pct}%</strong>${o.status !== 'Completed' ? `<br><button onclick="window.deleteOrientation(${o.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; margin-top:5px; padding:0; text-decoration:underline;">Remove Staff</button>` : ''}</div></div>${phasesHtml}<div style="margin-top:20px; background:var(--bg-main); padding:15px; border-radius:6px; border:1px solid var(--border);"><h5 style="margin:0 0 10px 0; color:var(--brand-dark);">Staff Acknowledgment</h5><p style="font-size:12px; margin:0 0 10px 0; color:var(--text-muted);">I confirm I have read the venue Handbooks, SOPs, and completed the training checklist above.</p>${o.signature ? `<div style="color:var(--green); font-family:monospace; font-size:14px; padding:10px; border:1px dashed var(--green); background:rgba(16, 185, 129, 0.1);">Signed: ${o.signature} <br><small>${o.signDate}</small></div>` : `<div style="display:flex; gap:10px;"><input type="text" id="sig-${o.originalIndex}" class="input-box" placeholder="Type name to sign..." style="margin:0; flex:1;"><button onclick="window.signOrientation(${o.originalIndex})" class="btn btn-dark">Sign</button></div>`}</div>${pct === 100 && o.signature && o.status !== 'Completed' ? `<button onclick="window.completeOrientation(${o.originalIndex})" class="btn btn-green" style="width:100%; margin-top:20px; font-size:16px;">Approve & Mark as Fully Trained</button>` : ''}</div>`; 
     }).join('')}</div></div>`;
 }
 
@@ -720,12 +722,16 @@ window.deleteOrientation = (index) => { if(confirm("Remove this staff member's t
 // --- 3. ROTATIONAL TASKS ---
 window.renderTaskView = function() {
     return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-            <div style="display:flex;gap:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div>
+                <h2 style="margin:0">🔄 Rotational Tasks</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Recurring tasks like deep cleans, filter changes, and stocktakes</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button onclick="window.renderTaskList()" class="btn btn-dark">Active Tasks</button>
                 <button onclick="window.renderTaskHistory()" class="btn btn-outline">Audit History</button>
+                <button onclick="window.addTaskForm()" class="btn btn-blue">+ Add Task</button>
             </div>
-            <button onclick="window.addTaskForm()" class="btn btn-blue">+ Add Task</button>
         </div>
         <div id="taskSubContent">${window.renderTaskListTemplate()}</div>
     </div>`;
@@ -734,7 +740,7 @@ window.renderTaskView = function() {
 window.renderTaskListTemplate = function() {
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const tasks = window.rotationalTasks || [];
-    if (tasks.length === 0) return '<div class="card"><p style="color:var(--text-muted);margin:0;">No tasks set up yet. Click + Add Task to get started.</p></div>';
+    if (tasks.length === 0) return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🔄</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rotational tasks</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add recurring tasks like deep cleans, filter changes, or stocktakes</div></div>';
 
     return '<div id="activeTasks">' + tasks.map((t, i) => {
         // Determine due status — supports both recurring freq and specific due date
@@ -754,12 +760,22 @@ window.renderTaskListTemplate = function() {
             if (!isDue) daysLeftText = 'Due in ' + Math.ceil(interval - daysSince) + ' days';
             nextDueStr = t.freq + ' | Last: ' + (t.lastDate || 'Never');
         } else if (t.anchorDate) {
-            // Has anchor date but never done — check if anchor date has passed
+            // Has anchor date but never done — check if anchor + interval has passed
             const anchorD = new Date(t.anchorDate);
             const today2 = new Date(); today2.setHours(0,0,0,0);
-            const daysUntilAnchor = Math.round((anchorD - today2) / (1000*3600*24));
-            isDue = daysUntilAnchor <= 0;
-            daysLeftText = isDue ? 'DUE NOW' : 'Due in ' + daysUntilAnchor + ' days';
+            const interval = freqMap[t.freq] || 7;
+            if (anchorD > today2) {
+                isDue = false;
+                const daysUntilAnchor = Math.round((anchorD - today2) / (1000*3600*24));
+                daysLeftText = 'Due in ' + daysUntilAnchor + ' days';
+            } else {
+                const daysSinceAnchor = (today2 - anchorD) / 86400000;
+                const intervalsPassed = Math.floor(daysSinceAnchor / interval);
+                const nextDueDate = new Date(anchorD.getTime() + intervalsPassed * interval * 86400000);
+                const daysUntilNext = Math.round((nextDueDate - today2) / 86400000);
+                isDue = daysUntilNext <= 0;
+                daysLeftText = isDue ? 'DUE NOW' : 'Due in ' + daysUntilNext + ' days';
+            }
             nextDueStr = t.freq + ' | First due: ' + anchorD.toLocaleDateString('en-AU', {day:'numeric',month:'short'});
         } else {
             nextDueStr = (t.dueDateMode === 'specific' ? 'Due: ' + (t.specificDueDate || 'Not set') : (t.freq || 'Weekly')) + ' | Never done';
@@ -1029,50 +1045,74 @@ window.removeShiftItem = (type, i) => {
     window.saveToDisk(); window.editShiftChecklist(type);
 };
 
+window._complianceTab = window._complianceTab || 'temps';
 window.renderComplianceView = function() {
-    const recentTemps = (window.tempLogs || []).slice(-8).reverse();
-    return `<div style="max-width: 900px; margin: auto;">
-        <div class="card" style="border-top:5px solid var(--blue);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 style="margin:0;">Fridge/Freezer Temp Log</h3><button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Setup Units</button></div>
-            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:10px; margin-bottom:15px;">
-                ${(window.fridgeUnits || []).map((f, i) => `
-                    <div style="background:var(--bg-main); padding:10px; border-radius:6px; border:1px solid var(--border);">
-                        <strong style="font-size:12px; display:block; margin-bottom:8px; color:var(--brand-dark);">${f}</strong>
-                        <input type="number" step="0.1" id="t-val-${i}" oninput="window.checkT(${i})" class="input-box" placeholder="Temp °C" style="margin:0; width:100%;">
-                        <div id="t-warn-${i}" style="display:none; margin-top:10px;">
-                            <small style="color:var(--red); font-weight:bold; display:block; margin-bottom:4px;">⚠️ High Temp Alert</small>
-                            <input type="text" id="t-action-${i}" class="input-box" placeholder="Corrective Action" style="margin:0; border-color:var(--red); font-size:12px; padding:6px;">
-                        </div>
+    const E = window.esc;
+    const tab = window._complianceTab || 'temps';
+    const tabPills = ['temps','shift','custom'].map(t => {
+        const labels = { temps:'🌡️ Temperatures', shift:'✅ Shift Checklist', custom:'📋 Custom Checklists' };
+        return `<span class="tag-pill ${tab===t?'active':''}" onclick="window._complianceTab='${t}';window.showView('compliance');">${labels[t]}</span>`;
+    }).join('');
+
+    let content = '';
+
+    if (tab === 'temps') {
+        const recentTemps = (window.tempLogs || []).slice(-8).reverse();
+        content = `<div class="card" style="border-top:5px solid var(--blue);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                <h3 style="margin:0;">Fridge/Freezer Temp Log</h3>
+                <button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">⚙️ Setup Units</button>
+            </div>
+            ${(window.fridgeUnits||[]).length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">🌡️</div><div style="font-size:13px;">No fridge units configured. Click Setup Units to add your coolrooms and fridges.</div></div>' : `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:15px;">
+                ${(window.fridgeUnits||[]).map((f,i) => `<div style="background:var(--bg-main);padding:10px;border-radius:6px;border:1px solid var(--border);">
+                    <strong style="font-size:12px;display:block;margin-bottom:8px;color:var(--brand-dark);">${E(f)}</strong>
+                    <input type="number" step="0.1" id="t-val-${i}" oninput="window.checkT(${i})" class="input-box" placeholder="Temp °C" style="margin:0;width:100%;">
+                    <div id="t-warn-${i}" style="display:none;margin-top:10px;">
+                        <small style="color:var(--red);font-weight:bold;display:block;margin-bottom:4px;">⚠️ High Temp Alert</small>
+                        <input type="text" id="t-action-${i}" class="input-box" placeholder="Corrective Action" style="margin:0;border-color:var(--red);font-size:12px;padding:6px;">
                     </div>
-                `).join('')}
+                </div>`).join('')}
             </div>
-            <div style="display:flex; gap:10px; border-top:1px solid var(--border); padding-top:20px;">
-                <input type="text" id="t-staff" class="input-box" placeholder="Staff Name Signing Off" style="flex:1; margin:0;">
+            <div style="display:flex;gap:10px;border-top:1px solid var(--border);padding-top:20px;">
+                <input type="text" id="t-staff" class="input-box" placeholder="Staff Name Signing Off" style="flex:1;margin:0;">
                 <button onclick="window.logAllTemps()" class="btn btn-blue" style="width:200px;">Log All Temps</button>
-            </div>
-            ${recentTemps.length > 0 ? `
-            <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px;">
-                <h4 style="margin:0 0 10px 0; font-size:13px; color:var(--text-muted); text-transform:uppercase;">Recent Logs</h4>
-                <table style="width:100%; font-size:13px; text-align:left; border-collapse:collapse;">
-                    <tbody>
-                        ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:5px 0;font-size:12px;">${t.unit}</td><td style="color:${t.value > 5 ? 'var(--red)' : 'var(--green)'}; font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${t.staff}</td><td>${t.action ? `<span style="color:var(--red); font-size:11px;">Action: ${t.action}</span><br>` : ''}<span style="color:var(--text-muted); font-size:11px;">${t.time}</span></td></tr>`).join('')}
-                    </tbody>
-                </table>
+            </div>`}
+            ${recentTemps.length > 0 ? `<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:15px;">
+                <h4 style="margin:0 0 10px 0;font-size:13px;color:var(--text-muted);text-transform:uppercase;">Recent Logs</h4>
+                <table style="width:100%;font-size:13px;text-align:left;border-collapse:collapse;"><tbody>
+                    ${recentTemps.map(t => `<tr style="border-bottom:1px dashed var(--border);"><td style="padding:5px 0;font-size:12px;">${E(t.unit)}</td><td style="color:${t.value>5?'var(--red)':'var(--green)'};font-weight:bold;">${t.value}°C</td><td style="color:var(--text-muted);">${E(t.staff)}</td><td>${t.action?`<span style="color:var(--red);font-size:11px;">Action: ${E(t.action)}</span><br>`:''}<span style="color:var(--text-muted);font-size:11px;">${t.time}</span></td></tr>`).join('')}
+                </tbody></table>
                 <button onclick="window.showTempHistory()" class="btn btn-outline" style="width:100%;margin-top:12px;font-size:12px;">📋 View Full History</button>
             </div>` : ''}
-        </div>
-        
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; margin-top:30px;">
-            <h3 style="margin:0;">Venue Checklists</h3>
-            <div style="display:flex;gap:8px;">
-                <button onclick="window.renderChecklistHistory()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">📋 History</button>
-                <button onclick="window.editChecklists()" class="btn btn-outline" style="padding:6px 12px; font-size:11px;">⚙️ Edit Lists</button>
+        </div>`;
+    }
+
+    if (tab === 'shift') {
+        content = window.renderShiftChecklists();
+    }
+
+    if (tab === 'custom') {
+        const checklists = window.masterChecklists || {};
+        const keys = Object.keys(checklists);
+        content = `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:15px;">
+            <button onclick="window.renderChecklistHistory()" class="btn btn-outline" style="font-size:12px;">📋 History</button>
+            <button onclick="window.editChecklists()" class="btn btn-outline" style="font-size:12px;">⚙️ Edit Lists</button>
+        </div>` + (keys.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📋</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No custom checklists yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Create audit checklists for weekly deep cleans, monthly inspections, or any recurring checks your venue needs.</div></div>' :
+        `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:20px;">
+            ${keys.map(l => `<div class="card" style="padding:14px;"><h4 style="margin:0 0 15px 0;color:var(--brand-accent);">${E(l)}</h4>${(checklists[l]||[]).map(item => `<div style="font-size:13px;margin:8px 0;"><label style="cursor:pointer;display:flex;gap:10px;align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${E(item)}</span></label></div>`).join('')}<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:15px;display:flex;gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
+        </div>`);
+    }
+
+    return `<div style="max-width:900px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+            <div>
+                <h2 style="margin:0;">Compliance</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Temperature logs, shift checklists, and custom audits</div>
             </div>
         </div>
-        ${window.renderShiftChecklists()}
-        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px; margin-top:20px;">
-            ${Object.keys(window.masterChecklists || {}).map(l => `<div class="card" style="padding:14px;"><h4 style="margin:0 0 15px 0; color:var(--brand-accent);">${l}</h4>${(window.masterChecklists[l] || []).map(item => `<div style="font-size:13px; margin:8px 0;"><label style="cursor:pointer; display:flex; gap:10px; align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${item}</span></label></div>`).join('')}<div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px; display:flex; gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
-        </div>
+        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
+        ${content}
     </div>`;
 }
 
@@ -1152,58 +1192,73 @@ window.addChecklistItem = (cat) => { const v = document.getElementById(`add-item
 window.delChecklistItem = (cat, idx) => { window.masterChecklists[cat].splice(idx, 1); window.saveToDisk(); window.editChecklists(); window.showView('compliance'); };
 
 // --- 5. MAINTENANCE & ASSETS ---
-window.renderMaintenanceView = function(activeTab = 'fixit') {
-    let content = '', btnF = 'btn-outline', btnA = 'btn-outline', btnC = 'btn-outline', actionBtn = '';
-    let btnCal = 'btn-outline';
-    if (activeTab === 'fixit') { content = window.renderFixItBoard(); btnF = 'btn-dark'; } 
-    else if (activeTab === 'assets') { content = window.renderAssetRegister(); btnA = 'btn-dark'; actionBtn = `<button onclick="window.editEq()" class="btn btn-blue">+ Add Asset</button>`; } 
-    else if (activeTab === 'contractors') { content = window.renderContractorBoard(); btnC = 'btn-dark'; actionBtn = `<button onclick="window.showContractorForm()" class="btn btn-green">+ Sign In Contractor</button>`; }
-    else if (activeTab === 'calendar') { content = window.renderServiceCalendar(); btnCal = 'btn-dark'; }
+window._maintTab = window._maintTab || 'fixit';
+window.renderMaintenanceView = function(activeTab) {
+    if (activeTab) window._maintTab = activeTab;
+    const tab = window._maintTab || 'fixit';
+    const E = window.esc;
+    let content = '', actionBtn = '';
 
-    return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
-            <div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:5px;">
-                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit')" class="btn ${btnF}">🛠️ Fix-It Board</button>
-                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('assets')" class="btn ${btnA}">⚙️ Asset Register</button>
-                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors')" class="btn ${btnC}">📋 Contractor Log</button>
-                <button onclick="document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('calendar')" class="btn ${btnCal}">📅 Service Calendar</button>
+    if (tab === 'fixit') { content = window.renderFixItBoard(); actionBtn = `<button onclick="window.openFixItForm()" class="btn btn-orange">🔧 Report Issue</button>`; }
+    else if (tab === 'assets') { content = window.renderAssetRegister(); actionBtn = `<button onclick="window.editEq()" class="btn btn-blue">+ Add Asset</button>`; }
+    else if (tab === 'contractors') { content = window.renderContractorBoard(); actionBtn = `<button onclick="window.showContractorForm()" class="btn btn-green">+ Sign In Contractor</button>`; }
+    else if (tab === 'calendar') { content = window.renderServiceCalendar(); }
+
+    const tabs = ['fixit','assets','contractors','calendar'].map(t => {
+        const labels = { fixit:'🛠️ Tickets', assets:'⚙️ Assets', contractors:'📋 Contractors', calendar:'📅 Service' };
+        return `<span class="tag-pill ${tab===t?'active':''}" onclick="window._maintTab='${t}';document.getElementById('mainContent').innerHTML=window.renderMaintenanceView();">${labels[t]}</span>`;
+    }).join('');
+
+    return `<div style="max-width:900px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+            <div>
+                <h2 style="margin:0;">Maintenance & Assets</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Fix-it tickets, equipment register, and contractor log</div>
             </div>
-            ${actionBtn}
+            <div style="display:flex;gap:8px;">${actionBtn}</div>
         </div>
+        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabs}</div>
         <div id="maint-content">${content}</div>
     </div>`;
 }
 
-window.renderFixItBoard = () => {
-    const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open'); 
-    const closedTickets = (window.defectLogs || []).filter(d => d.status === 'Resolved');
+window.openFixItForm = () => {
+    const E = window.esc;
     const tradies = (window.phoneBook || []).filter(c => c.category === 'Tradie' || c.category === 'Tradie / Maintenance');
-    const tradieOptions = `<option value="">Leave Unassigned (Internal Fix)</option>` + tradies.map(t => `<option value="${t.name}">${t.name} - ${t.phone}</option>`).join('');
-
-    return `<div class="card" style="border-top:4px solid var(--orange);">
-        <h3 style="margin-top:0;font-size:15px;">Log a Broken Item</h3>
-        <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <input type="text" id="def-item" class="input-box" placeholder="Item (e.g. Table 12 / Coolroom Fan)" style="flex-grow:1; margin:0;">
-            <label style="display:flex; align-items:center; color:var(--red); font-weight:bold; background:rgba(239, 68, 68, 0.1); padding:0 15px; border-radius:6px; border:1px solid rgba(239, 68, 68, 0.2); cursor:pointer;"><input type="checkbox" id="def-urgent" style="margin-right:8px; transform:scale(1.2);"> URGENT</label>
-        </div>
-        <select id="def-tradie" class="input-box" style="margin-bottom:15px;">${tradieOptions}</select>
-        <textarea id="def-desc" class="input-box" placeholder="What is exactly wrong with it?" style="height:60px; margin-bottom:15px;"></textarea>
-        <button onclick="window.submitDefect()" class="btn btn-orange" style="width:100%; font-size:13px;">Submit Ticket</button>
-    </div>
-    
-    <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;">Open Tickets</h3>
-    ${openTickets.length === 0 ? '<div class="card"><p style="color:var(--green); font-weight:bold; margin:0;">No open issues! Venue is looking good.</p></div>' : openTickets.map((d) => `
-        <div class="card" style="border-left:4px solid ${d.urgent ? 'var(--red)' : 'var(--orange)'}; padding:14px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><strong style="font-size:14px;">${d.item} ${d.urgent ? '<span style="color:var(--red); font-size:12px; margin-left:10px; border:1px solid var(--red); padding:2px 6px; border-radius:4px;">URGENT</span>' : ''}</strong><small style="color:var(--text-muted);">Reported: ${d.date}</small></div>
-            <p style="margin:6px 0; color:var(--text-main); font-size:13px; background:var(--bg-main); padding:8px; border-radius:5px;">${d.desc}</p>
-            ${d.tradie ? `<div style="font-size:13px; margin-bottom:15px; color:var(--blue); font-weight:bold;">🛠️ Assigned to: ${d.tradie}</div>` : '<div style="margin-bottom:15px;"></div>'}
-            <div style="display:flex; justify-content:flex-end; align-items:center; border-top:1px dashed var(--border); padding-top:10px;"><input type="number" step="0.01" id="def-cost-${d.originalIndex}" class="input-box" placeholder="Repair Cost ($)" style="width:140px; display:inline; margin:0 10px 0 0;"><button onclick="window.resolveDefect(${d.originalIndex})" class="btn btn-green">Mark Resolved</button></div>
-        </div>`).join('')}
-        
-    <h3 style="margin-top:20px; margin-bottom:10px; color:var(--text-muted); font-size:12px; text-transform:uppercase;">Recently Resolved</h3>
-    ${closedTickets.slice(-5).reverse().map(d => `<div style="background:var(--bg-main); padding:10px; border-radius:6px; margin-bottom:6px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;"><div><strong style="color:var(--green);">✓ ${d.item}</strong> - <span style="font-size:13px; color:var(--text-muted);">${d.desc}</span></div>${d.cost > 0 ? `<strong style="color:var(--red); font-size:14px;">$${d.cost.toFixed(2)}</strong>` : ''}</div>`).join('')}`;
+    const tradieOptions = `<option value="">Leave Unassigned (Internal Fix)</option>` + tradies.map(t => `<option value="${E(t.name)}">${E(t.name)} - ${E(t.phone)}</option>`).join('');
+    const html = `
+        <input type="text" id="def-item" class="input-box" placeholder="Item (e.g. Table 12 / Coolroom Fan)">
+        <textarea id="def-desc" class="input-box" placeholder="What is exactly wrong with it?" style="height:80px;"></textarea>
+        <select id="def-tradie" class="input-box">${tradieOptions}</select>
+        <label style="display:flex;align-items:center;color:var(--red);font-weight:bold;background:rgba(239,68,68,0.1);padding:10px 15px;border-radius:6px;border:1px solid rgba(239,68,68,0.2);cursor:pointer;margin-bottom:20px;">
+            <input type="checkbox" id="def-urgent" style="margin-right:8px;transform:scale(1.2);"> URGENT
+        </label>
+        <button onclick="window.submitDefect()" class="btn btn-orange" style="width:100%;font-size:14px;">Submit Ticket</button>`;
+    window.openModal('🔧 Report Maintenance Issue', html);
 };
-window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: new Date().toLocaleDateString() }); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
+
+window.renderFixItBoard = () => {
+    const E = window.esc;
+    const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open');
+    const closedTickets = (window.defectLogs || []).filter(d => d.status === 'Resolved');
+
+    if (openTickets.length === 0 && closedTickets.length === 0) {
+        return `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">🛠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No open tickets</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Report your first maintenance issue with the button above. Tickets stay here until resolved.</div></div>`;
+    }
+
+    return `<h3 style="margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:5px;">Open Tickets (${openTickets.length})</h3>
+    ${openTickets.length === 0 ? '<div class="card"><p style="color:var(--green);font-weight:bold;margin:0;">No open issues! Venue is looking good.</p></div>' : openTickets.map((d) => `
+        <div class="card" style="border-left:4px solid ${d.urgent?'var(--red)':'var(--orange)'};padding:14px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;"><strong style="font-size:14px;">${E(d.item)} ${d.urgent?'<span style="color:var(--red);font-size:12px;margin-left:10px;border:1px solid var(--red);padding:2px 6px;border-radius:4px;">URGENT</span>':''}</strong><small style="color:var(--text-muted);">Reported: ${d.date}</small></div>
+            <p style="margin:6px 0;color:var(--text-main);font-size:13px;background:var(--bg-main);padding:8px;border-radius:5px;">${E(d.desc)}</p>
+            ${d.tradie?`<div style="font-size:13px;margin-bottom:15px;color:var(--blue);font-weight:bold;">🛠️ Assigned to: ${E(d.tradie)}</div>`:'<div style="margin-bottom:15px;"></div>'}
+            <div style="display:flex;justify-content:flex-end;align-items:center;border-top:1px dashed var(--border);padding-top:10px;flex-wrap:wrap;gap:8px;"><input type="number" step="0.01" id="def-cost-${d.originalIndex}" class="input-box" placeholder="Repair Cost ($)" style="width:140px;display:inline;margin:0;"><button onclick="window.resolveDefect(${d.originalIndex})" class="btn btn-green">Mark Resolved</button></div>
+        </div>`).join('')}
+
+    ${closedTickets.length > 0 ? `<h3 style="margin-top:20px;margin-bottom:10px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Recently Resolved</h3>
+    ${closedTickets.slice(-5).reverse().map(d => `<div style="background:var(--bg-main);padding:10px;border-radius:6px;margin-bottom:6px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="color:var(--green);">✓ ${E(d.item)}</strong> - <span style="font-size:13px;color:var(--text-muted);">${E(d.desc)}</span></div>${d.cost>0?`<strong style="color:var(--red);font-size:14px;">$${d.cost.toFixed(2)}</strong>`:''}</div>`).join('')}` : ''}`;
+};
+window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: new Date().toLocaleDateString() }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
 window.resolveDefect = (index) => { const costInput = document.getElementById(`def-cost-${index}`).value; window.defectLogs[index].status = 'Resolved'; window.defectLogs[index].cost = costInput ? parseFloat(costInput) : 0; window.defectLogs[index].resolvedDate = new Date().toLocaleDateString(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Resolved!"); };
 
 window.renderAssetRegister = () => { return (window.equipmentData || []).length === 0 ? '<p style="color:var(--text-muted);">No assets tracked yet.</p>' : window.equipmentData.map((e, idx) => `<div class="card" style="border-left:3px solid var(--blue); padding:12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${e.name}</strong> <span style="color:var(--text-muted); font-size:13px; margin-left:10px;">[Code: ${e.code}]</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Service Interval: ${e.interval} months | Last Service: <strong style="color:white;">${e.lastService}</strong></small></div><div style="display:flex; gap:10px;"><button onclick="window.editEq(${idx})" class="btn btn-outline">Edit</button><button onclick="window.logEq(${idx})" class="btn btn-green">Log Service Today</button><button onclick="window.delEq(${idx})" style="background:none; color:var(--red); border:none; cursor:pointer; font-size:18px;">&times;</button></div></div></div>`).join(''); };
@@ -1238,95 +1293,181 @@ window.submitContractor = () => { const name = document.getElementById('con-name
 window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
 
 
-// --- 6. DIGITAL SAFE ---
+// --- 6. DIGITAL SAFE — Full Venue Document Hub ---
 window._safeActiveTab = window._safeActiveTab || 'all';
+window._safeViewMode = window._safeViewMode || (localStorage.getItem('safeViewMode') || 'grid');
+window._safeSortCol = window._safeSortCol || 'expiry';
+window._safeSortAsc = window._safeSortAsc !== undefined ? window._safeSortAsc : true;
 
-window.renderSafeView = function() {
-    const cats = window.safeCategories || ['Licenses & Permits', 'Staff RSAs', 'Food Safety Certs', 'Maintenance Records', 'General / Other'];
-    const docs = window.digitalSafe || [];
-    const activeTab = window._safeActiveTab || 'all';
+window._safeGetStatus = function(d) {
+    if (!d.expiry) return { label: 'OK', color: 'var(--green)' };
+    const daysLeft = (new Date(d.expiry) - new Date()) / 86400000;
+    if (daysLeft < 0) return { label: 'EXPIRED', color: 'var(--red)' };
+    if (daysLeft <= 30) return { label: 'Expiring', color: 'var(--orange)' };
+    if (daysLeft <= 90) return { label: 'Renew Soon', color: '#eab308' };
+    return { label: 'OK', color: 'var(--green)' };
+};
 
-    const sortDocs = (arr) => arr.slice().sort((a, b) => {
+window._safeSortDocs = function(arr) {
+    return arr.slice().sort((a, b) => {
         const now = new Date();
         const da = a.expiry ? new Date(a.expiry) : null;
-        const db = b.expiry ? new Date(b.expiry) : null;
-        // Expired first, then expiring soonest, then no expiry last
+        const db2 = b.expiry ? new Date(b.expiry) : null;
         const aExpired = da && da < now;
-        const bExpired = db && db < now;
+        const bExpired = db2 && db2 < now;
         if (aExpired && !bExpired) return -1;
         if (!aExpired && bExpired) return 1;
-        if (da && db) return da - db;
-        if (da && !db) return -1;
-        if (!da && db) return 1;
-        return a.name.localeCompare(b.name);
+        if (da && db2) return da - db2;
+        if (da && !db2) return -1;
+        if (!da && db2) return 1;
+        return (a.name||'').localeCompare(b.name||'');
     });
+};
 
-    const rawFiltered = activeTab === 'all' ? docs.map((d,i) => ({...d, originalIndex:i}))
-        : docs.map((d,i) => ({...d, originalIndex:i})).filter(d => (d.category || 'General / Other') === activeTab);
-    const filteredDocs = sortDocs(rawFiltered);
+window.renderSafeView = function() {
+    const E = window.esc;
+    const cats = window.safeCategories || [];
+    const docs = window.digitalSafe || [];
+    const activeTab = window._safeActiveTab || 'all';
+    const viewMode = window._safeViewMode || 'grid';
+    const searchQ = (window._safeSearchQuery || '').toLowerCase();
 
-    // Tab pills
-    const tabPills = [
-        `<span class="tag-pill ${activeTab === 'all' ? 'active' : ''}" onclick="window._safeActiveTab='all'; window.showView('safe');">All (${docs.length})</span>`
-    ].concat(cats.map(c => {
-        const count = docs.filter(d => (d.category || 'General / Other') === c).length;
-        return `<span class="tag-pill ${activeTab === c ? 'active' : ''}" onclick="window._safeActiveTab='${c.replace(/'/g,"\\'")}'; window.showView('safe');">${c} (${count})</span>`;
-    })).join('');
+    // Filter by tab + search
+    let indexed = docs.map((d,i) => ({...d, originalIndex:i}));
+    if (activeTab !== 'all') indexed = indexed.filter(d => (d.category || 'General / Other') === activeTab);
+    if (searchQ.length >= 2) indexed = indexed.filter(d => (d.name||'').toLowerCase().includes(searchQ) || (d.notes||'').toLowerCase().includes(searchQ) || (d.category||'').toLowerCase().includes(searchQ));
+    const filteredDocs = window._safeSortDocs(indexed);
+
+    // Tab pills — only show categories that have docs (plus All)
+    const tabPills = [`<span class="tag-pill ${activeTab === 'all' ? 'active' : ''}" onclick="window._safeActiveTab='all';window.showView('safe');">All (${docs.length})</span>`]
+        .concat(cats.map(c => {
+            const count = docs.filter(d => (d.category || 'General / Other') === c).length;
+            if (count === 0 && activeTab !== c) return '';
+            return `<span class="tag-pill ${activeTab === c ? 'active' : ''}" onclick="window._safeActiveTab='${E(c).replace(/'/g,"\\'")}';window.showView('safe');">${E(c)} (${count})</span>`;
+        })).filter(Boolean).join('');
 
     // Expiry alerts
-    const expiringSoon = docs.filter(d => d.expiry && ((new Date(d.expiry) - new Date()) / (1000*3600*24)) <= 30 && new Date(d.expiry) > new Date());
+    const expiringSoon = docs.filter(d => d.expiry && ((new Date(d.expiry) - new Date()) / 86400000) <= 30 && new Date(d.expiry) > new Date());
     const expired = docs.filter(d => d.expiry && new Date(d.expiry) < new Date());
     let alertHtml = '';
-    if (expired.length > 0) alertHtml += `<div class="card" style="border-left:4px solid var(--red);padding:10px 15px;margin-bottom:10px;font-size:13px;"><strong style="color:var(--red);">⚠️ ${expired.length} document${expired.length>1?'s':''} expired</strong></div>`;
+    if (expired.length > 0) alertHtml += `<div class="card" style="border-left:4px solid var(--red);padding:10px 15px;margin-bottom:10px;font-size:13px;"><strong style="color:var(--red);">⚠️ ${expired.length} document${expired.length>1?'s':''} expired</strong> — <a href="#" onclick="window._safeActiveTab='all';window._safeSearchQuery='';window.showView('safe');return false;" style="color:var(--red);">View all</a></div>`;
     if (expiringSoon.length > 0) alertHtml += `<div class="card" style="border-left:4px solid var(--orange);padding:10px 15px;margin-bottom:10px;font-size:13px;"><strong style="color:var(--orange);">📅 ${expiringSoon.length} document${expiringSoon.length>1?'s':''} expiring within 30 days</strong></div>`;
 
-    // Doc cards
-    const docsHtml = filteredDocs.length === 0
-        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No documents in this category.</p></div>'
-        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filteredDocs.map(d => {
-            const isExpired = d.expiry && new Date(d.expiry) < new Date();
-            const isExpiringSoon = d.expiry && !isExpired && ((new Date(d.expiry) - new Date()) / (1000*3600*24)) <= 30;
-            const borderColor = isExpired ? 'var(--red)' : isExpiringSoon ? 'var(--orange)' : 'var(--green)';
+    // Empty state
+    const emptyHtml = docs.length === 0
+        ? `<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px;">🔒</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">Your safe is empty</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Upload venue documents — licenses, insurance, RSAs, food safety certs, leases, and more. Everything your venue needs, in one secure place.</div></div>`
+        : (filteredDocs.length === 0 ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No documents match your search.</p></div>' : '');
+
+    // Grid view
+    let docsHtml = '';
+    if (filteredDocs.length > 0 && viewMode === 'grid') {
+        docsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filteredDocs.map(d => {
+            const st = window._safeGetStatus(d);
+            const borderColor = st.color;
             return `<div class="card" style="border-top:5px solid ${borderColor};margin-bottom:0;padding:20px;">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
                     <div style="flex:1;padding-right:10px;">
-                        <h4 style="margin:0 0 4px 0;font-size:15px;">${d.name}</h4>
-                        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${d.category || 'General'}</span>
+                        <h4 style="margin:0 0 4px 0;font-size:15px;">${E(d.name)}</h4>
+                        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${E(d.category || 'General')}</span>
                     </div>
                     <div style="display:flex;gap:4px;flex-shrink:0;">
-                        <button onclick="window.editDocForm(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;" title="Edit">✏️</button>
-                        <button onclick="window.delDoc(${d.originalIndex})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;" title="Delete">&times;</button>
+                        <button onclick="window.editDocForm(${d.originalIndex})" class="btn-touch" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;" title="Edit">✏️</button>
+                        <button onclick="window.delDoc(${d.originalIndex})" class="btn-touch" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;" title="Delete">&times;</button>
                     </div>
                 </div>
-                <p style="margin:8px 0 15px 0;font-size:12px;color:${isExpired?'var(--red)':isExpiringSoon?'var(--orange)':'var(--text-muted)'};">
-                    ${d.expiry ? (isExpired ? '⚠️ Expired: ' : isExpiringSoon ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
+                ${d.notes ? `<p style="margin:4px 0 8px 0;font-size:12px;color:var(--text-muted);line-height:1.4;">${E(d.notes)}</p>` : ''}
+                <p style="margin:4px 0 12px 0;font-size:12px;color:${st.color};">
+                    ${d.expiry ? (st.label === 'EXPIRED' ? '⚠️ Expired: ' : st.label === 'Expiring' ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
+                    <span style="background:${st.color};color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">${st.label}</span>
                 </p>
                 ${d.data ? `<a href="${d.data}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">📄 View / Download</a>` : d.link ? `<a href="${d.link}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
             </div>`;
         }).join('')}</div>`;
+    }
 
-    return `<div style="max-width:1050px;margin:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
-            <h2 style="margin:0;">Digital Safe</h2>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    // Table view
+    if (filteredDocs.length > 0 && viewMode === 'table') {
+        docsHtml = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">
+            <thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">
+                <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('name')">Name</th>
+                <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('category')">Category</th>
+                <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('expiry')">Expiry</th>
+                <th style="padding:10px 12px;">Status</th>
+                <th style="padding:10px 12px;text-align:right;">Actions</th>
+            </tr></thead><tbody>${filteredDocs.map(d => {
+                const st = window._safeGetStatus(d);
+                return `<tr style="border-bottom:1px solid var(--bg-main);">
+                    <td style="padding:10px 12px;"><strong style="font-size:13px;">${E(d.name)}</strong>${d.notes ? '<br><span style="font-size:11px;color:var(--text-muted);">'+E(d.notes).substring(0,60)+(d.notes.length>60?'...':'')+'</span>' : ''}</td>
+                    <td style="padding:10px 12px;font-size:12px;color:var(--text-muted);">${E(d.category||'General')}</td>
+                    <td style="padding:10px 12px;font-size:12px;color:${st.color};">${d.expiry || '—'}</td>
+                    <td style="padding:10px 12px;"><span style="background:${st.color};color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;">${st.label}</span></td>
+                    <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+                        ${d.data ? `<a href="${d.data}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">📄 View</a>` : d.link ? `<a href="${d.link}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">🔗 Open</a>` : ''}
+                        <button onclick="window.editDocForm(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-right:4px;">✏️</button>
+                        <button onclick="window.delDoc(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;color:var(--red);">&times;</button>
+                    </td>
+                </tr>`;
+            }).join('')}</tbody></table></div>`;
+    }
+
+    const viewToggle = `<div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <button onclick="window._safeViewMode='grid';localStorage.setItem('safeViewMode','grid');window.showView('safe');" style="padding:6px 10px;font-size:12px;border:none;cursor:pointer;background:${viewMode==='grid'?'var(--blue)':'var(--card-bg)'};color:${viewMode==='grid'?'#fff':'var(--text-muted)'};">Grid</button>
+        <button onclick="window._safeViewMode='table';localStorage.setItem('safeViewMode','table');window.showView('safe');" style="padding:6px 10px;font-size:12px;border:none;cursor:pointer;background:${viewMode==='table'?'var(--blue)':'var(--card-bg)'};color:${viewMode==='table'?'#fff':'var(--text-muted)'};">Table</button>
+    </div>`;
+
+    return `<div style="max-width:1100px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+            <div>
+                <h2 style="margin:0;">Digital Safe</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Secure document hub — licenses, insurance, certs, HR, and more</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                ${viewToggle}
+                <button onclick="window.printDocRegister()" class="btn btn-outline" style="font-size:12px;">🖨️ Print Register</button>
                 <button onclick="window.bulkUploadForm()" class="btn btn-blue">📂 Bulk Upload</button>
-                <button onclick="window.addDocForm()" class="btn btn-green">+ Single Upload</button>
-                <button onclick="window.editSafeCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>
+                <button onclick="window.addDocForm()" class="btn btn-green">+ Upload</button>
+                <button onclick="window.editSafeCategories()" class="btn btn-outline" style="font-size:12px;">⚙️</button>
             </div>
         </div>
         ${alertHtml}
-        <input type="text" class="search-bar" placeholder="🔍 Search documents..." oninput="window._safeSearchQuery=this.value;window.showView('safe')" value="${window._safeSearchQuery||''}" style="margin-bottom:15px;">
+        <input type="text" class="search-bar" placeholder="🔍 Search documents and notes..." oninput="window._safeSearchQuery=this.value;window.showView('safe')" value="${window._safeSearchQuery||''}" style="margin-bottom:15px;">
         <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
-        ${docsHtml}
+        ${emptyHtml}${docsHtml}
     </div>`;
+};
+
+window._safeSortBy = function(col) {
+    if (window._safeSortCol === col) window._safeSortAsc = !window._safeSortAsc;
+    else { window._safeSortCol = col; window._safeSortAsc = true; }
+    window.showView('safe');
+};
+
+window.printDocRegister = function() {
+    const docs = window.digitalSafe || [];
+    const E = window.esc;
+    const rows = docs.slice().sort((a,b) => (a.category||'').localeCompare(b.category||'') || (a.name||'').localeCompare(b.name||'')).map(d => {
+        const st = window._safeGetStatus(d);
+        return `<tr><td style="padding:6px 10px;border:1px solid #ddd;">${E(d.name)}</td><td style="padding:6px 10px;border:1px solid #ddd;">${E(d.category||'General')}</td><td style="padding:6px 10px;border:1px solid #ddd;">${d.expiry||'N/A'}</td><td style="padding:6px 10px;border:1px solid #ddd;color:${st.label==='EXPIRED'?'red':st.label==='Expiring'?'orange':'green'}">${st.label}</td><td style="padding:6px 10px;border:1px solid #ddd;font-size:11px;">${E(d.notes||'')}</td></tr>`;
+    }).join('');
+    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const html = `<html><head><title>Document Register</title></head><body style="font-family:Arial,sans-serif;padding:30px;color:#000;">
+        <h2 style="margin-bottom:4px;">${E(venueName)} — Document Register</h2>
+        <p style="color:#666;font-size:12px;">Printed: ${new Date().toLocaleDateString('en-AU')} | ${docs.length} documents</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:15px;">
+            <thead><tr style="background:#f0f0f0;"><th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Document</th><th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Category</th><th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Expiry</th><th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Status</th><th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Notes</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></body></html>`;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); win.print(); }
 };
 
 window.editSafeCategories = () => {
     const cats = window.safeCategories || [];
-    let html = `<div style="margin-bottom:15px;">
+    const E = window.esc;
+    let html = `<div style="margin-bottom:15px;max-height:400px;overflow-y:auto;">
         ${cats.map((c, i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);">
-            <span style="font-size:14px;">${c}</span>
-            <button onclick="window.delSafeCat(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;">&times;</button>
+            <span style="font-size:13px;">${E(c)}</span>
+            <button onclick="window.delSafeCat(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:18px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;">&times;</button>
         </div>`).join('')}
     </div>
     <div style="display:flex;gap:10px;">
@@ -1353,14 +1494,16 @@ window.delSafeCat = (i) => {
 
 window.bulkUploadForm = () => {
     const cats = (window.safeCategories || []);
-    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const catOpts = cats.map(c => `<option value="${window.esc(c)}">${window.esc(c)}</option>`).join('');
     const html = `
         <label style="font-size:11px;color:var(--text-muted);">Category for all files</label>
         <select id="bulk-cat" class="input-box">${catOpts}</select>
         <label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional — applies to all)</label>
         <input type="date" id="bulk-expiry" class="input-box">
-        <label style="font-size:11px;color:var(--text-muted);">Select Files (PDF or images, multiple OK)</label>
-        <input type="file" id="bulk-files" accept="application/pdf,image/*" multiple class="input-box" style="padding:12px;margin-bottom:20px;">
+        <label style="font-size:11px;color:var(--text-muted);">Notes (optional — applies to all)</label>
+        <input type="text" id="bulk-notes" class="input-box" placeholder="e.g. Renewed March 2026 via broker">
+        <label style="font-size:11px;color:var(--text-muted);">Select Files (PDF, images, Word docs — multiple OK)</label>
+        <input type="file" id="bulk-files" accept="application/pdf,image/*,.doc,.docx,.xlsx,.xls" multiple class="input-box" style="padding:12px;margin-bottom:20px;">
         <div id="bulk-status"></div>
         <button onclick="window.runBulkUpload()" class="btn btn-blue" style="width:100%;font-size:15px;" id="btn-bulk-upload">📂 Upload All Files</button>`;
     window.openModal('📂 Bulk Upload to Safe', html);
@@ -1370,6 +1513,7 @@ window.runBulkUpload = async () => {
     const fileInput = document.getElementById('bulk-files');
     const cat = document.getElementById('bulk-cat').value;
     const expiry = document.getElementById('bulk-expiry').value;
+    const notes = (document.getElementById('bulk-notes') || {}).value || '';
     const statusDiv = document.getElementById('bulk-status');
     const btn = document.getElementById('btn-bulk-upload');
     if (!fileInput.files.length) return window.showToast('Select at least one file.', 'error');
@@ -1379,16 +1523,18 @@ window.runBulkUpload = async () => {
     let uploaded = 0, failed = 0;
 
     for (const file of files) {
-        statusDiv.innerHTML = `<p style="color:var(--blue);font-size:13px;">⏳ Uploading ${uploaded + 1} of ${files.length}: ${file.name}</p>`;
+        statusDiv.innerHTML = `<p style="color:var(--blue);font-size:13px;">⏳ Uploading ${uploaded + 1} of ${files.length}: ${window.esc(file.name)}</p>`;
         try {
             const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
             await fileRef.put(file);
             const downloadURL = await fileRef.getDownloadURL();
             window.digitalSafe.push({
                 name: file.name.replace(/\.[^.]+$/, ''),
-                category: cat, expiry: expiry,
+                category: cat, expiry: expiry, notes: notes,
                 type: file.type.includes('pdf') ? 'pdf' : 'image',
-                data: downloadURL
+                data: downloadURL,
+                uploadDate: new Date().toISOString(),
+                lastUpdated: new Date().toISOString()
             });
             uploaded++;
         } catch(e) { failed++; console.error('Upload failed:', file.name, e); }
@@ -1402,63 +1548,101 @@ window.runBulkUpload = async () => {
 
 window.addDocForm = () => {
     const cats = (window.safeCategories || []);
-    const catOpts = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const catOpts = cats.map(c => `<option value="${window.esc(c)}">${window.esc(c)}</option>`).join('');
     const html = `
         <label style="font-size:11px;color:var(--text-muted);">Category</label>
         <select id="d-cat" class="input-box">${catOpts}</select>
         <label style="font-size:11px;color:var(--text-muted);">Document Name</label>
-        <input type="text" id="d-name" class="input-box" placeholder="e.g. John Smith RSA">
+        <input type="text" id="d-name" class="input-box" placeholder="e.g. Liquor License 2026">
         <label style="font-size:11px;color:var(--text-muted);">Expiry Date (Optional)</label>
         <input type="date" id="d-expiry" class="input-box">
-        <label style="font-size:11px;color:var(--text-muted);">File (PDF/Image)</label>
-        <input type="file" id="d-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
+        <label style="font-size:11px;color:var(--text-muted);">Notes (Optional)</label>
+        <input type="text" id="d-notes" class="input-box" placeholder="e.g. Policy #12345, renewed via ABC Insurance">
+        <label style="font-size:11px;color:var(--text-muted);">Upload File <em>or</em> paste an external link</label>
+        <input type="file" id="d-file" accept="application/pdf,image/*,.doc,.docx,.xlsx,.xls" class="input-box" style="padding:12px;">
+        <input type="text" id="d-link" class="input-box" placeholder="Or paste URL (e.g. Google Drive link)" style="margin-top:6px;margin-bottom:20px;">
         <button onclick="window.subDoc()" class="btn btn-green" style="width:100%;" id="btn-doc-save">Save to Safe</button>`;
-    window.openModal('🔓 Upload to Safe', html);
+    window.openModal('🔒 Upload to Safe', html);
 };
 
 window.subDoc = async () => {
-    const name = document.getElementById('d-name').value;
+    const name = document.getElementById('d-name').value.trim();
     const category = document.getElementById('d-cat').value;
     const expiry = document.getElementById('d-expiry').value;
+    const notes = (document.getElementById('d-notes') || {}).value || '';
     const fileInput = document.getElementById('d-file');
+    const linkInput = document.getElementById('d-link');
+    const link = linkInput ? linkInput.value.trim() : '';
     if (!name) return window.showToast('Name required.', 'error');
-    if (!fileInput.files.length) return window.showToast('Select a file.', 'error');
-    const file = fileInput.files[0];
+    if (!fileInput.files.length && !link) return window.showToast('Upload a file or paste a link.', 'error');
+
     const btn = document.getElementById('btn-doc-save');
-    btn.innerText = 'Uploading... ⏳'; btn.disabled = true;
-    try {
-        const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
-        await fileRef.put(file);
-        const downloadURL = await fileRef.getDownloadURL();
-        window.digitalSafe.push({ name, category, expiry, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL });
+    btn.innerText = 'Saving... ⏳'; btn.disabled = true;
+
+    if (fileInput.files.length) {
+        try {
+            const file = fileInput.files[0];
+            const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
+            await fileRef.put(file);
+            const downloadURL = await fileRef.getDownloadURL();
+            window.digitalSafe.push({ name, category, expiry, notes, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
+            window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast('Document Secured!');
+        } catch (error) { window.showToast('Upload failed.', 'error'); btn.innerText = 'Save to Safe'; btn.disabled = false; }
+    } else {
+        window.digitalSafe.push({ name, category, expiry, notes, type: 'link', link: link, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
         window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast('Document Secured!');
-    } catch (error) { window.showToast('Upload failed.', 'error'); btn.innerText = 'Save to Safe'; btn.disabled = false; }
+    }
 };
 window.delDoc = (i) => {
-    if (confirm('Delete this document?')) { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); }
+    if (confirm('Delete this document permanently?')) { window.digitalSafe.splice(i, 1); window.saveToDisk(); window.showView('safe'); }
 };
 
 window.editDocForm = (i) => {
     const doc = window.digitalSafe[i];
     if (!doc) return;
+    const E = window.esc;
     const cats = (window.safeCategories || []);
-    const catOpts = cats.map(c => '<option value="' + c + '" ' + (c === doc.category ? 'selected' : '') + '>' + c + '</option>').join('');
+    const catOpts = cats.map(c => '<option value="' + E(c) + '" ' + (c === doc.category ? 'selected' : '') + '>' + E(c) + '</option>').join('');
     const html = '<label style="font-size:11px;color:var(--text-muted);">Document Name</label>' +
-        '<input type="text" id="edit-doc-name" class="input-box" value="' + (doc.name||'').replace(/"/g, '&quot;') + '" placeholder="e.g. John Smith RSA Certificate">' +
+        '<input type="text" id="edit-doc-name" class="input-box" value="' + E(doc.name||'') + '" placeholder="e.g. Liquor License 2026">' +
         '<label style="font-size:11px;color:var(--text-muted);">Category</label>' +
         '<select id="edit-doc-cat" class="input-box"><option value="">-- Select Category --</option>' + catOpts + '</select>' +
         '<label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional)</label>' +
         '<input type="date" id="edit-doc-expiry" class="input-box" value="' + (doc.expiry||'') + '">' +
-        '<button onclick="window.saveDocEdit(' + i + ')" class="btn btn-green" style="width:100%;margin-top:5px;">Save Changes</button>';
-    window.openModal('✏️ Edit Document — ' + (doc.name||'Untitled'), html);
+        '<label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
+        '<input type="text" id="edit-doc-notes" class="input-box" value="' + E(doc.notes||'') + '" placeholder="e.g. Policy details, renewal info">' +
+        '<label style="font-size:11px;color:var(--text-muted);">Replace File (optional — leave empty to keep current)</label>' +
+        '<input type="file" id="edit-doc-file" accept="application/pdf,image/*,.doc,.docx,.xlsx,.xls" class="input-box" style="padding:12px;margin-bottom:20px;">' +
+        '<button onclick="window.saveDocEdit(' + i + ')" class="btn btn-green" style="width:100%;" id="btn-edit-doc-save">Save Changes</button>';
+    window.openModal('✏️ Edit — ' + E(doc.name||'Untitled'), html);
 };
 
-window.saveDocEdit = (i) => {
+window.saveDocEdit = async (i) => {
     const name = document.getElementById('edit-doc-name').value.trim();
     if (!name) return window.showToast('Name is required.', 'error');
     window.digitalSafe[i].name = name;
     window.digitalSafe[i].category = document.getElementById('edit-doc-cat').value;
     window.digitalSafe[i].expiry = document.getElementById('edit-doc-expiry').value;
+    window.digitalSafe[i].notes = (document.getElementById('edit-doc-notes') || {}).value || '';
+    window.digitalSafe[i].lastUpdated = new Date().toISOString();
+
+    // Handle file replacement
+    const fileInput = document.getElementById('edit-doc-file');
+    if (fileInput && fileInput.files.length) {
+        const btn = document.getElementById('btn-edit-doc-save');
+        if (btn) { btn.innerText = 'Uploading... ⏳'; btn.disabled = true; }
+        try {
+            const file = fileInput.files[0];
+            const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
+            await fileRef.put(file);
+            const downloadURL = await fileRef.getDownloadURL();
+            window.digitalSafe[i].data = downloadURL;
+            window.digitalSafe[i].type = file.type.includes('pdf') ? 'pdf' : 'image';
+        } catch (err) {
+            window.showToast('File replacement failed — other changes saved.', 'error');
+        }
+    }
+
     window.saveToDisk(); window.closeModal(); window.showView('safe');
     window.showToast('Document updated!');
 };
@@ -1602,12 +1786,12 @@ window.renderHACCPHistory = () => {
 window.renderStaffDirectoryView = () => {
     const staff = window.staffDirectory || [];
     return '<div style="max-width:900px;margin:auto;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
-            '<h2 style="margin:0;">Staff Directory</h2>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">' +
+            '<div><h2 style="margin:0">👥 Staff Directory</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Team contact details, roles, and emergency info</div></div>' +
             '<button onclick="window.editStaffForm()" class="btn btn-blue">+ Add Staff Member</button>' +
         '</div>' +
         (staff.length === 0 ?
-            '<div class="card"><p style="color:var(--text-muted);margin:0;">No staff added yet.</p></div>' :
+            '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">👥</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No staff added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add team members with their contact details and emergency info</div></div>' :
             '<div class="card" style="padding:0;overflow:hidden;">' +
             '<table style="width:100%;border-collapse:collapse;">' +
             '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
@@ -1619,7 +1803,7 @@ window.renderStaffDirectoryView = () => {
             '</tr></thead><tbody>' +
             staff.map((s, i) =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
-                '<td style="padding:8px 12px;"><strong style="font-size:13px;">' + s.name + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + s.emergency + '</small>' : '') + '</td>' +
+                '<td style="padding:8px 12px;"><strong style="font-size:13px;">' + esc(s.name) + '</strong>' + (s.emergency ? '<br><small style="color:var(--red);font-size:11px;">Emergency: ' + esc(s.emergency) + '</small>' : '') + '</td>' +
                 '<td style="padding:12px 15px;font-size:13px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + (s.role||'Staff') + '</span></td>' +
                 '<td style="padding:12px 15px;font-size:13px;"><a href="tel:' + (s.phone||'') + '" style="color:var(--blue);">' + (s.phone||'No phone') + '</a>' + (s.email ? '<br><a href="mailto:' + s.email + '" style="color:var(--text-muted);font-size:12px;">' + s.email + '</a>' : '') + '</td>' +
                 '<td style="padding:8px 12px;"><span style="font-size:11px;color:' + (s.status==='Active'?'var(--green)':'var(--text-muted)') + ';font-weight:bold;">' + (s.status||'Active') + '</span>' + (s.startDate ? '<br><small style="color:var(--text-muted);font-size:11px;">Since ' + s.startDate + '</small>' : '') + '</td>' +
@@ -1681,7 +1865,7 @@ window.delStaff = (i) => {
 
 window.renderPhoneBookView = function() { 
     const mergedContacts = [...(window.phoneBook || []).map((c, i) => ({ ...c, originalIndex: i, isSupplier: false })), ...(window.suppliers || []).map(s => ({ name: s.name, category: 'Supplier', phone: s.contact || 'No email/phone', notes: `Order Cutoff: ${s.cutoff}`, isSupplier: true }))].sort((a, b) => a.name.localeCompare(b.name));
-    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Master Phone Book</h2><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div><table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:8px 12px;">Name</th><th style="padding:8px 12px;">Contact</th><th style="padding:8px 12px;">Notes</th><th style="text-align:right; padding:8px 12px;">Action</th></tr></thead><tbody>${mergedContacts.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">No contacts.</td></tr>' : mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:7px 12px;"><strong style="font-size:13px;">${c.name}</strong><br><small style="color:var(--text-muted);">${c.category}</small></td><td style="padding:7px 12px;font-size:13px;">${c.phone.includes('@') ? `<a href="mailto:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>` : `<a href="tel:${c.phone}" style="color:var(--blue); font-weight:bold;">${c.phone}</a>`}</td><td style="padding:7px 12px; color:var(--brand-accent); font-size:12px; white-space:pre-wrap;">${c.notes || ''}</td><td style="text-align:right; padding:7px 12px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('')}</tbody></table></div>`; 
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px"><div><h2 style="margin:0">📞 Phonebook</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Tradies, suppliers, and service providers your team calls regularly</div></div><button onclick="window.addContact()" class="btn btn-blue">+ Add Contact</button></div>${mergedContacts.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📞</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No contacts yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add tradies, suppliers, and service providers your team calls regularly</div></div>' : '<table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse: collapse; overflow:hidden;"><thead><tr style="text-align:left; border-bottom:1px solid var(--border); background:#111;"><th style="padding:8px 12px;">Name</th><th style="padding:8px 12px;">Contact</th><th style="padding:8px 12px;">Notes</th><th style="text-align:right; padding:8px 12px;">Action</th></tr></thead><tbody>' + mergedContacts.map(c => `<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:7px 12px;"><strong style="font-size:13px;">${esc(c.name)}</strong><br><small style="color:var(--text-muted);">${esc(c.category)}</small></td><td style="padding:7px 12px;font-size:13px;">${c.phone.includes('@') ? `<a href="mailto:${esc(c.phone)}" style="color:var(--blue); font-weight:bold;">${esc(c.phone)}</a>` : `<a href="tel:${esc(c.phone)}" style="color:var(--blue); font-weight:bold;">${esc(c.phone)}</a>`}</td><td style="padding:7px 12px; color:var(--brand-accent); font-size:12px; white-space:pre-wrap;">${esc(c.notes) || ''}</td><td style="text-align:right; padding:7px 12px;">${c.isSupplier ? `<button onclick="window.showView('suppliers')" class="btn btn-outline" style="font-size:11px; padding:6px 10px;">Edit in Suppliers</button>` : `<button onclick="window.delContact(${c.originalIndex})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold; font-size:20px; line-height:1;">&times;</button>`}</td></tr>`).join('') + '</tbody></table>'}</div>`; 
 }
 window.addContact = () => { 
     let html = `<input type="text" id="c-n" class="input-box" placeholder="Name"><select id="c-c" class="input-box"><option>Staff</option><option>Tradie / Maintenance</option><option>Service Provider</option><option>Other</option></select><input type="text" id="c-p" class="input-box" placeholder="Phone or Email"><textarea id="c-notes" class="input-box" placeholder="Notes..." style="height:80px; margin-bottom:20px;"></textarea><button onclick="window.subContact()" class="btn btn-green" style="width:100%;">Save Contact</button>`;
@@ -1695,7 +1879,7 @@ window.renderIncidentView = function() {
     const logs = (window.incidentLogs || []).slice().reverse();
     return '<div style="max-width:800px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
-            '<h2 style="margin:0;">Incident Log</h2>' +
+            '<div><h2 style="margin:0">⚠️ Incident Log</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Record workplace incidents for compliance and safety tracking</div></div>' +
             '<button onclick="window.exportIncidentLog()" class="btn btn-outline" style="font-size:12px;">🖨️ Export / Print</button>' +
         '</div>' +
         '<div class="card" style="border-top:4px solid var(--red);margin-bottom:15px;">' +
@@ -1708,13 +1892,13 @@ window.renderIncidentView = function() {
             '</div>' +
             '<button onclick="window.saveIncident()" class="btn btn-red" style="width:100%;font-size:15px;">Log Incident to Permanent Record</button>' +
         '</div>' +
-        (logs.length === 0 ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No incidents logged.</p></div>' :
+        (logs.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">⚠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No incidents logged</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Record workplace incidents here for compliance and safety tracking</div></div>' :
         logs.map(l => '<div class="card" style="margin-bottom:10px;padding:14px;border-left:3px solid var(--red);">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
-                '<div><strong style="font-size:15px;">' + l.staff + '</strong>' + (l.type ? ' <span style="font-size:11px;color:var(--red);background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:8px;margin-left:8px;">' + l.type + '</span>' : '') + '</div>' +
-                '<span style="color:var(--text-muted);font-size:12px;">' + l.time + '</span>' +
+                '<div><strong style="font-size:15px;">' + esc(l.staff) + '</strong>' + (l.type ? ' <span style="font-size:11px;color:var(--red);background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:8px;margin-left:8px;">' + esc(l.type) + '</span>' : '') + '</div>' +
+                '<span style="color:var(--text-muted);font-size:12px;">' + esc(l.time) + '</span>' +
             '</div>' +
-            '<p style="margin:0;font-size:14px;white-space:pre-wrap;">' + l.desc + '</p>' +
+            '<p style="margin:0;font-size:14px;white-space:pre-wrap;">' + esc(l.desc) + '</p>' +
         '</div>').join('')) +
     '</div>';
 };
@@ -1791,7 +1975,12 @@ window.generateWeeklySummary = () => {
     const wastageVal = weekWastage.reduce((s,w) => s + Number(w.value||0), 0);
     const weekIncidents = (window.incidentLogs||[]).filter(i => { const d = new Date(i.time); return d >= weekStart && d <= today; });
     const freqMap = {'Weekly':7,'Fortnightly':14,'Monthly':30,'Quarterly':90};
-    const overdueTasks = (window.rotationalTasks||[]).filter(t => { if(!t.lastLogIso) return true; return ((today-new Date(t.lastLogIso))/(1000*3600*24)) >= freqMap[t.freq]; });
+    const overdueTasks = (window.rotationalTasks||[]).filter(t => {
+        if (t.dueDateMode === 'specific') return t.specificDueDate && new Date(t.specificDueDate) <= today;
+        if (t.lastLogIso) return ((today - new Date(t.lastLogIso)) / 86400000) >= (freqMap[t.freq] || 7);
+        if (t.anchorDate) { const ad = new Date(t.anchorDate); if (ad > today) return false; const ds = (today - ad) / 86400000; const iv = freqMap[t.freq] || 7; return (ds - Math.floor(ds / iv) * iv) < 1 || ds >= iv; }
+        return true;
+    });
     const weekLabel = weekStart.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + today.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
     const fmt = (n) => Number(n).toLocaleString('en-AU',{minimumFractionDigits:0,maximumFractionDigits:0});
     const lines = [
@@ -2219,10 +2408,10 @@ window.renderManagerHub = () => {
         let parTarget = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
         return i.stock < parTarget;
     });
-    let stockHtml = lowStock.length > 0 ? lowStock.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>⚠️ <strong>${i.name}</strong></span> <span>(${Number(i.stock).toFixed(1)} / ${isWeekend ? i.parWeekend : i.parWeekday})</span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">All inventory is at or above PAR.</p>';
+    let stockHtml = lowStock.length > 0 ? lowStock.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>⚠️ <strong>${esc(i.name)}</strong></span> <span>(${Number(i.stock).toFixed(1)} / ${isWeekend ? i.parWeekend : i.parWeekday})</span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">All inventory is at or above PAR.</p>';
 
     const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open');
-    let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${t.item}</strong>: ${t.desc}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
+    let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${esc(t.item)}</strong>: ${esc(t.desc)}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
 
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
     let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${a.name}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy.</p>';
@@ -2239,17 +2428,23 @@ window.renderManagerHub = () => {
 
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const overdueTasks = (window.rotationalTasks || []).filter(t => {
-        if(!t.lastLogIso) {
-            // Never done — check anchor date
-            if (t.anchorDate) { const ad = new Date(t.anchorDate); return ad <= today; }
-            return true;
+        if (t.dueDateMode === 'specific') return t.specificDueDate && new Date(t.specificDueDate) <= today;
+        if (t.lastLogIso) return ((today - new Date(t.lastLogIso)) / 86400000) >= (freqMap[t.freq] || 7);
+        if (t.anchorDate) {
+            const ad = new Date(t.anchorDate);
+            if (ad > today) return false;
+            const ds = (today - ad) / 86400000;
+            const iv = freqMap[t.freq] || 7;
+            const intervalsPassed = Math.floor(ds / iv);
+            const nextDue = new Date(ad.getTime() + intervalsPassed * iv * 86400000);
+            return today >= nextDue;
         }
-        return ((today - new Date(t.lastLogIso)) / (1000 * 3600 * 24)) >= (freqMap[t.freq] || 7);
+        return true;
     });
-    let taskHtml = overdueTasks.length > 0 ? overdueTasks.map(t => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🔄 <strong>${t.name}</strong> (${t.freq}) is DUE NOW.</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">All rotational tasks are current.</p>';
+    let taskHtml = overdueTasks.length > 0 ? overdueTasks.map(t => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🔄 <strong>${esc(t.name)}</strong> (${t.freq}) is DUE NOW.</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">All rotational tasks are current.</p>';
 
     const todayIncidents = (window.incidentLogs || []).filter(i => i.time.includes(todayStr));
-    let incHtml = todayIncidents.length > 0 ? todayIncidents.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚠️ <strong>${i.staff}</strong>: ${i.desc}</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">No incidents logged today.</p>';
+    let incHtml = todayIncidents.length > 0 ? todayIncidents.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚠️ <strong>${esc(i.staff)}</strong>: ${esc(i.desc)}</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">No incidents logged today.</p>';
 
     // Simple COGS Estimate metric
     let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
@@ -2336,6 +2531,59 @@ window.renderManagerHub = () => {
             <button onclick="window.renderCrossVenueDashboard()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">🏢 All Venues</button>
         </div>
     
+    ${(function(){
+        // C2: Today's Focus — auto-prioritized alert list
+        const focusItems = [];
+        // HACCP breaches today
+        const todayStr2 = today.toLocaleDateString();
+        (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr2) && parseFloat(t.value) > 5).forEach(t => {
+            focusItems.push({pri:0, icon:'🌡️', color:'var(--red)', text:esc((t.unit||'Unit')+' temp breach: '+t.value+'°C'), view:'compliance'});
+        });
+        // Overdue rotational tasks
+        overdueTasks.forEach(t => {
+            focusItems.push({pri:1, icon:'🔄', color:'var(--red)', text:esc(t.name)+' is overdue ('+t.freq+')', view:'tasks'});
+        });
+        // Documents expiring within 7 days
+        (window.digitalSafe||[]).forEach(d => {
+            if (!d.expiry) return;
+            const daysLeft = (new Date(d.expiry) - today) / 86400000;
+            if (daysLeft <= 7 && daysLeft > -30) {
+                const lbl = daysLeft < 0 ? 'EXPIRED' : 'Expires in '+Math.ceil(daysLeft)+' days';
+                focusItems.push({pri:2, icon:'📄', color: daysLeft<0?'var(--red)':'var(--orange)', text:esc(d.name)+' — '+lbl, view:'safe'});
+            }
+        });
+        // Stock below par
+        lowStock.slice(0,5).forEach(i => {
+            focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:esc(i.name)+' below par ('+Number(i.stock).toFixed(1)+')', view:'inventory'});
+        });
+        if (lowStock.length > 5) focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:'+'+(lowStock.length-5)+' more items below par', view:'inventory'});
+        // Open maintenance tickets
+        openTickets.slice(0,3).forEach(t => {
+            focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:esc(t.item)+' needs fixing', view:'maintenance'});
+        });
+        // Unresolved incidents this week
+        const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
+        (window.incidentLogs||[]).filter(i => new Date(i.time) >= weekAgo).slice(0,2).forEach(i => {
+            focusItems.push({pri:5, icon:'⚠️', color:'var(--orange)', text:'Incident: '+esc(i.staff)+' — '+esc((i.desc||'').substring(0,40)), view:'incidents'});
+        });
+        focusItems.sort((a,b)=>a.pri-b.pri);
+        if (focusItems.length === 0) {
+            return '<div class="card" style="border-left:4px solid var(--green);padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">✅</span><div><strong style="color:var(--green);">All clear</strong><div style="font-size:13px;color:var(--text-muted);">Nothing needs your attention right now</div></div></div>';
+        }
+        return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;border-top:4px solid var(--red);">' +
+            '<div style="padding:12px 16px;background:rgba(239,68,68,0.06);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="font-size:14px;">🎯 Today\'s Focus</strong>' +
+                '<span style="font-size:12px;color:var(--text-muted);">'+focusItems.length+' item'+(focusItems.length===1?'':'s')+' need attention</span>' +
+            '</div>' +
+            focusItems.slice(0,8).map(f =>
+                '<div class="focus-item" onclick="window.showView(\''+f.view+'\')" style="border-bottom:1px solid var(--border);">' +
+                    '<span style="font-size:16px;">'+f.icon+'</span>' +
+                    '<span style="flex:1;color:'+f.color+';">'+f.text+'</span>' +
+                    '<span style="color:var(--text-muted);font-size:11px;">→</span>' +
+                '</div>'
+            ).join('') +
+        '</div>';
+    })()}
     ${expiringHtml}
     ${checklistWidget}
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
@@ -2378,39 +2626,79 @@ window.renderManagerHub = () => {
 };
 
 // --- 10. HANDOVER ---
+window._handoverExpanded = window._handoverExpanded || {};
+window._handoverRange = window._handoverRange || 14;
 window.renderHandoverView = () => {
+    const E = window.esc;
     const logs = (window.handoverLogs || []).slice().reverse();
-    const logsHtml = logs.length === 0
-        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No shift debriefs yet. Hit the button above to log tonight\'s shift.</p></div>'
-        : logs.map((h, i) => {
-            const isFirst = i === 0;
-            const urgentHtml = h.urgent ? `<div style="margin-top:15px;padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:13px;color:var(--red);"><strong>⚠️ Needs attention:</strong> ${h.urgent}</div>` : '';
+    const range = window._handoverRange || 14;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - range);
+
+    // Filter by date range
+    const filtered = logs.filter(h => {
+        if (!h.date) return true;
+        const parts = h.date.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (!parts) return true;
+        const d = new Date(parseInt(parts[3]), parseInt(parts[2])-1, parseInt(parts[1]));
+        return d >= cutoff;
+    });
+
+    // Auto-expand latest
+    if (filtered.length > 0 && Object.keys(window._handoverExpanded).length === 0) {
+        window._handoverExpanded[0] = true;
+    }
+
+    const emptyHtml = logs.length === 0
+        ? `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📝</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No handovers yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Complete your first shift debrief to keep the team aligned across shifts.</div></div>`
+        : '';
+
+    const rangePills = [7,14,30].map(r =>
+        `<span class="tag-pill ${range===r?'active':''}" onclick="window._handoverRange=${r};window._handoverExpanded={};window.showView('handover');">${r}d</span>`
+    ).join('');
+
+    const tableRows = filtered.map((h, i) => {
+        const isExpanded = !!window._handoverExpanded[i];
+        const isFirst = i === 0;
+        const snippet = h.debrief ? h.debrief.substring(0, 80) + (h.debrief.length > 80 ? '...' : '') : (h.notes || '').substring(0, 80);
+        const urgentBadge = h.urgent ? '<span style="color:var(--red);font-size:12px;font-weight:bold;">⚠️</span>' : '';
+
+        let expandedContent = '';
+        if (isExpanded) {
+            const urgentHtml = h.urgent ? `<div style="margin-top:12px;padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:13px;color:var(--red);"><strong>⚠️ Needs attention:</strong> ${E(h.urgent)}</div>` : '';
             const debriefHtml = h.debrief
                 ? `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;color:var(--text-main);">${h.debrief}</div>`
-                : `<p style="color:var(--text-muted);font-size:13px;font-style:italic;">No AI debrief — raw notes only.</p><p style="white-space:pre-wrap;font-size:14px;line-height:1.7;">${h.notes||''}</p>`;
-            return `<div class="card" style="border-left:4px solid ${isFirst?'var(--purple)':'var(--border)'};margin-bottom:12px;padding:18px;${isFirst?'background:rgba(139,92,246,0.04);':''}" >
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
-                    <div>
-                        <div style="font-size:18px;font-weight:bold;color:${isFirst?'var(--purple)':'var(--text-main)'};">${h.shift} · ${h.date}</div>
-                        <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Closed ${h.closeTime||'—'} · Out ${h.outTime||'—'} · Written by ${h.manager}</div>
-                    </div>
-                    ${isFirst ? '<span style="font-size:11px;background:rgba(139,92,246,0.15);color:var(--purple);padding:3px 10px;border-radius:10px;font-weight:600;">Latest</span>' : ''}
-                </div>
-                ${debriefHtml}
-                ${urgentHtml}
-                ${h.debrief ? `<button onclick="window.copyDebrief(${logs.length-1-i})" class="btn btn-outline" style="font-size:11px;margin-top:15px;padding:6px 14px;">📋 Copy to Clipboard</button>` : ''}
-            </div>`;
-        }).join('');
+                : `<p style="color:var(--text-muted);font-size:13px;font-style:italic;">No AI debrief — raw notes only.</p><div style="white-space:pre-wrap;font-size:14px;line-height:1.7;">${E(h.notes||'')}</div>`;
+            expandedContent = `<tr><td colspan="5" style="padding:15px 20px;background:${isFirst?'rgba(139,92,246,0.04)':'var(--bg-main)'};border-bottom:2px solid var(--border);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Closed ${h.closeTime||'—'} · Out ${h.outTime||'—'} · KH ${h.khTime||'—'}</div>
+                ${debriefHtml}${urgentHtml}
+                ${h.debrief?`<button onclick="window.copyDebrief(${logs.length-1-i})" class="btn btn-outline" style="font-size:11px;margin-top:12px;padding:6px 14px;">📋 Copy</button>`:''}
+            </td></tr>`;
+        }
+
+        return `<tr onclick="window._handoverExpanded[${i}]=!window._handoverExpanded[${i}];window.showView('handover');" style="cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid ${h.urgent?'var(--red)':isFirst?'var(--purple)':'transparent'};" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+            <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap;">${E(h.date||'')}</td>
+            <td style="padding:10px 12px;font-size:13px;">${E(h.shift||'')}</td>
+            <td style="padding:10px 12px;font-size:13px;">${E(h.manager||'')}</td>
+            <td style="padding:10px 12px;font-size:12px;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${urgentBadge} ${E(snippet)}</td>
+            <td style="padding:10px 12px;font-size:14px;text-align:center;">${isExpanded?'▾':'▸'}</td>
+        </tr>${expandedContent}`;
+    }).join('');
+
+    const tableHtml = filtered.length > 0 ? `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">
+        <thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">
+            <th style="padding:10px 12px;">Date</th><th style="padding:10px 12px;">Shift</th><th style="padding:10px 12px;">Manager</th><th style="padding:10px 12px;">Summary</th><th style="padding:10px 12px;width:40px;"></th>
+        </tr></thead><tbody>${tableRows}</tbody></table></div>` : '';
 
     return `<div style="max-width:900px;margin:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
             <div>
-                <h2 style="margin:0;">📝 Shift Debrief</h2>
-                <small style="color:var(--text-muted);">End of night handover — for opening staff, managers and ownership.</small>
+                <h2 style="margin:0;">Shift Handover</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">End-of-shift debriefs for the opening team, managers, and ownership</div>
             </div>
             <button onclick="window.newHandoverForm()" class="btn btn-purple" style="font-size:14px;padding:10px 20px;">✨ Log Tonight's Shift</button>
         </div>
-        ${logsHtml}
+        <div style="margin-bottom:15px;display:flex;gap:6px;align-items:center;"><span style="font-size:12px;color:var(--text-muted);margin-right:4px;">Show:</span>${rangePills}</div>
+        ${emptyHtml}${tableHtml}
     </div>`;
 };
 
@@ -2493,32 +2781,49 @@ window.saveAndGenerateDebrief = async () => {
     const structuredNotes = Object.entries(sectionData).map(([k, v]) => k + ':\n' + v).join('\n\n');
     const combinedNotes = structuredNotes || notes;
 
-    // Pull today's ops data quietly — no financials shown to managers
+    // D5: Pull richer ops data for AI context
     const todaySales = (window.salesData||[]).find(s => s.date === today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/'));
     const todayRevenue = todaySales ? Number(todaySales.total||0) : null;
-    const openTickets = (window.defectLogs||[]).filter(d=>d.status==='Open').length;
-    const wastageLogs = (window.wastageLogs||[]).filter(l=>l.time&&l.time.includes(today.toLocaleDateString()));
+    const openTickets = (window.defectLogs||[]).filter(d=>d.status==='Open');
+    const todayWasteLogs = (window.wastageLogs||[]).filter(l=>l.time&&l.time.includes(today.toLocaleDateString()));
+    const wasteTotal = todayWasteLogs.reduce((s,w) => s + Number(w.value||0), 0);
+    const todayIncidents = (window.incidentLogs||[]).filter(i=>i.time&&i.time.includes(today.toLocaleDateString()));
+    const isWeekend = [0,5,6].includes(today.getDay());
+    const belowPar = (window.inventoryItems||[]).filter(i => {
+        if (i.archived) return false;
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return i.stock < par;
+    });
+    const topBelowPar = belowPar.slice(0,5).map(i=>i.name).join(', ');
+    const todayTemps = (window.tempLogs||[]).filter(t=>t.time&&t.time.includes(today.toLocaleDateString()));
+    const tempBreaches = todayTemps.filter(t=>parseFloat(t.value) > 5);
+    const newTicketsToday = openTickets.filter(t=>t.date&&t.date.includes(today.toLocaleDateString()));
 
-    const prompt = `You are writing an end-of-shift debrief for a hospitality venue called ${window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue'}. 
+    const prompt = `You are writing an end-of-shift debrief for a hospitality venue called ${window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue'}.
 
 The manager (${mgr}) has provided the following shift notes:
-"${notes}"
+"${combinedNotes}"
 
-Additional context:
+Operational context for tonight's debrief:
 - Shift: ${shift}
 - Venue closed at: ${closeTime||'not recorded'}
 - Manager out of building: ${outTime||'not recorded'}
 - Kitchen hand finished: ${khTime||'not recorded'}
-${todayRevenue ? '- It was a ' + (todayRevenue > 25000 ? 'big' : todayRevenue > 15000 ? 'solid' : 'quiet') + ' night for the venue.' : ''}
-${openTickets > 0 ? '- There are ' + openTickets + ' open maintenance tickets.' : ''}
-${wastageLogs.length > 0 ? '- Wastage was logged tonight (' + wastageLogs.length + ' items).' : ''}
+${todayRevenue ? '- It was a ' + (todayRevenue > 25000 ? 'big' : todayRevenue > 15000 ? 'solid' : 'quiet') + ' night for the venue.' : '- Revenue: not yet logged'}
+- Wastage logged today: ${todayWasteLogs.length} items ($${wasteTotal.toFixed(2)})${todayWasteLogs.length > 0 ? ' — ' + todayWasteLogs.map(w=>w.itemName).join(', ') : ''}
+- Maintenance tickets opened today: ${newTicketsToday.length}${newTicketsToday.length > 0 ? ' (' + newTicketsToday.map(t=>t.item).join(', ') + ')' : ''}
+- Total open maintenance tickets: ${openTickets.length}${openTickets.length > 0 ? ' (' + openTickets.slice(0,3).map(t=>t.item).join(', ') + ')' : ''}
+- Stock below par: ${belowPar.length} items${belowPar.length > 0 ? ' (' + topBelowPar + ')' : ''}
+- Incidents today: ${todayIncidents.length}${todayIncidents.length > 0 ? ' — ' + todayIncidents.map(i=>i.type||'General').join(', ') : ''}
+- Temp logs today: ${todayTemps.length} readings, ${tempBreaches.length} breach(es) above 5°C
 ${urgent ? '- URGENT for opening team: ' + urgent : ''}
 
-Write a clear, friendly shift debrief that the opening team and management will read tomorrow. 
+Write a clear, friendly shift debrief that the opening team and management will read tomorrow.
 - Write in plain paragraphs, no bullet points, no headers
 - Tone is professional but warm — like a message from a capable colleague
 - Cover: how the shift went, anything running low or needing attention, any follow-ups needed
-- If there's an urgent item, make sure it's clear
+- Reference specific items from the operational context above where relevant (e.g. name specific low-stock items, mention wastage if significant)
+- If there's an urgent item, make sure it's prominent
 - Do NOT mention revenue figures, wage percentages or financial targets
 - Keep it to 3-4 short paragraphs maximum
 - End with the close/out times as a simple sign-off line`;
@@ -2595,11 +2900,11 @@ window.renderKnowledgeView = () => {
     })).join('');
 
     const cardsHtml = filtered.length === 0
-        ? '<div class="card"><p style="color:var(--text-muted);margin:0;">No SOPs in this category yet.</p></div>'
+        ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No SOPs added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create standard operating procedures so everyone knows the playbook</div></div>'
         : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filtered.map(k =>
             `<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(${k.idx})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-                    <h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">${k.title}</h4>
+                    <h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">${esc(k.title)}</h4>
                     ${k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : ''}
                 </div>
                 <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">${k.category || 'General'}</span>
@@ -2609,7 +2914,7 @@ window.renderKnowledgeView = () => {
 
     return `<div style="max-width:1000px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
-            <h2 style="margin:0;">Knowledge Base</h2>
+            <div><h2 style="margin:0">📚 Knowledge Base</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">SOPs, training manuals, and operational procedures</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button onclick="window.newSOPForm()" class="btn btn-blue">+ New SOP</button>
                 <button onclick="window.editKbCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>
@@ -2785,14 +3090,14 @@ window.deleteSOP = (i) => {
 
 // --- 12. ROSTERS ---
 window.renderRosterView = () => {
-    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="margin:0;">Shift Rosters</h2><label class="btn btn-blue" style="cursor:pointer;">+ Upload Roster PDF/Image<input type="file" id="roster-upload" accept="application/pdf,image/*" style="display:none;" onchange="window.handleRosterUpload(event)"></label></div>${(window.shiftRosters || []).length === 0 ? '<div class="card"><p style="color:var(--text-muted); margin:0;">No rosters uploaded.</p></div>' : window.shiftRosters.slice().reverse().map((r, i) => {
+    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px"><div><h2 style="margin:0">🗓️ Shift Rosters</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Upload weekly roster PDFs or images for staff to view</div></div><label class="btn btn-blue" style="cursor:pointer;">+ Upload Roster PDF/Image<input type="file" id="roster-upload" accept="application/pdf,image/*" style="display:none;" onchange="window.handleRosterUpload(event)"></label></div>${(window.shiftRosters || []).length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🗓️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rosters uploaded</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Upload your weekly roster PDF or image for staff to view here</div></div>' : window.shiftRosters.slice().reverse().map((r, i) => {
         let actualIndex = window.shiftRosters.length - 1 - i;
         let displayHtml = '';
         if (r.data) {
             if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${r.data}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; } 
             else { displayHtml = `<iframe src="${r.data}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
         }
-        return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${r.name}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
+        return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${esc(r.name)}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${r.name}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
     }).join('')}</div>`;
 };
 window.handleRosterUpload = async (e) => {
