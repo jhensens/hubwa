@@ -14,6 +14,29 @@ window.getApiKey = () => {
 };
 window.resetApiKey = () => { localStorage.removeItem('geminiApiKey'); window.showToast("API Key cleared."); };
 
+// --- SHARED TAB BARS ---
+window._marginsTabBar = function(activeView) {
+    const tabs = [
+        { id: 'margins', label: '📊 Margins', view: 'margins' },
+        { id: 'price-alerts', label: '🚨 Price Alerts', view: 'price-alerts' },
+        { id: 'menu-engineering', label: '🎯 Menu Engineering', view: 'menu-engineering' },
+        { id: 'sell-price-editor', label: '💰 Sell Prices', view: 'sell-price-editor' }
+    ];
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
+        tabs.map(t => `<span class="tag-pill ${t.id===activeView?'active':''}" onclick="window.showView('${t.view}')">${t.label}</span>`).join('') +
+    '</div>';
+};
+
+window._orderTabBar = function(activeView) {
+    const tabs = [
+        { id: 'prep-list', label: '📝 Order List', view: 'prep-list' },
+        { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' }
+    ];
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
+        tabs.map(t => `<span class="tag-pill ${t.id===activeView?'active':''}" onclick="window.showView('${t.view}')">${t.label}</span>`).join('') +
+    '</div>';
+};
+
 // =============================================================================
 // 1. STORAGE ZONE MANAGER
 // Zones are now fully user-managed. Used everywhere: inventory, invoice, recipes.
@@ -350,8 +373,8 @@ window.renderInventoryView = () => {
                     <span style="color:var(--text-muted); font-size:11px; cursor:pointer;" title="Click to edit PAR" onclick="window._inlineEditPar('${item.id}')">${parTarget}</span>
                 </td>
                 <td style="text-align:right; padding:7px 6px; white-space:nowrap;">
-                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:3px 6px; border-color:var(--purple); color:var(--purple); margin-right:2px;">📈</button>
-                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:3px 6px;">Edit</button>
+                    <button onclick="window.viewPriceTrend(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:8px 12px; border-color:var(--purple); color:var(--purple); margin-right:2px;">📈</button>
+                    <button onclick="window.editInvItem(this.getAttribute('data-id'))" data-id="${item.id}" class="btn btn-outline" style="font-size:10px; padding:8px 12px;">Edit</button>
                 </td>
             </tr>`;
         }).join('');
@@ -407,6 +430,7 @@ window.renderInventoryView = () => {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
             <div><h2 style="margin:0">📦 Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button onclick="window.showView('stock-count')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--green); color:var(--green);">✅ Quick Count</button>
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
                 <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
@@ -721,7 +745,7 @@ window.printCountSheet = () => {
             tableHtml += '<tr>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">'+esc(item.name)+'</td>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">'+( item.buyUnit||'unit')+'</td>' +
-                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">PAR: '+par+'</td>' +
+                '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#888;font-size:12px;">'+(par > 0 ? 'PAR: '+par : 'No PAR')+'</td>' +
                 '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;"><div style="width:80px;border-bottom:2px solid #333;height:22px;"></div></td>' +
             '</tr>';
         });
@@ -829,6 +853,7 @@ window.renderQuickStockCount = () => {
         '<div class="card" style="border-left:4px solid var(--blue);padding:12px 18px;margin-bottom:20px;">' +
             '<p style="margin:0;font-size:13px;color:var(--text-muted);">Tab through each item and enter the count. Only filled fields will update. Empty fields are skipped.</p>' +
         '</div>' +
+        '<input type="text" class="search-bar" placeholder="🔍 Filter items..." oninput="window._filterStockCount(this.value)" style="margin-bottom:15px;">' +
         zonesHtml +
         '<div class="sticky-footer" style="justify-content:space-between;">' +
             '<span id="sc-changed-count" style="font-size:13px;color:var(--text-muted);">0 items changed</span>' +
@@ -837,6 +862,16 @@ window.renderQuickStockCount = () => {
             '</div>' +
         '</div>' +
     '</div>';
+};
+
+window._filterStockCount = (query) => {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.stock-count-input').forEach(input => {
+        const row = input.closest('tr');
+        if (!row) return;
+        const name = row.querySelector('strong') ? row.querySelector('strong').textContent.toLowerCase() : '';
+        row.style.display = !q || name.includes(q) ? '' : 'none';
+    });
 };
 
 window.saveQuickStockCount = () => {
@@ -1261,7 +1296,7 @@ window.cascadeRecipeCosts = (changedInvIds) => {
 window.renderSellPriceEditor = () => {
     const recipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived);
     const stations = [...new Set(recipes.map(r=>r.station||'Kitchen'))].sort();
-    if (recipes.length===0) return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3><button onclick="window.showView(\'recipes\')" class="btn btn-blue" style="margin-top:10px;">← Back</button></div></div>';
+    if (recipes.length===0) return '<div style="max-width:900px;margin:auto;">' + window._marginsTabBar('sell-price-editor') + '<div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No menu recipes yet.</h3><button onclick="window.showView(\'recipes\')" class="btn btn-blue" style="margin-top:10px;">← Back</button></div></div>';
     const sc = {Kitchen:'var(--orange)',Bar:'var(--blue)',Prep:'var(--purple)'};
     const groups = stations.map(station => {
         const sr = recipes.filter(r=>(r.station||'Kitchen')===station);
@@ -1286,10 +1321,10 @@ window.renderSellPriceEditor = () => {
             '</tr></thead><tbody>' + rows + '</tbody></table></div></details>';
     }).join('');
     return '<div style="max-width:1100px;margin:auto;">' +
+        window._marginsTabBar('sell-price-editor') +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
-        '<div><h2 style="margin:0;">Sell Price Editor</h2><small style="color:var(--text-muted);">Set sell prices for all menu recipes. GP% updates live. Target: ' + GP_TARGET + '%.</small></div>' +
-        '<div style="display:flex;gap:8px;"><button onclick="window.saveAllSellPrices()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button>' +
-        '<button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button></div></div>' +
+        '<div><h2 style="margin:0;">💰 Sell Price Editor</h2><small style="color:var(--text-muted);">Set sell prices for all menu recipes. GP% updates live. Target: ' + GP_TARGET + '%.</small></div>' +
+        '<div style="display:flex;gap:8px;"><button onclick="window.saveAllSellPrices()" class="btn btn-green" style="font-size:15px;padding:10px 24px;">💾 Save All</button></div></div>' +
         groups +
         '<div style="position:sticky;bottom:20px;z-index:100;background:var(--card-bg);border:1px solid var(--green);border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin-top:15px;">' +
         '<span style="color:var(--text-muted);font-size:13px;">' + recipes.length + ' menu recipes</span>' +
@@ -1497,8 +1532,8 @@ window.editRecipeForm = (id = null) => {
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <h4 style="margin:0;font-size:14px;">Ingredients</h4>
                         <div style="display:flex;gap:5px;">
-                            <button onclick="window.scaleRecipe()" class="btn btn-outline" style="padding:3px 8px;font-size:11px;">⚖️ Scale</button>
-                            <button onclick="window.openQuickAddIngModal()" class="btn btn-blue" style="padding:3px 8px;font-size:11px;">+ Quick Add</button>
+                            <button onclick="window.scaleRecipe()" class="btn btn-outline" style="padding:8px 12px;font-size:11px;">⚖️ Scale</button>
+                            <button onclick="window.openQuickAddIngModal()" class="btn btn-blue" style="padding:8px 12px;font-size:11px;">+ Quick Add</button>
                         </div>
                     </div>
                     <div style="max-height:320px;overflow-y:auto;">${ingHtml||'<p style="font-size:13px;color:var(--text-muted);text-align:center;padding:10px 0;">No ingredients yet.</p>'}</div>
@@ -1727,7 +1762,8 @@ window.renderPriceAlertsView = () => {
     };
 
     if (alerts.length === 0) {
-        return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;">' +
+        return '<div style="max-width:900px;margin:auto;">' + window._marginsTabBar('price-alerts') +
+            '<div class="card" style="text-align:center;padding:40px;">' +
             '<div style="font-size:48px;margin-bottom:10px;">✅</div>' +
             '<h3 style="color:var(--green);margin:0;">No price changes detected</h3>' +
             '<p style="color:var(--text-muted);font-size:13px;margin-top:8px;">Run more invoices through the Invoice Ripper to build price history.</p>' +
@@ -1752,8 +1788,9 @@ window.renderPriceAlertsView = () => {
     }).join('');
 
     return '<div style="max-width:1100px;margin:auto;">' +
+        window._marginsTabBar('price-alerts') +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-            '<div><h2 style="margin:0;">Price Change Alerts</h2>' +
+            '<div><h2 style="margin:0;">🚨 Price Change Alerts</h2>' +
             '<small style="color:var(--text-muted);">Changes detected from invoice history. Check affected recipes for GP impact.</small></div>' +
             '<button onclick="window.showView(\'invoice\')" class="btn btn-outline" style="font-size:12px;">🧾 Run Invoice</button>' +
         '</div>' +
@@ -1816,9 +1853,9 @@ window.renderMarginView = () => {
     }).join('');
     return `
     <div style="max-width:1100px;margin:auto;">
+        ${window._marginsTabBar('margins')}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <div><h2 style="margin:0;">Margin Health</h2><small style="color:var(--text-muted);">Target: ${GP_TARGET}% GP · Active menu recipes · Updates live when invoices processed</small></div>
-            <button onclick="window.showView(\'recipes\')" class="btn btn-outline">← Recipes</button>
+            <div><h2 style="margin:0;">📊 Margin Health</h2><small style="color:var(--text-muted);">Target: ${GP_TARGET}% GP · Active menu recipes · Updates live when invoices processed</small></div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:25px;">
             <div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">${menuRecipes.length}</div><div style="font-size:12px;color:var(--text-muted);">Active Menu Recipes</div></div>
@@ -2084,9 +2121,10 @@ window.renderMenuEngineeringView = () => {
         '</div>';
     }).join('');
     return '<div style="max-width:1100px;margin:auto;">' +
+        window._marginsTabBar('menu-engineering') +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-        '<div><h2 style="margin:0;">Menu Engineering Matrix</h2><small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+' covers/wk · '+menuRecipes.length+' active items</small></div>' +
-        '<div style="display:flex;gap:8px;"><button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:12px;">📊 Margins</button><button onclick="window.showView(\'recipes\')" class="btn btn-outline" style="font-size:12px;">← Recipes</button></div></div>' +
+        '<div><h2 style="margin:0;">🎯 Menu Engineering Matrix</h2><small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+' covers/wk · '+menuRecipes.length+' active items</small></div>' +
+        '</div>' +
         warnHtml +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:25px;">' +
         '<div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">'+counts.star+'</div><div style="font-size:12px;color:var(--text-muted);">⭐ Stars</div></div>' +
@@ -2264,6 +2302,7 @@ window.generateAiOrderEmail = (supName) => {
 
 window.renderAiOrderView = () => {
     return '<div style="max-width:900px;margin:auto;">' +
+        window._orderTabBar('ai-order') +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<div><h2 style="margin:0;">✨ AI Order Suggester</h2>' +
             '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Analyses stock levels, depletion history, and delivery schedules to suggest smart order quantities.</p></div>' +
@@ -2684,9 +2723,10 @@ window.renderPrepListView = () => {
 
     return `
     <div style="max-width: 900px; margin: auto;">
+        ${window._orderTabBar('prep-list')}
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div>
-                <h2 style="margin:0">📝 Auto-Order List</h2>
+                <h2 style="margin:0">📝 Order Hub</h2>
                 <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Targeting <strong style="color:var(--blue);">${isWeekend ? 'WEEKEND' : 'WEEKDAY'}</strong> PAR levels — items below par grouped by supplier</div>
             </div>
             <button onclick="window.showView(\'inventory\')" class="btn btn-outline">Update Stock Levels</button>

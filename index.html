@@ -30,26 +30,27 @@
         </button>
         <div class="sidebar-scroll">
 
-            <!-- OPERATIONS -->
+            <!-- DAILY OPS -->
             <div class="nav-section">
-                <div class="nav-section-header" onclick="window.toggleSection('sec-ops')">
-                    <span>⚡ Operations</span><span class="nav-section-arrow" id="arr-sec-ops">▾</span>
+                <div class="nav-section-header" onclick="window.toggleSection('sec-daily')">
+                    <span>⚡ Daily Ops</span><span class="nav-section-arrow" id="arr-sec-daily">▾</span>
                 </div>
-                <div class="nav-section-items" id="sec-ops">
+                <div class="nav-section-items" id="sec-daily">
                     <div class="nav-item restricted" onclick="window.showView('sales')">📈 Takings & KPIs</div>
-                    <div class="nav-item restricted" onclick="window.showView('prime-cost')">💎 Prime Cost</div>
-                    <div class="nav-item restricted" onclick="window.showView('forecast')">🔮 Revenue Forecast</div>
-                    <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
                     <div class="nav-item" onclick="window.showView('inventory')">📦 Live Inventory</div>
-                    <div class="nav-item" onclick="window.showView('stock-count')">✅ Quick Stock Count</div>
-                    <div class="nav-item" onclick="window.showView('zones')">🗄️ Storage Zones</div>
-                    <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers & Ordering</div>
-                    <div class="nav-item" onclick="window.showView('prep-list')">📝 Auto-Order List</div>
-                    <div class="nav-item restricted" onclick="window.showView('lightspeed-import')">📥 Lightspeed Import</div>
-                    <div class="nav-item" onclick="window.showView('ai-order')">✨ AI Order Suggester</div>
                     <div class="nav-item" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
-                    <div class="nav-item restricted" onclick="window.showView('variance')">📊 Actual vs Theoretical</div>
-                    <div class="nav-item" onclick="window.showView('allergens')">🧪 Allergen Matrix</div>
+                    <div class="nav-item" onclick="window.showView('compliance')">🌡️ Compliance</div>
+                </div>
+            </div>
+
+            <!-- ORDERING -->
+            <div class="nav-section">
+                <div class="nav-section-header" onclick="window.toggleSection('sec-ordering')">
+                    <span>📦 Ordering</span><span class="nav-section-arrow" id="arr-sec-ordering">▾</span>
+                </div>
+                <div class="nav-section-items" id="sec-ordering">
+                    <div class="nav-item" onclick="window.showView('prep-list')">📝 Order Hub</div>
+                    <div class="nav-item restricted" onclick="window.showView('invoice')">🧾 Invoice Ripper</div>
                 </div>
             </div>
 
@@ -60,43 +61,43 @@
                 </div>
                 <div class="nav-section-items" id="sec-recipes">
                     <div class="nav-item restricted" onclick="window.showView('recipes')">⚖️ Recipe Engine</div>
-                    <div class="nav-item restricted" onclick="window.showView('margins')">📊 Margin Health</div>
-                    <div class="nav-item restricted" onclick="window.showView('price-alerts')">🚨 Price Alerts</div>
-                    <div class="nav-item restricted" onclick="window.showView('menu-engineering')">🎯 Menu Engineering</div>
-                    <div class="nav-item restricted" onclick="window.showView('sell-price-editor')">💰 Sell Prices</div>
+                    <div class="nav-item restricted" onclick="window.showView('margins')">📊 Margins & Pricing</div>
+                    <div class="nav-item" onclick="window.showView('sheet-gen')">📄 AI Run Sheet</div>
+                </div>
+            </div>
+
+            <!-- TEAM & VENUE -->
+            <div class="nav-section">
+                <div class="nav-section-header" onclick="window.toggleSection('sec-team')">
+                    <span>👥 Team & Venue</span><span class="nav-section-arrow" id="arr-sec-team">▾</span>
+                </div>
+                <div class="nav-section-items" id="sec-team">
+                    <div class="nav-item restricted" onclick="window.showView('orientation')">👥 Staff Hub</div>
+                    <div class="nav-item" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
+                    <div class="nav-item" onclick="window.showView('maintenance')">🛠️ Maintenance</div>
+                    <div class="nav-item restricted" onclick="window.showView('handover')">📝 Handover</div>
+                    <div class="nav-item" onclick="window.showView('incidents')">⚠️ Incidents</div>
+                    <div class="nav-item" onclick="window.showView('rosters')">🗓️ Roster</div>
+                    <div class="nav-item restricted" onclick="window.showView('safe')">🔒 Digital Safe</div>
+                    <div class="nav-item" onclick="window.showView('knowledge')">📚 Knowledge Base</div>
+                </div>
+            </div>
+
+            <!-- SETTINGS -->
+            <div class="nav-section">
+                <div class="nav-section-header" onclick="window.toggleSection('sec-settings')">
+                    <span>⚙️ Settings</span><span class="nav-section-arrow" id="arr-sec-settings">▾</span>
+                </div>
+                <div class="nav-section-items" id="sec-settings">
+                    <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers</div>
+                    <div class="nav-item" onclick="window.showView('zones')">🗄️ Storage Zones</div>
                     <div class="nav-item restricted" onclick="window.showView('par-editor')">📋 PAR Editor</div>
                     <div class="nav-item restricted" onclick="window.showView('batch-linker')">🔗 Ingredient Linker</div>
-                    <div class="nav-item restricted" onclick="window.showView('invoice')">🧾 Invoice Ripper</div>
-                </div>
-            </div>
-
-            <!-- COMPLIANCE & STAFF -->
-            <div class="nav-section">
-                <div class="nav-section-header" onclick="window.toggleSection('sec-compliance')">
-                    <span>✅ Compliance & Staff</span><span class="nav-section-arrow" id="arr-sec-compliance">▾</span>
-                </div>
-                <div class="nav-section-items" id="sec-compliance">
-                    <div class="nav-item" onclick="window.showView('compliance')">🌡️ Temp & Checklists</div>
-                    <div class="nav-item" onclick="window.showView('haccp-history')">📋 HACCP History</div>
-                    <div class="nav-item restricted" onclick="window.showView('orientation')">🤝 Staff Onboarding</div>
-                    <div class="nav-item" onclick="window.showView('maintenance')">🛠️ Maintenance & Assets</div>
-                    <div class="nav-item" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
-                    <div class="nav-item" onclick="window.showView('incidents')">⚠️ Incident Log</div>
-                    <div class="nav-item" onclick="window.showView('phonebook')">📞 Phonebook</div>
-                    <div class="nav-item restricted" onclick="window.showView('safe')">🔒 Digital Safe</div>
-                </div>
-            </div>
-
-            <!-- LOGISTICS -->
-            <div class="nav-section">
-                <div class="nav-section-header" onclick="window.toggleSection('sec-logistics')">
-                    <span>📋 Logistics</span><span class="nav-section-arrow" id="arr-sec-logistics">▾</span>
-                </div>
-                <div class="nav-section-items" id="sec-logistics">
-                    <div class="nav-item" onclick="window.showView('rosters')">🗓️ Shift Rosters</div>
-                    <div class="nav-item restricted" onclick="window.showView('handover')">📝 Shift Handover</div>
-                    <div class="nav-item" onclick="window.showView('knowledge')">📚 Knowledge Base</div>
-                    <div class="nav-item" onclick="window.showView('staff-directory')">👥 Staff Directory</div>
+                    <div class="nav-item" onclick="window.showView('allergens')">🧪 Allergen Matrix</div>
+                    <div class="nav-item restricted" onclick="window.showView('variance')">📊 Actual vs Theoretical</div>
+                    <div class="nav-item restricted" onclick="window.showView('prime-cost')">💎 Prime Cost</div>
+                    <div class="nav-item restricted" onclick="window.showView('forecast')">🔮 Revenue Forecast</div>
+                    <div class="nav-item restricted" onclick="window.openTandaSettings()">⏱️ Tanda Settings</div>
                 </div>
             </div>
 
@@ -116,7 +117,6 @@
 
         <div class="sidebar-footer">
             <div id="btn-lock" class="nav-item btn-lock" onclick="window.toggleLock()">🔒 Lock Hub</div>
-            <div class="nav-item restricted" onclick="window.openTandaSettings()" style="font-size:12px;justify-content:center;background:rgba(59,130,246,0.1);color:var(--blue);">⏱️ Tanda Settings</div>
             <div class="nav-item restricted btn-backup" onclick="window.exportData()">💾 Backup Data</div>
             <div class="nav-item restricted btn-restore">
                 <label for="importFile" style="cursor:pointer; display: block; width: 100%;">📂 Restore Data</label>
@@ -180,11 +180,12 @@
 <script>
 // Collapsible sidebar sections
 // Default: Operations open, everything else collapsed
-window._defaultOpenSections = ['sec-ops'];
+window._defaultOpenSections = ['sec-daily'];
 window._sectionState = JSON.parse(localStorage.getItem('hubSections') || 'null');
-if (window._sectionState === null) {
-    // First load - set defaults
-    window._sectionState = { 'sec-ops': true, 'sec-recipes': false, 'sec-compliance': false, 'sec-logistics': false, 'sec-external': false };
+if (window._sectionState === null || window._sectionState['sec-ops'] !== undefined) {
+    // First load or migrating from old sections - set new defaults
+    window._sectionState = { 'sec-daily': true, 'sec-ordering': false, 'sec-recipes': false, 'sec-team': false, 'sec-settings': false, 'sec-external': false };
+    localStorage.setItem('hubSections', JSON.stringify(window._sectionState));
 }
 
 window.toggleSection = (id) => {
@@ -200,7 +201,7 @@ window.toggleSection = (id) => {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Apply saved or default section states
-    const allSections = ['sec-ops','sec-recipes','sec-compliance','sec-logistics','sec-external'];
+    const allSections = ['sec-daily','sec-ordering','sec-recipes','sec-team','sec-settings','sec-external'];
     allSections.forEach(id => {
         const el = document.getElementById(id);
         const arr = document.getElementById('arr-' + id);

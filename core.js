@@ -578,12 +578,12 @@ window.showView = (view) => {
         else if (view === 'inventory' && window.renderInventoryView) content.innerHTML = window.renderInventoryView();
         else if (view === 'suppliers' && window.renderSupplierView) content.innerHTML = window.renderSupplierView();
         else if (view === 'sales' && window.renderSalesView) content.innerHTML = window.renderSalesView();
-        else if ((view === 'orientation' || view === 'training') && window.renderOrientationView) content.innerHTML = window.renderOrientationView();
+        else if ((view === 'orientation' || view === 'training') && window.renderStaffHubView) { if (view === 'training') window._staffHubTab = 'onboarding'; content.innerHTML = window.renderStaffHubView(); }
         else if (view === 'tasks' && window.renderTaskView) content.innerHTML = window.renderTaskView();
         else if (view === 'compliance' && window.renderComplianceView) content.innerHTML = window.renderComplianceView();
         else if (view === 'maintenance' && window.renderMaintenanceView) content.innerHTML = window.renderMaintenanceView();
         else if (view === 'safe' && window.renderSafeView) content.innerHTML = window.renderSafeView();
-        else if ((view === 'phonebook' || view === 'contacts') && window.renderPhoneBookView) content.innerHTML = window.renderPhoneBookView();
+        else if ((view === 'phonebook' || view === 'contacts') && window.renderStaffHubView) { window._staffHubTab = 'phonebook'; content.innerHTML = window.renderStaffHubView(); }
         else if (view === 'incidents' && window.renderIncidentView) content.innerHTML = window.renderIncidentView();
         else if (view === 'handover' && window.renderHandoverView) content.innerHTML = window.renderHandoverView();
         else if ((view === 'knowledge' || view === 'sops') && window.renderKnowledgeView) content.innerHTML = window.renderKnowledgeView();
@@ -601,7 +601,7 @@ window.showView = (view) => {
         else if (view === 'par-editor' && window.renderParEditor) content.innerHTML = window.renderParEditor();
         else if (view === 'sell-price-editor' && window.renderSellPriceEditor) content.innerHTML = window.renderSellPriceEditor();
         else if (view === 'price-alerts' && window.renderPriceAlertsView) content.innerHTML = window.renderPriceAlertsView();
-        else if (view === 'staff-directory' && window.renderStaffDirectoryView) content.innerHTML = window.renderStaffDirectoryView();
+        else if (view === 'staff-directory' && window.renderStaffHubView) { window._staffHubTab = 'directory'; content.innerHTML = window.renderStaffHubView(); }
         else if (view === 'forecast' && window.renderForecastView) content.innerHTML = window.renderForecastView();
         else if (view === 'cross-venue') { if (window.renderCrossVenueDashboard) window.renderCrossVenueDashboard(); }
         else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
@@ -611,7 +611,7 @@ window.showView = (view) => {
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
         else if (view === 'stock-count' && window.renderQuickStockCount) content.innerHTML = window.renderQuickStockCount();
         else if (view === 'variance' && window.renderVarianceReport) content.innerHTML = window.renderVarianceReport();
-        else if (view === 'haccp-history' && window.renderHACCPHistory) content.innerHTML = window.renderHACCPHistory();
+        else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);

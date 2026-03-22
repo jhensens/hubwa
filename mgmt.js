@@ -501,7 +501,8 @@ window.renderSalesView = () => {
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
                 '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +
-                '<button onclick="if(confirm(\'Are you sure you want to clear ALL takings data? This cannot be undone.\'))window.clearTakingsData()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
+                '<button onclick="window.showView(\'lightspeed-import\')" class="btn btn-outline" style="font-size:12px;">📥 Lightspeed</button>' +
+                '<button onclick="window.confirmClearTakings()" class="btn btn-outline" style="color:var(--red);border-color:var(--red);font-size:12px;">🗑️ Clear Takings</button>' +
             '</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">' + tabHtml + '</div>' +
@@ -533,10 +534,20 @@ window.renderSalesView = () => {
 };
 
 window.updateWageTarget = (val) => { window.salesTargets.wageTarget = val; window.saveToDisk(); window.showToast("Wage Target Saved"); };
+window.confirmClearTakings = () => {
+    const html = '<p style="color:var(--red);font-weight:bold;margin-top:0;">This will permanently delete ALL takings data.</p>' +
+        '<p style="color:var(--text-muted);font-size:13px;">Make sure you have your CSV files ready to re-upload.</p>' +
+        '<label style="font-size:12px;color:var(--text-muted);">Type <strong>CLEAR</strong> to confirm:</label>' +
+        '<input type="text" id="clear-confirm-input" class="input-box" placeholder="Type CLEAR here" style="margin-bottom:15px;">' +
+        '<button onclick="window.clearTakingsData()" class="btn btn-red" style="width:100%;">🗑️ Delete All Takings</button>';
+    window.openModal('⚠️ Clear Takings Data', html);
+};
 window.clearTakingsData = () => {
-    if (!confirm('Clear ALL takings data? This cannot be undone.\n\nMake sure you have your CSV files ready to re-upload.')) return;
+    const input = document.getElementById('clear-confirm-input');
+    if (input && input.value.trim() !== 'CLEAR') return window.showToast('Type CLEAR to confirm.', 'error');
     window.salesData = [];
     window.saveToDisk();
+    window.closeModal();
     window.showToast('Takings data cleared. Re-upload your CSVs.');
     window.showView('sales');
 };
@@ -646,7 +657,37 @@ window.handleSalesCSV = (event) => {
 };
 
 
-// --- 2. ORIENTATION & TRAINING ---
+// --- 2. STAFF HUB (Directory + Onboarding + Phonebook) ---
+window._staffHubTab = window._staffHubTab || 'directory';
+
+window.renderStaffHubView = function() {
+    const tab = window._staffHubTab;
+    const tabs = [
+        { id: 'directory', label: '👥 Directory', view: 'staff-directory' },
+        { id: 'onboarding', label: '🤝 Onboarding', view: 'orientation' },
+        { id: 'phonebook', label: '📞 Phonebook', view: 'phonebook' }
+    ];
+    const tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
+        tabs.map(t => `<span class="tag-pill ${tab===t.id?'active':''}" onclick="window._staffHubTab='${t.id}';window.showView('orientation');">${t.label}</span>`).join('') +
+    '</div>';
+
+    let content = '';
+    if (tab === 'directory') content = window.renderStaffDirectoryView ? window.renderStaffDirectoryView() : '';
+    else if (tab === 'onboarding') content = window.renderOrientationView ? window.renderOrientationView() : '';
+    else if (tab === 'phonebook') content = window.renderPhoneBookView ? window.renderPhoneBookView() : '';
+
+    return `<div style="max-width:1100px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+            <div>
+                <h2 style="margin:0;">👥 Staff Hub</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Team directory, onboarding, and contacts</div>
+            </div>
+        </div>
+        ${tabBar}
+        ${content}
+    </div>`;
+};
+
 window.renderOrientationView = function(showCompleted = false) {
     const filtered = (window.orientationLogs || []).map((o, i) => ({...o, originalIndex: i})).filter(o => (o.status === 'Completed') === showCompleted);
     return `<div style="max-width: 900px; margin: auto;">
@@ -1049,8 +1090,8 @@ window._complianceTab = window._complianceTab || 'temps';
 window.renderComplianceView = function() {
     const E = window.esc;
     const tab = window._complianceTab || 'temps';
-    const tabPills = ['temps','shift','custom'].map(t => {
-        const labels = { temps:'🌡️ Temperatures', shift:'✅ Shift Checklist', custom:'📋 Custom Checklists' };
+    const tabPills = ['temps','shift','custom','haccp'].map(t => {
+        const labels = { temps:'🌡️ Temperatures', shift:'✅ Shift Checklist', custom:'📋 Custom Checklists', haccp:'📋 HACCP History' };
         return `<span class="tag-pill ${tab===t?'active':''}" onclick="window._complianceTab='${t}';window.showView('compliance');">${labels[t]}</span>`;
     }).join('');
 
@@ -1090,6 +1131,10 @@ window.renderComplianceView = function() {
 
     if (tab === 'shift') {
         content = window.renderShiftChecklists();
+    }
+
+    if (tab === 'haccp') {
+        content = window.renderHACCPHistory ? window.renderHACCPHistory() : '<p style="color:var(--text-muted);">HACCP History not available.</p>';
     }
 
     if (tab === 'custom') {
@@ -1726,7 +1771,7 @@ window.renderHACCPHistory = () => {
         return '<div class="card" style="border-top:3px solid ' + statusColor + ';margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
                 '<div><h3 style="margin:0;font-size:15px;">' + esc(unit) + '</h3>' +
-                '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + totalLogs + ' readings in 30 days</div></div>' +
+                '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + totalLogs + (totalLogs === 1 ? ' reading' : ' readings') + ' in 30 days</div></div>' +
                 '<div style="text-align:right;"><span class="breach-indicator ' + (breaches.length === 0 ? 'ok' : breaches.length <= 2 ? 'warn' : 'breach') + '"></span>' +
                 '<span style="font-weight:bold;color:' + statusColor + ';">' + statusLabel + '</span></div>' +
             '</div>' +
