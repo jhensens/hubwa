@@ -1977,7 +1977,9 @@ window.renderStaffDirectoryView = () => {
     return '<div style="max-width:900px;margin:auto;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">' +
             '<div><h2 style="margin:0">👥 Staff Directory</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Team contact details, roles, and emergency info</div></div>' +
-            '<button onclick="window.editStaffForm()" class="btn btn-blue">+ Add Staff Member</button>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            (window.getTandaToken && window.getTandaToken() ? '<button onclick="window.showLoadingOverlay(\'Syncing from Tanda...\');window.loadTandaData().then(()=>{window.hideLoadingOverlay();window.syncTandaStaff();})" class="btn btn-outline" style="font-size:12px;border-color:var(--purple);color:var(--purple);">🔄 Sync from Tanda</button>' : '') +
+            '<button onclick="window.editStaffForm()" class="btn btn-blue">+ Add Staff Member</button></div>' +
         '</div>' +
         (staff.length === 0 ?
             '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">👥</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No staff added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add team members with their contact details and emergency info</div></div>' :
@@ -2575,13 +2577,18 @@ window.renderPrimeCostView = () => {
             '</div>' +
         '</div>' +
 
-        // Tanda live today card
-        (tanda ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-            '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">⏱️ Tanda — Today Live</div>' +
-            '<div style="font-size:15px;">' + tanda.staffCount + ' staff rostered · ' + tanda.rosteredHours + ' hrs · Est. <strong style="color:var(--blue);">$' + tanda.estimatedWageCost + '</strong> wages</div>' +
-            (tandaWagePct ? '<div style="font-size:12px;color:var(--text-muted);">Labour % today: <strong style="color:var(--blue);">' + tandaWagePct + '%</strong></div>' : '') +
+        // Tanda live today card (enhanced)
+        (tanda ? '<div class="card" style="border-left:4px solid var(--blue);padding:15px;margin-bottom:20px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">' +
+            '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">⏱️ Tanda — Today Live</div>' +
+            '<div style="font-size:11px;color:var(--text-muted);">Updated: ' + tanda.lastUpdated + ' · <a onclick="window.loadTandaData()" style="color:var(--blue);cursor:pointer;">Refresh</a></div></div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><div style="font-size:11px;color:var(--text-muted);">Rostered</div><div style="font-size:18px;font-weight:700;color:var(--blue);">$' + tanda.estimatedWageCost + '</div><div style="font-size:11px;color:var(--text-muted);">' + tanda.staffCount + ' staff · ' + tanda.rosteredHours + 'h</div></div>' +
+            (Number(tanda.actualHours) > 0 ?
+            '<div><div style="font-size:11px;color:var(--text-muted);">Actual</div><div style="font-size:18px;font-weight:700;color:' + (Number(tanda.actualWageCost) > Number(tanda.estimatedWageCost) ? 'var(--red)' : 'var(--green)') + ';">$' + tanda.actualWageCost + '</div><div style="font-size:11px;color:var(--text-muted);">' + tanda.actualStaffCount + ' staff · ' + tanda.actualHours + 'h</div></div>' : '') +
             '</div>' +
-            '<div style="font-size:11px;color:var(--text-muted);">Updated: ' + tanda.lastUpdated + ' · <a onclick="window.loadTandaData()" style="color:var(--blue);cursor:pointer;">Refresh</a></div>' +
+            (tandaWagePct ? '<div style="font-size:12px;color:var(--text-muted);margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">Labour %: <strong style="color:var(--blue);">' + tandaWagePct + '%</strong></div>' : '') +
+            ((tanda.clockedIn||[]).length > 0 ? '<div style="font-size:11px;color:var(--green);margin-top:6px;">🟢 ' + tanda.clockedIn.length + ' on floor: ' + tanda.clockedIn.slice(0,5).map(function(c){return c.name;}).join(', ') + (tanda.clockedIn.length > 5 ? ' +' + (tanda.clockedIn.length-5) : '') + '</div>' : '') +
         '</div>' : '') +
 
         // Week breakdown table
@@ -2761,6 +2768,17 @@ window.renderManagerHub = () => {
     openTickets.slice(0,2).forEach(t => focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:E(t.item)+' — open ticket', view:'maintenance'}));
     expiringQuals.slice(0,2).forEach(q => focusItems.push({pri:5, icon:'🎓', color:q.status==='expired'?'var(--red)':'var(--orange)', text:E(q.staff)+' — '+E(q.qual)+(q.status==='expired'?' EXPIRED':' expires in '+q.days+'d'), view:'orientation'}));
     marginAlerts.slice(0,2).forEach(a => focusItems.push({pri:6, icon:'📉', color:'var(--red)', text:E(a.name)+' margin: '+a.currentGp+'%', view:'margins'}));
+    // Tanda leave alerts
+    if (window._tandaData && window._tandaData.upcomingLeave) {
+        var _todayStr = new Date().toISOString().split('T')[0];
+        var _tmrw = new Date(); _tmrw.setDate(_tmrw.getDate() + 1); var _tmrwStr = _tmrw.toISOString().split('T')[0];
+        window._tandaData.upcomingLeave.forEach(function(l) {
+            var isToday = l.from <= _todayStr && l.to >= _todayStr;
+            var isTmrw = l.from === _tmrwStr;
+            if (isToday) focusItems.push({pri:1, icon:'🏖️', color:'var(--orange)', text:E(l.name)+' on leave today ('+E(l.type)+')', view:'orientation'});
+            else if (isTmrw) focusItems.push({pri:2, icon:'🏖️', color:'var(--blue)', text:E(l.name)+' on leave tomorrow — check coverage', view:'orientation'});
+        });
+    }
     focusItems.sort((a,b) => a.pri - b.pri);
 
     // =====================================================
@@ -2828,8 +2846,21 @@ window.renderManagerHub = () => {
         html += '<div style="font-size:32px;font-weight:800;color:var(--text-muted);margin:4px 0;">—</div>';
         html += '<div style="font-size:12px;color:var(--text-muted);">Log takings with wages to see labor %</div>';
     }
-    // Tanda data
-    if (window._tandaData) html += '<div style="font-size:11px;color:var(--purple);margin-top:8px;">⏱️ Tanda: '+window._tandaData.staffCount+' staff · $'+window._tandaData.estimatedWageCost+'</div>';
+    // Tanda data — rostered vs actual
+    if (window._tandaData) {
+        const td = window._tandaData;
+        html += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;font-size:11px;">';
+        html += '<div style="color:var(--purple);font-weight:600;margin-bottom:4px;">⏱️ Tanda Live</div>';
+        html += '<div style="color:var(--text-muted);">Rostered: ' + td.staffCount + ' staff · ' + td.rosteredHours + 'h · $' + td.estimatedWageCost + '</div>';
+        if (Number(td.actualHours) > 0) {
+            const variance = Number(td.actualWageCost) - Number(td.estimatedWageCost);
+            const varColor = variance <= 0 ? 'var(--green)' : 'var(--red)';
+            const varLabel = variance <= 0 ? ('$' + Math.abs(variance).toFixed(0) + ' under') : ('$' + variance.toFixed(0) + ' over');
+            html += '<div style="color:var(--text-muted);">Actual: ' + td.actualStaffCount + ' staff · ' + td.actualHours + 'h · <strong style="color:' + varColor + ';">$' + td.actualWageCost + '</strong></div>';
+            html += '<div style="color:' + varColor + ';font-weight:600;">' + varLabel + ' budget</div>';
+        }
+        html += '</div>';
+    }
     html += '</div>';
 
     // Card 3: Daily P&L Estimate
@@ -2889,13 +2920,18 @@ window.renderManagerHub = () => {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+(window.rotationalTasks||[]).length+' total tasks tracked</div>';
     html += '</div>';
 
-    // Team
+    // Team + On Floor
+    var _ci = (window._tandaData && window._tandaData.clockedIn) ? window._tandaData.clockedIn : [];
     html += '<div class="card" style="padding:14px;cursor:pointer;" onclick="window._staffHubTab=\'qualifications\';window.showView(\'orientation\')">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
     html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">👥 Team</div>';
     html += '<div style="font-size:22px;font-weight:800;color:'+(expiringQuals.length>0?'var(--orange)':'var(--green)')+';">'+activeStaff.length+'</div>';
     html += '</div>';
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+(expiringQuals.length > 0 ? '<span style="color:var(--orange);font-weight:600;">'+expiringQuals.length+' qual alert'+(expiringQuals.length===1?'':'s')+'</span>' : 'All qualifications OK')+'</div>';
+    if (_ci.length > 0) {
+        html += '<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:6px;">🟢 ' + _ci.length + ' on floor now</div>';
+        html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;line-height:1.5;">' + _ci.slice(0, 4).map(function(c) { return c.name + (c.since ? ' <span style="opacity:0.6;">(' + c.since + ')</span>' : ''); }).join(', ') + (_ci.length > 4 ? ' +' + (_ci.length - 4) + ' more' : '') + '</div>';
+    }
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">'+(expiringQuals.length > 0 ? '<span style="color:var(--orange);font-weight:600;">'+expiringQuals.length+' qual alert'+(expiringQuals.length===1?'':'s')+'</span>' : 'All qualifications OK')+'</div>';
     if (openTickets.length > 0) html += '<div style="font-size:11px;color:var(--orange);margin-top:2px;">🛠️ '+openTickets.length+' open ticket'+(openTickets.length===1?'':'s')+'</div>';
     html += '</div>';
     html += '</div>';

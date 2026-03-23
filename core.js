@@ -562,74 +562,247 @@ window.fetchTanda = async (endpoint) => {
     } catch(e) { return null; }
 };
 
+// --- TANDA HOURS HELPER ---
+window._tandaCalcHours = (s) => {
+    if (s.duration) return s.duration / 3600;
+    if (s.finish && s.start) return (s.finish - s.start) / 3600;
+    if (s.finish_time && s.start_time) {
+        const [sh, sm] = s.start_time.split(':').map(Number);
+        const [fh, fm] = s.finish_time.split(':').map(Number);
+        let hrs = ((fh * 60 + fm) - (sh * 60 + sm)) / 60;
+        if (hrs < 0) hrs += 24;
+        return hrs;
+    }
+    return 0;
+};
+
+// --- TANDA FULL DATA LOAD ---
+window._tandaData = window._tandaData || null;
+window._tandaStaff = [];
+window._tandaDepartments = [];
+
 window.loadTandaData = async () => {
     if (!window.getTandaToken()) return;
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
-    // Step 1: Get all users in the organisation
+    // 1. Users (full profiles)
     const usersData = await window.fetchTanda('users');
     if (!usersData) { console.log('Tanda: could not fetch users'); return; }
-
     const users = Array.isArray(usersData) ? usersData : (usersData.users || []);
     if (users.length === 0) { console.log('Tanda: no users found'); return; }
 
-    const userIds = users.map(u => u.id).join(',');
-    console.log('Tanda: fetching schedules for', users.length, 'staff');
+    // Store full staff profiles
+    window._tandaStaff = users.map(u => ({
+        id: u.id, name: u.name || '', phone: u.phone || '', email: u.email || '',
+        photo: u.photo_url || u.photo || '', dob: u.date_of_birth || '',
+        startDate: u.employment_start_date || '', departmentIds: u.department_ids || [],
+        active: u.active !== false
+    }));
 
-    // Step 2: Get schedules for ALL users for today
+    const userIds = users.map(u => u.id).join(',');
+
+    // 2. Departments
+    const deptData = await window.fetchTanda('departments');
+    if (deptData) {
+        const depts = Array.isArray(deptData) ? deptData : (deptData.departments || []);
+        window._tandaDepartments = depts.map(d => ({ id: d.id, name: d.name || 'Unknown' }));
+    }
+
+    // 3. Schedules (rostered / planned)
     const schedData = await window.fetchTanda(
         'schedules?from=' + dateStr + '&to=' + dateStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true'
     );
-
-    if (!schedData) { console.log('Tanda: no schedule data'); return; }
-
-    const schedules = Array.isArray(schedData) ? schedData : (schedData.schedules || []);
-    let totalHours = 0, totalCost = 0, staff = [];
-
+    const schedules = schedData ? (Array.isArray(schedData) ? schedData : (schedData.schedules || [])) : [];
+    let rosteredHours = 0, rosteredCost = 0, rosteredStaff = [];
     schedules.forEach(s => {
-        // Calculate hours from duration, or from start/finish timestamps
-        let hrs = 0;
-        if (s.duration) {
-            hrs = s.duration / 3600;
-        } else if (s.finish && s.start) {
-            hrs = (s.finish - s.start) / 3600;
-        } else if (s.finish_time && s.start_time) {
-            // Time strings like "09:00" - calculate difference
-            const [sh, sm] = s.start_time.split(':').map(Number);
-            const [fh, fm] = s.finish_time.split(':').map(Number);
-            hrs = ((fh * 60 + fm) - (sh * 60 + sm)) / 60;
-            if (hrs < 0) hrs += 24; // overnight shift
-        }
-        totalHours += hrs;
-        if (s.cost) totalCost += Number(s.cost);
-        // Find user name
+        const hrs = window._tandaCalcHours(s);
+        rosteredHours += hrs;
+        if (s.cost) rosteredCost += Number(s.cost);
         const user = users.find(u => u.id === s.user_id);
-        const name = (user && user.name) || s.user_name || ('Staff #' + (s.user_id||''));
-        // Count staff even if hours are 0 (shift may not have started yet)
-        if (name) staff.push({ name, hours: hrs > 0 ? hrs.toFixed(1) : 'Rostered' });
+        const name = (user && user.name) || s.user_name || ('Staff #' + (s.user_id || ''));
+        if (name) rosteredStaff.push({ name, hours: hrs > 0 ? hrs.toFixed(1) : 'Rostered', start: s.start_time || '' });
     });
 
+    // 4. Shifts (actual hours worked)
+    const shiftsData = await window.fetchTanda(
+        'shifts?from=' + dateStr + '&to=' + dateStr + '&show_costs=true'
+    );
+    const shifts = shiftsData ? (Array.isArray(shiftsData) ? shiftsData : (shiftsData.shifts || [])) : [];
+    let actualHours = 0, actualCost = 0, actualStaff = [];
+    shifts.forEach(s => {
+        const hrs = window._tandaCalcHours(s);
+        actualHours += hrs;
+        if (s.cost) actualCost += Number(s.cost);
+        const user = users.find(u => u.id === s.user_id);
+        const name = (user && user.name) || ('Staff #' + (s.user_id || ''));
+        if (name) actualStaff.push({ name, hours: hrs.toFixed(1) });
+    });
+
+    // 5. Clocked in right now
+    let clockedIn = [];
+    const clockedData = await window.fetchTanda('users/clocked_in');
+    if (clockedData) {
+        const cArr = Array.isArray(clockedData) ? clockedData : (clockedData.users || []);
+        clockedIn = cArr.map(u => {
+            const name = u.name || ('Staff #' + u.id);
+            const since = u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            return { name, since };
+        });
+    }
+
+    // 6. Leave (next 14 days)
+    const leaveEnd = new Date(today); leaveEnd.setDate(leaveEnd.getDate() + 14);
+    const leaveEndStr = leaveEnd.toISOString().split('T')[0];
+    let upcomingLeave = [];
+    const leaveData = await window.fetchTanda('leave?from=' + dateStr + '&to=' + leaveEndStr);
+    if (leaveData) {
+        const lArr = Array.isArray(leaveData) ? leaveData : (leaveData.leave || []);
+        upcomingLeave = lArr.filter(l => l.status === 'approved' || l.status === 'pending').map(l => {
+            const user = users.find(u => u.id === l.user_id);
+            return {
+                name: (user && user.name) || ('Staff #' + l.user_id),
+                from: l.start_date || l.from || '',
+                to: l.end_date || l.to || '',
+                type: l.leave_type || l.type || 'Leave',
+                status: l.status || 'approved'
+            };
+        });
+    }
+
+    // Build combined data object
     window._tandaData = {
         date: dateStr,
-        rosteredHours: totalHours.toFixed(1),
-        estimatedWageCost: totalCost.toFixed(2),
-        staffCount: staff.length,
-        staff,
-        lastUpdated: new Date().toLocaleTimeString()
+        // Rostered (planned)
+        rosteredHours: rosteredHours.toFixed(1),
+        estimatedWageCost: rosteredCost.toFixed(2),
+        staffCount: rosteredStaff.length,
+        staff: rosteredStaff,
+        // Actual (worked)
+        actualHours: actualHours.toFixed(1),
+        actualWageCost: actualCost.toFixed(2),
+        actualStaffCount: actualStaff.length,
+        actualStaff: actualStaff,
+        // Live
+        clockedIn: clockedIn,
+        // Leave
+        upcomingLeave: upcomingLeave,
+        // Meta
+        lastUpdated: new Date().toLocaleTimeString(),
+        userCount: users.length
     };
     console.log('Tanda loaded:', window._tandaData);
-    if (window.currentView === 'dashboard' || window.currentView === 'prime-cost') window.showView(window.currentView);
+    if (['dashboard', 'prime-cost', 'orientation'].includes(window.currentView)) window.showView(window.currentView);
 };
 
+// --- TANDA CLOCKED-IN QUICK REFRESH (lightweight) ---
+window.loadTandaClockedIn = async () => {
+    if (!window.getTandaToken() || !window._tandaData) return;
+    const clockedData = await window.fetchTanda('users/clocked_in');
+    if (!clockedData) return;
+    const cArr = Array.isArray(clockedData) ? clockedData : (clockedData.users || []);
+    window._tandaData.clockedIn = cArr.map(u => {
+        const name = u.name || ('Staff #' + u.id);
+        const since = u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        return { name, since };
+    });
+    window._tandaData.lastUpdated = new Date().toLocaleTimeString();
+};
+
+// --- TANDA AUTO-REFRESH ---
+window._tandaFullInterval = null;
+window._tandaQuickInterval = null;
+window.startTandaAutoRefresh = () => {
+    window.stopTandaAutoRefresh();
+    // Full refresh every 15 minutes
+    window._tandaFullInterval = setInterval(() => {
+        if (!document.hidden && window.getTandaToken()) window.loadTandaData();
+    }, 15 * 60 * 1000);
+    // Clocked-in refresh every 5 minutes
+    window._tandaQuickInterval = setInterval(() => {
+        if (!document.hidden && window.getTandaToken()) window.loadTandaClockedIn();
+    }, 5 * 60 * 1000);
+};
+window.stopTandaAutoRefresh = () => {
+    if (window._tandaFullInterval) { clearInterval(window._tandaFullInterval); window._tandaFullInterval = null; }
+    if (window._tandaQuickInterval) { clearInterval(window._tandaQuickInterval); window._tandaQuickInterval = null; }
+};
+
+// --- TANDA STAFF SYNC → STAFF DIRECTORY ---
+window.syncTandaStaff = () => {
+    if (!window._tandaStaff || window._tandaStaff.length === 0) return window.showToast('No Tanda staff data. Refresh Tanda first.', 'error');
+    let added = 0, updated = 0;
+    window._tandaStaff.filter(ts => ts.active).forEach(ts => {
+        const existing = (window.staffDirectory || []).find(s => s.name && ts.name && s.name.toLowerCase().trim() === ts.name.toLowerCase().trim());
+        if (existing) {
+            // Merge: fill blanks only
+            if (!existing.phone && ts.phone) { existing.phone = ts.phone; updated++; }
+            if (!existing.email && ts.email) { existing.email = ts.email; updated++; }
+            if (!existing.startDate && ts.startDate) existing.startDate = ts.startDate;
+            if (ts.departmentIds && ts.departmentIds.length > 0 && window._tandaDepartments.length > 0) {
+                const deptName = window._tandaDepartments.find(d => d.id === ts.departmentIds[0]);
+                if (deptName && !existing.role) existing.role = deptName.name;
+            }
+        } else {
+            // Add new staff
+            let role = '';
+            if (ts.departmentIds && ts.departmentIds.length > 0 && window._tandaDepartments.length > 0) {
+                const dept = window._tandaDepartments.find(d => d.id === ts.departmentIds[0]);
+                if (dept) role = dept.name;
+            }
+            window.staffDirectory.push({
+                name: ts.name, role: role, phone: ts.phone, email: ts.email,
+                emergency: '', status: 'Active', startDate: ts.startDate, notes: 'Synced from Tanda',
+                qualifications: {}
+            });
+            added++;
+        }
+    });
+    window.saveToDisk();
+    window.showToast('Tanda sync: ' + added + ' added, ' + updated + ' updated.');
+    if (window.currentView === 'orientation') window.showView('orientation');
+};
+
+// --- TANDA SETTINGS MODAL ---
 window.openTandaSettings = () => {
     const token = window.getTandaToken();
-    const html = '<p style="font-size:13px;color:var(--text-muted);margin-top:0;">Connect Tanda to automatically pull rostered hours and wage costs.</p>' +
-        '<label style="font-size:11px;color:var(--text-muted);">API Token — get from: my.tanda.co/api/v2/my_tokens</label>' +
-        '<input type="text" id="tanda-token" class="input-box" value="' + token + '" placeholder="Paste Tanda API token...">' +
-        '<button onclick="window.saveTandaToken()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Save & Connect</button>' +
-        (token ? '<button onclick="window.loadTandaData();window.closeModal();window.showToast(\'Refreshing...\')" class="btn btn-outline" style="width:100%;">🔄 Refresh Now</button>' : '') +
-        (window._tandaData ? '<div style="margin-top:12px;font-size:12px;color:var(--text-muted);">Last sync: ' + window._tandaData.lastUpdated + ' · ' + window._tandaData.staffCount + ' staff · Est. $' + window._tandaData.estimatedWageCost + '</div>' : '');
+    const td = window._tandaData;
+    const connected = !!token;
+    const statusDot = connected ? '🟢' : '🔴';
+    const statusText = connected ? 'Connected' : 'Not Connected';
+
+    let html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border);">' +
+        '<span style="font-size:18px;">' + statusDot + '</span>' +
+        '<div><div style="font-weight:600;font-size:14px;">' + statusText + '</div>' +
+        (td ? '<div style="font-size:11px;color:var(--text-muted);">Last sync: ' + td.lastUpdated + '</div>' : '') +
+        '</div></div>';
+
+    html += '<label style="font-size:11px;color:var(--text-muted);">API Token — get from: <a href="https://my.tanda.co/api/v2/my_tokens" target="_blank" style="color:var(--blue);">my.tanda.co/api/v2/my_tokens ↗</a></label>';
+    html += '<input type="text" id="tanda-token" class="input-box" value="' + token + '" placeholder="Paste Tanda API token...">';
+    html += '<button onclick="window.saveTandaToken()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Save & Connect</button>';
+
+    if (connected) {
+        html += '<button onclick="window.showLoadingOverlay(\'Refreshing Tanda...\');window.loadTandaData().then(()=>{window.hideLoadingOverlay();window.openTandaSettings();});" class="btn btn-outline" style="width:100%;margin-bottom:8px;">🔄 Refresh All Data</button>';
+        html += '<button onclick="window.syncTandaStaff();window.closeModal();" class="btn btn-outline" style="width:100%;margin-bottom:12px;">👥 Sync Staff to Hub Directory</button>';
+    }
+
+    if (td) {
+        html += '<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">';
+        html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--brand-dark);">📊 Data Summary</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:var(--text-muted);">';
+        html += '<div>👥 Staff synced: <strong>' + td.userCount + '</strong></div>';
+        html += '<div>📋 Rostered today: <strong>' + td.staffCount + '</strong></div>';
+        html += '<div>⏱️ Rostered hours: <strong>' + td.rosteredHours + 'h</strong></div>';
+        html += '<div>💰 Est. wages: <strong>$' + td.estimatedWageCost + '</strong></div>';
+        if (Number(td.actualHours) > 0) {
+            html += '<div>✅ Actual hours: <strong>' + td.actualHours + 'h</strong></div>';
+            html += '<div>💵 Actual cost: <strong>$' + td.actualWageCost + '</strong></div>';
+        }
+        html += '<div>🟢 Clocked in: <strong>' + (td.clockedIn || []).length + '</strong></div>';
+        html += '<div>🏖️ Upcoming leave: <strong>' + (td.upcomingLeave || []).length + '</strong></div>';
+        html += '</div></div>';
+    }
+
     window.openModal('⏱️ Tanda Integration', html);
 };
 
@@ -640,7 +813,8 @@ window.saveTandaToken = () => {
     localStorage.setItem(vid + '_tandaApiToken', token);
     window.closeModal();
     window.showToast('Tanda connected!');
-    window.loadTandaData();
+    window.showLoadingOverlay('Connecting to Tanda...');
+    window.loadTandaData().then(() => { window.hideLoadingOverlay(); window.startTandaAutoRefresh(); });
 };
 
 // Debounced Firebase write — max once every 4 seconds
@@ -1070,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateVenueBadge();
     window.showView('dashboard');
     setTimeout(() => window.updateNotifBadge(), 500);
-    setTimeout(() => window.loadTandaData(), 2000);
+    setTimeout(() => { window.loadTandaData(); window.startTandaAutoRefresh(); }, 2000);
 
     // Force PIN setup if no PIN exists
     setTimeout(() => {
