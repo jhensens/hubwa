@@ -565,3 +565,4 @@ table .btn {
     .tag-pill { min-height: 36px; padding: 8px 16px; display: inline-flex; align-items: center; }
     .notif-panel { width: calc(100vw - 30px); right: -10px; }
 }
+@keyframes spin { to { transform: rotate(360deg); } }

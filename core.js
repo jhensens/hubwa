@@ -83,6 +83,23 @@ window.escAttr = function(str) {
     return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 };
 
+// --- LOADING OVERLAY ---
+window.showLoadingOverlay = function(msg) {
+    var el = document.getElementById('hub-loading-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'hub-loading-overlay';
+        el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.6);display:flex;flex-direction:column;align-items:center;justify-content:center;';
+        document.body.appendChild(el);
+    }
+    el.innerHTML = '<div style="background:var(--card-bg);padding:30px 40px;border-radius:12px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4);"><div class="loading-spinner" style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="margin:0;color:var(--text-muted);font-size:14px;">' + (msg || 'Processing...') + '</p></div>';
+    el.style.display = 'flex';
+};
+window.hideLoadingOverlay = function() {
+    var el = document.getElementById('hub-loading-overlay');
+    if (el) el.style.display = 'none';
+};
+
 // --- 2. GLOBAL MODAL SYSTEM (Zero Context Switching) ---
 window.openModal = (titleHtml, bodyHtml) => {
     const overlay = document.getElementById('global-modal-overlay');
@@ -99,11 +116,13 @@ window.openModal = (titleHtml, bodyHtml) => {
         </div>
     `;
     overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 };
 
 window.closeModal = () => {
     const overlay = document.getElementById('global-modal-overlay');
     if(overlay) overlay.style.display = 'none';
+    document.body.style.overflow = '';
 };
 
 // --- 2b. AUTOFOCUS ON MODAL OPEN ---
@@ -613,6 +632,7 @@ window.saveTandaToken = () => {
 // Debounced Firebase write — max once every 4 seconds
 window._saveTimer = null;
 window._lastFirebaseSave = 0;
+window._firebaseRetryCount = 0;
 
 window.saveToDisk = () => {
     const syncLabel = document.getElementById('sync-status');
@@ -638,10 +658,21 @@ window.saveToDisk = () => {
         window._lastFirebaseSave = now;
         let payload = {}; window.saveKeys.forEach(k => payload[k] = window[k]);
         db.collection('venueData').doc(window.getVenueDocId()).set(payload, { merge: true })
-            .then(() => { if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; } })
+            .then(() => {
+                window._firebaseRetryCount = 0;
+                if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }
+            })
             .catch(err => {
                 console.error('Firebase save error:', err);
-                if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Mode'; syncLabel.style.color = 'var(--orange)'; }
+                window._firebaseRetryCount++;
+                if (window._firebaseRetryCount <= 3) {
+                    if (syncLabel) { syncLabel.innerHTML = '🔄 Retrying sync (' + window._firebaseRetryCount + '/3)...'; syncLabel.style.color = 'var(--orange)'; }
+                    if (window.showToast && window._firebaseRetryCount === 1) window.showToast('Sync failed — retrying...', 'error');
+                    setTimeout(() => { window._lastFirebaseSave = 0; window.saveToDisk(); }, 10000);
+                } else {
+                    if (syncLabel) { syncLabel.innerHTML = '❌ Sync Failed — <span onclick="window._firebaseRetryCount=0;window.saveToDisk()" style="cursor:pointer;text-decoration:underline;">Retry</span>'; syncLabel.style.color = 'var(--red)'; }
+                    if (window.showToast) window.showToast('Data not synced to cloud. Check your connection.', 'error');
+                }
             });
     }, 3000); // Wait 3 seconds after last save call before writing to Firebase
 };

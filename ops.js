@@ -577,21 +577,39 @@ window._invBulkAction = (action) => {
     const ids = [...window._invSelected];
     if (!ids.length) return;
     if (action === 'delete') {
+        var affectedRecipes = (window.recipes || []).filter(r => (r.ingredients || []).some(ing => ing.type === 'inv' && ids.includes(ing.ref)));
+        var recipeWarning = affectedRecipes.length > 0 ? '<br><span style="color:var(--orange);">⚠️ ' + affectedRecipes.length + ' recipe(s) reference these items — their ingredients will be unlinked.</span>' : '';
         window.confirmAction({
             title: '🗑️ Bulk Delete',
-            message: 'Permanently delete <strong>' + ids.length + ' items</strong>? This cannot be undone.',
+            message: 'Permanently delete <strong>' + ids.length + ' items</strong>? This cannot be undone.' + recipeWarning,
             confirmLabel: 'Delete ' + ids.length + ' Items',
             tier: 'dangerous',
             onConfirm: () => {
+                // Unlink dangling recipe ingredient references
+                (window.recipes || []).forEach(r => {
+                    (r.ingredients || []).forEach(ing => {
+                        if (ing.type === 'inv' && ids.includes(ing.ref)) { ing.type = 'raw'; ing.name = (ing.name || 'Deleted item') + ' (unlinked)'; ing.ref = null; }
+                    });
+                });
                 window.inventoryItems = window.inventoryItems.filter(i => !ids.includes(i.id));
-                window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items deleted.'); window.showView('inventory');
+                window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items deleted. Recipe refs unlinked.'); window.showView('inventory');
             }
         });
         return;
     }
     if (action === 'archive') {
-        ids.forEach(id => { const it = window.inventoryItems.find(i=>i.id===id); if(it) it.archived=true; });
-        window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items archived.'); window.showView('inventory'); return;
+        window.confirmAction({
+            title: '📦 Bulk Archive',
+            message: 'Archive <strong>' + ids.length + ' items</strong>? They will be hidden from the active list but can be restored later.',
+            confirmLabel: 'Archive ' + ids.length + ' Items',
+            confirmColor: 'var(--orange)',
+            tier: 'standard',
+            onConfirm: () => {
+                ids.forEach(id => { const it = window.inventoryItems.find(i=>i.id===id); if(it) it.archived=true; });
+                window._invSelected = new Set(); window.saveToDisk(); window.showToast(ids.length + ' items archived.'); window.showView('inventory');
+            }
+        });
+        return;
     }
     const opts = action === 'zone'
         ? '<option value="">Unassigned</option>' + (window.storageZones||[]).map(z=>'<option value="'+esc(z.name)+'">'+esc(z.name)+'</option>').join('')
@@ -614,21 +632,39 @@ window._applyBulk = (action) => {
 // ── Inline stock & PAR edit ──────────────────────────────────
 window._inlineEditStock = (id) => {
     const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
-    const val = prompt('Update stock for "' + item.name + '" (current: ' + item.stock + ' ' + item.buyUnit + '):', item.stock);
-    if (val === null) return;
-    const n = parseFloat(val); if (isNaN(n)) return window.showToast('Invalid number.','error');
+    window.openModal('📦 Update Stock', `
+        <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;"><strong>${esc(item.name)}</strong> — current: ${item.stock || 0} ${esc(item.buyUnit || 'units')}</p>
+        <input type="number" id="_ies-val" class="input-box" value="${item.stock || 0}" step="0.01" min="0" style="font-size:16px;padding:10px;margin:0 0 16px;">
+        <div style="display:flex;gap:10px;">
+            <button onclick="window._commitInlineStock('${item.id}')" class="btn btn-green" style="flex:1;padding:10px;">Save</button>
+            <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Cancel</button>
+        </div>`);
+};
+window._commitInlineStock = (id) => {
+    const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
+    const val = document.getElementById('_ies-val'); if (!val) return;
+    const n = parseFloat(val.value); if (isNaN(n)) return window.showToast('Invalid number.','error');
     window.logStockMovement(item.id, n - (item.stock || 0), 'manual-adjust', { notes: 'Inline edit' });
-    item.stock = n; window.saveToDisk(); window.showToast(item.name + ' → ' + n + ' ' + item.buyUnit); window.showView('inventory');
+    item.stock = n; window.closeModal(); window.saveToDisk(); window.showToast(item.name + ' → ' + n + ' ' + (item.buyUnit||'units')); window.showView('inventory');
 };
 window._inlineEditPar = (id) => {
     const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
     const isWe = [0,5,6].includes(new Date().getDay());
     const field = isWe ? 'parWeekend' : 'parWeekday';
     const label = (isWe ? 'Weekend' : 'Weekday') + ' PAR';
-    const val = prompt('Update ' + label + ' for "' + item.name + '":', item[field]||0);
-    if (val === null) return;
-    const n = parseFloat(val); if (isNaN(n)) return window.showToast('Invalid number.','error');
-    item[field] = n; item.par = n; window.saveToDisk(); window.showToast(item.name + ' ' + label + ' → ' + n); window.showView('inventory');
+    window.openModal('📋 Update ' + label, `
+        <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;"><strong>${esc(item.name)}</strong> — current ${label}: ${item[field] || 0}</p>
+        <input type="number" id="_iep-val" class="input-box" value="${item[field] || 0}" step="0.01" min="0" style="font-size:16px;padding:10px;margin:0 0 16px;">
+        <div style="display:flex;gap:10px;">
+            <button onclick="window._commitInlinePar('${item.id}','${field}')" class="btn btn-green" style="flex:1;padding:10px;">Save</button>
+            <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Cancel</button>
+        </div>`);
+};
+window._commitInlinePar = (id, field) => {
+    const item = window.inventoryItems.find(i=>i.id===id); if (!item) return;
+    const val = document.getElementById('_iep-val'); if (!val) return;
+    const n = parseFloat(val.value); if (isNaN(n)) return window.showToast('Invalid number.','error');
+    item[field] = n; item.par = n; window.closeModal(); window.saveToDisk(); window.showToast(item.name + ' PAR → ' + n); window.showView('inventory');
 };
 
 window.editInvItem = (id = null) => {
@@ -668,7 +704,7 @@ window.editInvItem = (id = null) => {
                 <div style="padding-top:20px;"><label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="iv-gst" ${e.gstFree ? 'checked' : ''} style="transform:scale(1.2);"> GST Free</label></div>
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding-top:10px; border-top:1px dashed var(--border);">
-                <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-Units per Buy-Unit)</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="${e.yield}" style="border-color:var(--blue);"></div>
+                <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Yield (Use-Units per Buy-Unit)</label><input type="number" step="0.01" min="0.01" id="iv-yield" class="input-box" value="${e.yield || 1}" style="border-color:var(--blue);"></div>
                 <div><label style="font-size:11px; color:var(--blue); font-weight:bold;">Use Unit (e.g. kg, ml, portion)</label><input type="text" id="iv-useUnit" class="input-box" value="${esc(e.useUnit)}" style="border-color:var(--blue);"></div>
             </div>
         </div>
@@ -707,7 +743,7 @@ window.subInvItem = (id, addAnother, isModal = false) => {
         parWeekday: parseFloat(document.getElementById('iv-parwd').value) || 0,
         parWeekend: parseFloat(document.getElementById('iv-parwe').value) || 0,
         par: parseFloat(document.getElementById('iv-parwd').value) || 0,
-        yield: parseFloat(document.getElementById('iv-yield').value) || 1,
+        yield: Math.max(0.01, parseFloat(document.getElementById('iv-yield').value) || 1),
         useUnit: document.getElementById('iv-useUnit').value,
         buyUnit: document.getElementById('iv-buyUnit').value,
         archived: existingIdx >= 0 ? window.inventoryItems[existingIdx].archived : false,
@@ -1316,12 +1352,18 @@ window.viewRecipe = (id) => {
 
     // Media section
     let mediaHtml = '';
-    if (r.photo && r.videoUrl) {
-        mediaHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><img src="${r.photo}" style="width:100%;max-height:250px;object-fit:cover;border-radius:8px;"><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`;
+    const _isYouTube = (u) => u && (u.toLowerCase().includes('youtube.com') || u.toLowerCase().includes('youtu.be'));
+    const _embedUrl = (u) => window.safeUrl(u.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/'));
+    if (r.photo && r.videoUrl && _isYouTube(r.videoUrl)) {
+        mediaHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><img src="${r.photo}" style="width:100%;max-height:250px;object-fit:cover;border-radius:8px;"><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;"><iframe src="${_embedUrl(r.videoUrl)}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>`;
+    } else if (r.photo && r.videoUrl) {
+        mediaHtml = `<div style="margin-bottom:20px;"><img src="${r.photo}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:8px;"><a href="${window.safeUrl(r.videoUrl)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:13px;">🎥 Watch video ↗</a></div>`;
     } else if (r.photo) {
         mediaHtml = `<img src="${r.photo}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:20px;">`;
+    } else if (r.videoUrl && _isYouTube(r.videoUrl)) {
+        mediaHtml = `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:20px;"><iframe src="${_embedUrl(r.videoUrl)}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`;
     } else if (r.videoUrl) {
-        mediaHtml = `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:20px;"><iframe src="${r.videoUrl.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/')}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`;
+        mediaHtml = `<div style="margin-bottom:20px;"><a href="${window.safeUrl(r.videoUrl)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:13px;">🎥 Watch video ↗</a></div>`;
     }
 
     document.getElementById('mainContent').innerHTML = `
@@ -1797,7 +1839,7 @@ window.updateUnitHint = () => {
             <div style="display:none;"><input type="checkbox" id="iv-gst"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;border:1px dashed var(--blue);padding:10px;border-radius:6px;">
-            <div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Yield</label><input type="number" step="0.01" id="iv-yield" class="input-box" value="1"></div>
+            <div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Yield</label><input type="number" step="0.01" min="0.01" id="iv-yield" class="input-box" value="1"></div>
             <div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Use Unit</label><input type="text" id="iv-useUnit" class="input-box" value="kg"></div>
         </div>
         <div style="margin-bottom:15px;"><label style="font-size:11px;">Storage Zone</label>${window.buildZoneSelect('','iv-loc')}</div>
@@ -2092,13 +2134,14 @@ window.runAiRecipeImport = async () => {
     const statusDiv = document.getElementById('ai-recipe-status');
     if (!rawText.trim()) return window.showToast("Please paste a recipe first.","error");
     statusDiv.innerHTML=`<p style="color:var(--purple);font-weight:bold;">🤖 Analyzing recipe...</p>`;
+    window.showLoadingOverlay('🤖 AI is analyzing your recipe...');
     const invNames=(window.inventoryItems||[]).map(i=>`${i.id}:${i.name} (per ${i.useUnit})`).join(', ');
     const prompt=`You are a culinary AI for Bar Wa Izakaya. Extract the recipe from this text.
 Return ONLY JSON: { "name": "Name", "method": "Method", "yieldQty": 1, "ingredients": [ { "name": "Name", "qty": 1.5, "unit": "kg", "matchedInvId": null } ] }
 Match to inventory IDs where possible: [${invNames}]
 Recipe: ${rawText}`;
     try {
-        const apiKey=window.getApiKey(); if(!apiKey) return;
+        const apiKey=window.getApiKey(); if(!apiKey) { window.hideLoadingOverlay(); return; }
         const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:"application/json"}})});
         const data=await response.json(); if(data.error) throw new Error(data.error.message);
         let rawJson=data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim();
@@ -2109,7 +2152,8 @@ Recipe: ${rawText}`;
         });
         const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
         window.recipes.push(newObj); window.editRecipeForm(newObj.id); window.showToast("AI Parsing Complete!");
-    } catch(e) { statusDiv.innerHTML=`<p style="color:var(--red);">API Error: ${e.message}</p>`; }
+        window.hideLoadingOverlay();
+    } catch(e) { window.hideLoadingOverlay(); statusDiv.innerHTML=`<p style="color:var(--red);">API Error: ${e.message}</p>`; }
 };
 
 
@@ -2153,8 +2197,9 @@ window.runAiBatchLink = async () => {
     const invList = (window.inventoryItems||[]).filter(i=>!i.archived).map(i=>i.id+':'+i.name+' ('+( i.useUnit||'unit')+')').join('; ');
     const rawList = rawIngredients.map((r,idx)=>idx+': '+r.rawName+' [in: '+r.recipeName+']').join('\n');
     const prompt = 'Match each raw ingredient to the best inventory ID or null.\nINVENTORY: '+invList+'\nRAW:\n'+rawList+'\nReturn ONLY JSON array: [{"idx":0,"matchId":"id","confidence":"high"},...]. confidence: high/medium/low/none. Only suggest medium+ confidence.';
+    window.showLoadingOverlay('🤖 AI is matching ingredients...');
     try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
+        const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+apiKey, {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})
@@ -2169,7 +2214,8 @@ window.runAiBatchLink = async () => {
         });
         window.renderBatchLinkQueue();
         statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ Done — '+aiMatches.filter(m=>m.matchId).length+' matches suggested.</div>';
-    } catch(e) { statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">Error: '+e.message+'</div>'; }
+        window.hideLoadingOverlay();
+    } catch(e) { window.hideLoadingOverlay(); statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">Error: '+e.message+'</div>'; }
 };
 
 window.renderBatchLinkQueue = () => {
@@ -3140,9 +3186,10 @@ window.runAiDepletion = async () => {
     const menuItems = (window.recipes || []).filter(r => r.type === 'Menu');
     if (menuItems.length === 0) return statusDiv.innerHTML = `<p style="color:var(--orange);">⚠️ No Menu Recipes built in the Hub yet!</p>`;
     statusDiv.innerHTML = `<p style="color:var(--brand-accent); font-weight:bold;">🤖 AI is translating Lightspeed data...</p>`;
+    window.showLoadingOverlay('🤖 AI is analyzing POS data...');
     const prompt = `Extract items and Quantity Sold from this POS table. Return ONLY JSON: { "results": [ { "rawName": "Exact POS Item Name", "qtySold": 42 } ] } Text: ${rawText}`;
     try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
+        const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
@@ -3163,8 +3210,9 @@ window.runAiDepletion = async () => {
                 window.pendingMap.unknown.push({ posName: res.rawName, qtySold: res.qtySold });
             }
         });
+        window.hideLoadingOverlay();
         window.renderDepletionConfirmation();
-    } catch (e) { statusDiv.innerHTML = `<p style="color:var(--red);">API Error: ${e.message}</p>`; }
+    } catch (e) { window.hideLoadingOverlay(); statusDiv.innerHTML = `<p style="color:var(--red);">API Error: ${e.message}</p>`; }
 };
 
 window.renderDepletionConfirmation = () => {
@@ -3391,8 +3439,9 @@ window._parseImageInvoice = async (file) => {
 // Gemini Vision API call (for scanned/image invoices)
 window._parseVisionInvoice = async (base64ImageArray) => {
     const statusEl = document.getElementById('invoice-status');
+    window.showLoadingOverlay('🤖 AI is reading invoice images...');
     const apiKey = window.getApiKey();
-    if (!apiKey) { statusEl.innerHTML = '<span style="color:var(--red);">No API key set.</span>'; return; }
+    if (!apiKey) { window.hideLoadingOverlay(); statusEl.innerHTML = '<span style="color:var(--red);">No API key set.</span>'; return; }
 
     const parts = [
         {
@@ -3434,8 +3483,10 @@ Be thorough. Extract every product line. Use 0 for missing prices. Use empty str
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.pendingInvoiceData = JSON.parse(rawJson);
         statusEl.innerHTML = `<span style="color:var(--green);">✓ AI extracted ${window.pendingInvoiceData.items.length} line items. Review below.</span>`;
+        window.hideLoadingOverlay();
         window._renderInvoiceReview();
     } catch (err) {
+        window.hideLoadingOverlay();
         statusEl.innerHTML = `<span style="color:var(--red);">Vision API error: ${err.message}</span>`;
     }
 };
@@ -3443,8 +3494,9 @@ Be thorough. Extract every product line. Use 0 for missing prices. Use empty str
 // Gemini Text API call (for text-layer PDFs)
 window._parseTextInvoice = async (rawText) => {
     const statusEl = document.getElementById('invoice-status');
+    window.showLoadingOverlay('🤖 AI is extracting invoice data...');
     const apiKey = window.getApiKey();
-    if (!apiKey) { statusEl.innerHTML = '<span style="color:var(--red);">No API key set.</span>'; return; }
+    if (!apiKey) { window.hideLoadingOverlay(); statusEl.innerHTML = '<span style="color:var(--red);">No API key set.</span>'; return; }
 
     const prompt = `You are an invoice data extraction AI. Extract ALL line items from this invoice text.
 Return ONLY valid JSON in this exact structure:
@@ -3480,8 +3532,10 @@ ${rawText}`;
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.pendingInvoiceData = JSON.parse(rawJson);
         statusEl.innerHTML = `<span style="color:var(--green);">✓ AI extracted ${window.pendingInvoiceData.items.length} line items. Review below.</span>`;
+        window.hideLoadingOverlay();
         window._renderInvoiceReview();
     } catch (err) {
+        window.hideLoadingOverlay();
         statusEl.innerHTML = `<span style="color:var(--red);">AI error: ${err.message}</span>`;
     }
 };
@@ -3979,8 +4033,9 @@ window.runAiAllergenScan = async () => {
     const prompt = `You are an allergen detection AI for a restaurant. For each recipe, identify the following allergens and dietary flags that ARE PRESENT: GF (gluten free), DF (dairy free), VG (vegan), V (vegetarian), NF (nut free), SF (shellfish free), EF (egg free), SPICY, contains: Gluten, Dairy, Eggs, Nuts, Shellfish, Fish, Soy, Sesame.
 Return ONLY JSON: { "results": [ { "id": "recipe_id", "allergens": ["GF", "contains: Dairy"] } ] }
 Recipes: ${JSON.stringify(recipeData)}`;
+    window.showLoadingOverlay('🤖 AI scanning allergens across all recipes...');
     try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
+        const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
@@ -3993,9 +4048,10 @@ Recipes: ${JSON.stringify(recipeData)}`;
             if (recipe) recipe.allergens = res.allergens;
         });
         window.saveToDisk();
+        window.hideLoadingOverlay();
         statusDiv.innerHTML = `<div class="card" style="border-left:4px solid var(--green); padding:12px; color:var(--green); font-weight:bold;">✓ Allergen scan complete. Matrix updated.</div>`;
         window.showView('allergens');
-    } catch (e) { statusDiv.innerHTML = `<div class="card" style="border-left:4px solid var(--red); padding:12px; color:var(--red);">AI Error: ${e.message}</div>`; }
+    } catch (e) { window.hideLoadingOverlay(); statusDiv.innerHTML = `<div class="card" style="border-left:4px solid var(--red); padding:12px; color:var(--red);">AI Error: ${e.message}</div>`; }
 };
 
 window.renderSheetGenView = () => {
@@ -4025,12 +4081,13 @@ window.generateRunSheet = async () => {
     const outputDiv = document.getElementById('run-sheet-output');
     if (!rawText.trim()) return window.showToast("Paste booking data first.", "error");
     outputDiv.innerHTML = `<p style="text-align:center; color:#666;">🤖 Generating run sheet...</p>`;
+    window.showLoadingOverlay('🤖 Generating run sheet...');
     const prompt = `You are a hospitality operations AI for Bar Wa Izakaya in Hobart. Generate a professional run sheet from this booking data.
 Format as clean HTML using only inline styles (white background, black text — this will be printed). 
 Include: date/time, pax count, booking name, special requirements, staff notes. Group by time slot. Add a staff checklist section at the end.
 Booking data: ${rawText}`;
     try {
-        const apiKey = window.getApiKey(); if (!apiKey) return;
+        const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -4038,8 +4095,9 @@ Booking data: ${rawText}`;
         const data = await response.json(); if (data.error) throw new Error(data.error.message);
         const text = data.candidates[0].content.parts[0].text;
         outputDiv.innerHTML = text.replace(/^```html/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
+        window.hideLoadingOverlay();
         window.showToast("Run sheet generated!");
-    } catch (e) { outputDiv.innerHTML = `<p style="color:red;">Error: ${e.message}</p>`; }
+    } catch (e) { window.hideLoadingOverlay(); outputDiv.innerHTML = `<p style="color:red;">Error: ${e.message}</p>`; }
 };
 
 window.checkRecipeMargins = () => {
