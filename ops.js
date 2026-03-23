@@ -417,6 +417,23 @@ window.resetAllStock = () => {
     });
 };
 
+window.exportInventoryCSV = () => {
+    const items = (window.inventoryItems || []).filter(i => window.invFilters.filter === 'Archived' ? i.archived : !i.archived);
+    if (!items.length) return window.showToast('No items to export.', 'error');
+    const headers = ['Name','Category','Subcategory','Supplier','SKU','Buy Price','Buy Unit','Yield','Use Unit','Current Stock','PAR Weekday','PAR Weekend','Location'];
+    const rows = items.map(i => [
+        i.name||'', i.category||'', i.subcategory||'', i.supplier||'', i.sku||'',
+        i.price||0, i.buyUnit||'', i.yield||1, i.useUnit||'', i.stock||0,
+        i.parWeekday||0, i.parWeekend||0, i.location||''
+    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'inventory-' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    window.showToast(items.length + ' items exported.');
+};
+
 window.invFilters = window.invFilters || { search: '', filter: 'Active', groupBy: 'Category' };
 window._invSelected = window._invSelected || new Set();
 
@@ -545,6 +562,7 @@ window.renderInventoryView = () => {
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
                 <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
+                <button onclick="window.exportInventoryCSV()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">📥 Export CSV</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>

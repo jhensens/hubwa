@@ -125,7 +125,21 @@ window.closeModal = () => {
     document.body.style.overflow = '';
 };
 
-// --- 2b. AUTOFOCUS ON MODAL OPEN ---
+// --- 2b. KEYBOARD SHORTCUTS ---
+document.addEventListener('keydown', (e) => {
+    // Esc → close modal
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('global-modal-overlay');
+        if (overlay && overlay.style.display !== 'none') { window.closeModal(); e.preventDefault(); return; }
+    }
+    const mod = e.metaKey || e.ctrlKey;
+    // Cmd/Ctrl + S → save
+    if (mod && e.key === 's') { e.preventDefault(); if (window.saveToDisk) window.saveToDisk(); if (window.showToast) window.showToast('Saved.'); return; }
+    // Cmd/Ctrl + K → focus search
+    if (mod && e.key === 'k') { e.preventDefault(); const si = document.getElementById('global-search-input'); if (si) { si.focus(); si.select(); } return; }
+});
+
+// --- 2c. AUTOFOCUS ON MODAL OPEN ---
 // After modal opens, focus first visible input/textarea/select
 window._autoFocusModal = () => {
     setTimeout(() => {
@@ -715,39 +729,48 @@ window.importData = (event) => {
     reader.readAsText(file);
 };
 
-// --- 5. GLOBAL TOAST NOTIFICATIONS ---
-window.showToast = (msg, type = "success") => {
-    const existing = document.getElementById('hub-toast');
-    if(existing) existing.remove();
-    
-    const toast = document.createElement('div');
-    toast.id = 'hub-toast';
-    toast.innerText = msg;
-    toast.style.position = 'fixed';
-    toast.style.bottom = '20px';
-    toast.style.left = '50%';
-    toast.style.transform = 'translateX(-50%)';
-    toast.style.background = type === 'error' ? 'var(--red)' : 'var(--green)';
-    toast.style.color = 'white';
-    toast.style.padding = '12px 24px';
-    toast.style.borderRadius = '30px';
-    toast.style.fontWeight = 'bold';
-    toast.style.fontSize = '14px';
-    toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
-    toast.style.zIndex = '10000';
-    toast.style.animation = 'slideUp 0.3s ease forwards';
-    
+// --- 5. GLOBAL TOAST NOTIFICATIONS (stacking) ---
+window._getToastContainer = () => {
+    let c = document.getElementById('hub-toast-container');
+    if (!c) {
+        c = document.createElement('div');
+        c.id = 'hub-toast-container';
+        c.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column-reverse;gap:8px;align-items:center;pointer-events:none;';
+        document.body.appendChild(c);
+    }
     // Add keyframes only once
     if (!document.getElementById('toast-keyframes')) {
-        const style = document.createElement('style');
-        style.id = 'toast-keyframes';
-        style.innerHTML = '@keyframes slideUp { from { bottom: -50px; opacity: 0; } to { bottom: 20px; opacity: 1; } } @keyframes slideDown { from { bottom: 20px; opacity: 1; } to { bottom: -50px; opacity: 0; } }';
-        document.head.appendChild(style);
+        const s = document.createElement('style'); s.id = 'toast-keyframes';
+        s.innerHTML = '@keyframes toastIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes toastOut{from{transform:translateY(0);opacity:1}to{transform:translateY(20px);opacity:0}}';
+        document.head.appendChild(s);
     }
-    
-    document.body.appendChild(toast);
-    setTimeout(() => { toast.style.animation = 'slideDown 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+    return c;
 };
+window.showToast = (msg, type = "success") => {
+    const container = window._getToastContainer();
+    // Max 3 visible — remove oldest
+    while (container.children.length >= 3) container.lastChild.remove();
+    const toast = document.createElement('div');
+    toast.innerText = msg;
+    toast.style.cssText = 'background:' + (type === 'error' ? 'var(--red)' : 'var(--green)') + ';color:white;padding:12px 24px;border-radius:30px;font-weight:bold;font-size:14px;box-shadow:0 10px 25px rgba(0,0,0,0.5);animation:toastIn 0.3s ease forwards;pointer-events:auto;white-space:nowrap;';
+    container.insertBefore(toast, container.firstChild);
+    setTimeout(() => { toast.style.animation = 'toastOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+};
+
+// --- THEME TOGGLE ---
+window.toggleTheme = () => {
+    const isLight = document.body.classList.toggle('light-mode');
+    localStorage.setItem('hubTheme', isLight ? 'light' : 'dark');
+    const btn = document.getElementById('btn-theme');
+    if (btn) btn.innerHTML = isLight ? '☀️ Light Mode' : '🌙 Dark Mode';
+};
+// Apply saved theme on load
+(function() {
+    if (localStorage.getItem('hubTheme') === 'light') {
+        document.body.classList.add('light-mode');
+        setTimeout(() => { const btn = document.getElementById('btn-theme'); if (btn) btn.innerHTML = '☀️ Light Mode'; }, 100);
+    }
+})();
 
 // --- 6. VIEW ROUTER ---
 window.currentView = 'dashboard';
@@ -759,10 +782,12 @@ window.showView = (view) => {
     }
     
     window.currentView = view;
+    // Auto-close mobile sidebar on navigation
+    const sb = document.querySelector('.sidebar'); if (sb) sb.classList.remove('mobile-open');
     const content = document.getElementById('mainContent');
     const viewTitle = document.getElementById('viewTitle');
     if (!content) return;
-    
+
     // Update Sidebar Active State & Header Title
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     const activeNav = Array.from(document.querySelectorAll('.nav-item')).find(el => el.getAttribute('onclick') === `window.showView('${view}')`);
@@ -879,6 +904,12 @@ window.globalSearch = (query) => {
     return results.slice(0, 15);
 };
 
+window._highlightMatch = (text, query) => {
+    if (!query || !text) return text;
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp('(' + escaped + ')', 'gi'), '<mark style="background:var(--purple);color:#fff;border-radius:2px;padding:0 2px;">$1</mark>');
+};
+
 window.renderGlobalSearchResults = (query) => {
     const resultsDiv = document.getElementById('global-search-results');
     if (!resultsDiv) return;
@@ -896,7 +927,9 @@ window.renderGlobalSearchResults = (query) => {
     Object.keys(grouped).forEach(type => {
         html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 15px 4px;font-weight:bold;">' + (typeLabels[type]||type) + '</div>';
         grouped[type].forEach(r => {
-            html += '<div onclick="' + r.action + ';document.getElementById(\'global-search-results\').style.display=\'none\';document.getElementById(\'global-search-input\').value=\'\';" style="padding:10px 15px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background 0.15s;border-bottom:1px solid var(--border);" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'\'"><span style="font-size:16px;">' + r.icon + '</span><div><div style="font-size:13px;font-weight:500;">' + r.label + '</div><div style="font-size:11px;color:var(--text-muted);">' + r.sub + '</div></div></div>';
+            const hl = window._highlightMatch(r.label, query);
+            const hlSub = window._highlightMatch(r.sub, query);
+            html += '<div onclick="' + r.action + ';document.getElementById(\'global-search-results\').style.display=\'none\';document.getElementById(\'global-search-input\').value=\'\';" style="padding:10px 15px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background 0.15s;border-bottom:1px solid var(--border);" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'\'"><span style="font-size:16px;">' + r.icon + '</span><div><div style="font-size:13px;font-weight:500;">' + hl + '</div><div style="font-size:11px;color:var(--text-muted);">' + hlSub + '</div></div></div>';
         });
     });
     resultsDiv.innerHTML = html;

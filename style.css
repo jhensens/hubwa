@@ -566,3 +566,24 @@ table .btn {
     .notif-panel { width: calc(100vw - 30px); right: -10px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Light Mode Override */
+body.light-mode {
+    --bg-main: #f3f4f6;
+    --sidebar-bg: #1e1e2e;
+    --sidebar-hover: #2a2a3e;
+    --card-bg: #ffffff;
+    --border: #e5e7eb;
+    --brand-dark: #111827;
+    --brand-accent: #6b7280;
+    --text-main: #111827;
+    --text-muted: #6b7280;
+}
+body.light-mode .main-header { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
+body.light-mode .search-bar { background: #f3f4f6; border-color: #e5e7eb; color: #111827; }
+body.light-mode .input-box { background: #f9fafb; border-color: #d1d5db; color: #111827; }
+body.light-mode .tag-pill { background: #e5e7eb; color: #374151; }
+body.light-mode .tag-pill.active { background: #3b82f6; color: white; }
+body.light-mode details summary { background: #f9fafb !important; color: #111827 !important; }
+body.light-mode table th { background: #f3f4f6 !important; color: #6b7280 !important; }
+body.light-mode table td { border-color: #e5e7eb !important; }

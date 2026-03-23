@@ -1212,6 +1212,22 @@ window.removeShiftItem = (type, i) => {
 };
 
 window._complianceTab = window._complianceTab || 'temps';
+window.exportTempLogCSV = () => {
+    const logs = window.tempLogs || [];
+    if (!logs.length) return window.showToast('No temperature logs to export.', 'error');
+    const headers = ['Date/Time','Unit','Temperature (°C)','Staff','Corrective Action','Status'];
+    const rows = logs.map(t => [
+        t.time||'', t.unit||'', t.value||'', t.staff||'', t.action||'',
+        (Number(t.value) > 5 || Number(t.value) < -25) ? 'FAIL' : 'PASS'
+    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'temp-logs-' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    window.showToast(logs.length + ' temp logs exported.');
+};
+
 window.renderComplianceView = function() {
     const E = window.esc;
     const tab = window._complianceTab || 'temps';
@@ -1227,7 +1243,11 @@ window.renderComplianceView = function() {
         content = `<div class="card" style="border-top:5px solid var(--blue);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
                 <h3 style="margin:0;">Fridge/Freezer Temp Log</h3>
-                <button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">⚙️ Setup Units</button>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="window.exportTempLogCSV()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">📥 Export CSV</button>
+                    <button onclick="window.print()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">🖨️ Print</button>
+                    <button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">⚙️ Setup Units</button>
+                </div>
             </div>
             ${(window.fridgeUnits||[]).length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">🌡️</div><div style="font-size:13px;">No fridge units configured. Click Setup Units to add your coolrooms and fridges.</div></div>' : `
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:15px;">
