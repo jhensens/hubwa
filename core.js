@@ -67,6 +67,20 @@ window.esc = function(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 };
 
+// --- 1c. URL SANITIZER (Block javascript: and data: injection) ---
+window.safeUrl = function(url) {
+    if (!url || typeof url !== 'string') return '#';
+    const trimmed = url.trim().toLowerCase();
+    if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:text/html') || trimmed.startsWith('vbscript:')) return '#';
+    return url;
+};
+
+// Escape a string for safe use inside onclick attribute single quotes
+window.escAttr = function(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+};
+
 // --- 2. GLOBAL MODAL SYSTEM (Zero Context Switching) ---
 window.openModal = (titleHtml, bodyHtml) => {
     const overlay = document.getElementById('global-modal-overlay');

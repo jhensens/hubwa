@@ -853,8 +853,8 @@ window.editOnbTemplates = () => {
         html += `<div style="margin-bottom:20px;"><h3 style="color:var(--brand-dark); border-bottom:2px solid var(--border); padding-bottom:5px;">${esc(role)}</h3>`;
         Object.keys(window.onboardingTemplates[role]).forEach(phase => {
             html += `<h5 style="margin-top:15px; color:var(--brand-accent);">${esc(phase)}</h5>`;
-            window.onboardingTemplates[role][phase].forEach((task, tIdx) => { html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg-main); font-size:13px;"><span>${esc(task.label)} ${task.isUpload ? '<span style="color:var(--blue); font-size:10px; border:1px solid var(--blue); padding:2px 4px; border-radius:4px; margin-left:5px;">Upload Required</span>' : ''}</span><button onclick="window.delOnbTask('${role}', '${phase}', ${tIdx})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">&times;</button></div>`; });
-            html += `<div style="display:flex; gap:10px; margin-top:10px;"><input type="text" id="nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}" class="input-box" placeholder="Add new task..." style="flex:1; margin:0;"><button onclick="window.addOnbTask('${role}', '${phase}')" class="btn btn-green">Add Task</button></div>`;
+            window.onboardingTemplates[role][phase].forEach((task, tIdx) => { html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg-main); font-size:13px;"><span>${esc(task.label)} ${task.isUpload ? '<span style="color:var(--blue); font-size:10px; border:1px solid var(--blue); padding:2px 4px; border-radius:4px; margin-left:5px;">Upload Required</span>' : ''}</span><button onclick="window.delOnbTask('${escAttr(role)}', '${escAttr(phase)}', ${tIdx})" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">&times;</button></div>`; });
+            html += `<div style="display:flex; gap:10px; margin-top:10px;"><input type="text" id="nt-${role.replace(/\s/g,'')}-${phase.replace(/\s/g,'')}" class="input-box" placeholder="Add new task..." style="flex:1; margin:0;"><button onclick="window.addOnbTask('${escAttr(role)}', '${escAttr(phase)}')" class="btn btn-green">Add Task</button></div>`;
         });
         html += `</div>`;
     });
@@ -1352,7 +1352,7 @@ window.delFridge = (i) => { window.fridgeUnits.splice(i,1); window.saveToDisk();
 
 window.editChecklists = () => {
     let html = `<div style="display:flex; gap:10px; margin-bottom:20px;"><input type="text" id="new-cat" class="input-box" placeholder="New Category (e.g. Weekly Deep Clean)" style="margin:0;"><button onclick="window.addChecklistCat()" class="btn btn-blue">Add Category</button></div><div style="max-height:60vh; overflow-y:auto; padding-right:10px;">`;
-    Object.keys(window.masterChecklists || {}).forEach(cat => { html += `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><h4 style="margin:0; color:var(--brand-accent);">${esc(cat)}</h4><button onclick="window.delChecklistCat('${cat.replace(/'/g,"\\'")}')" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; text-decoration:underline;">Delete Category</button></div>${(window.masterChecklists[cat] || []).map((item, idx) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);"><span style="font-size:13px;">${esc(item)}</span><button onclick="window.delChecklistItem('${cat.replace(/'/g,"\\'")}', ${idx})" style="color:var(--red); background:none; border:none; cursor:pointer;">&times;</button></div>`).join('')}<div style="display:flex; gap:10px; margin-top:15px;"><input type="text" id="add-item-${cat.replace(/\s/g,'')}" class="input-box" placeholder="New task..." style="margin:0; font-size:12px; padding:6px;"><button onclick="window.addChecklistItem('${cat.replace(/'/g,"\\'")}' )" class="btn btn-green" style="padding:6px 12px; font-size:11px;">Add Task</button></div></div>`; });
+    Object.keys(window.masterChecklists || {}).forEach(cat => { html += `<div style="background:var(--bg-main); padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><h4 style="margin:0; color:var(--brand-accent);">${esc(cat)}</h4><button onclick="window.delChecklistCat('${escAttr(cat)}')" style="color:var(--red); background:none; border:none; cursor:pointer; font-size:11px; text-decoration:underline;">Delete Category</button></div>${(window.masterChecklists[cat] || []).map((item, idx) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);"><span style="font-size:13px;">${esc(item)}</span><button onclick="window.delChecklistItem('${escAttr(cat)}', ${idx})" style="color:var(--red); background:none; border:none; cursor:pointer;">&times;</button></div>`).join('')}<div style="display:flex; gap:10px; margin-top:15px;"><input type="text" id="add-item-${cat.replace(/\s/g,'')}" class="input-box" placeholder="New task..." style="margin:0; font-size:12px; padding:6px;"><button onclick="window.addChecklistItem('${escAttr(cat)}')" class="btn btn-green" style="padding:6px 12px; font-size:11px;">Add Task</button></div></div>`; });
     html += `</div>`;
     window.openModal("⚙️ Edit Checklists", html);
 };
@@ -1550,7 +1550,7 @@ window.renderSafeView = function() {
                     ${d.expiry ? (st.label === 'EXPIRED' ? '⚠️ Expired: ' : st.label === 'Expiring' ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
                     <span style="background:${st.color};color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">${st.label}</span>
                 </p>
-                ${d.data ? `<a href="${d.data}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">📄 View / Download</a>` : d.link ? `<a href="${d.link}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
+                ${d.data ? `<a href="${window.safeUrl(d.data)}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">📄 View / Download</a>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
             </div>`;
         }).join('')}</div>`;
     }
@@ -1572,7 +1572,7 @@ window.renderSafeView = function() {
                     <td style="padding:10px 12px;font-size:12px;color:${st.color};">${d.expiry || '—'}</td>
                     <td style="padding:10px 12px;"><span style="background:${st.color};color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;">${st.label}</span></td>
                     <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
-                        ${d.data ? `<a href="${d.data}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">📄 View</a>` : d.link ? `<a href="${d.link}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">🔗 Open</a>` : ''}
+                        ${d.data ? `<a href="${window.safeUrl(d.data)}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">📄 View</a>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">🔗 Open</a>` : ''}
                         <button onclick="window.editDocForm(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-right:4px;">✏️</button>
                         <button onclick="window.delDoc(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;color:var(--red);">&times;</button>
                     </td>
@@ -2589,236 +2589,397 @@ window.renderPrimeCostView = () => {
 };
 
 window.renderManagerHub = () => {
+    // Fetch weather async
     fetch('https://api.open-meteo.com/v1/forecast?latitude=-42.8794&longitude=147.3294&current=temperature_2m,weather_code')
         .then(res => res.json())
         .then(data => {
-            if(document.getElementById('hobart-temp')) {
-                document.getElementById('hobart-temp').innerText = `${Math.round(data.current.temperature_2m)}°C`;
-                document.getElementById('hobart-desc').innerText = "Live from Hobart Satellite";
-            }
-        }).catch(e => console.log("Weather fetch failed"));
-
-    const isWeekend = [0, 5, 6].includes(new Date().getDay());
-    const lowStock = (window.inventoryItems || []).filter(i => {
-        if(i.archived) return false;
-        let parTarget = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
-        return i.stock < parTarget;
-    });
-    let stockHtml = lowStock.length > 0 ? lowStock.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>⚠️ <strong>${esc(i.name)}</strong></span> <span>(${Number(i.stock).toFixed(1)} / ${isWeekend ? i.parWeekend : i.parWeekday})</span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">All inventory is at or above PAR.</p>';
-
-    const openTickets = (window.defectLogs || []).filter(d => d.status === 'Open');
-    let ticketHtml = openTickets.length > 0 ? openTickets.map(t => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🛠️ <strong>${esc(t.item)}</strong>: ${esc(t.desc)}</div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">No open maintenance issues.</p>';
-
-    const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
-    let marginHtml = marginAlerts.length > 0 ? marginAlerts.map(a => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border); display:flex; justify-content:space-between;"><span>📉 <strong>${esc(a.name)}</strong></span> <span><strong>${a.currentGp}%</strong> <small>($${a.cost})</small></span></div>`).join('') : '<p style="color:var(--green); font-size:14px; font-weight:bold; margin:0;">Menu margins are healthy.</p>';
+            const el = document.getElementById('pulse-weather');
+            if (el) el.innerHTML = Math.round(data.current.temperature_2m) + '°C <span style="font-size:11px;color:var(--text-muted);margin-left:4px;">Hobart</span>';
+        }).catch(() => {});
 
     const today = new Date();
     const todayStr = today.toLocaleDateString();
-    
-    const eqAlerts = (window.equipmentData || []).filter(e => {
-        if(!e.lastService || !e.interval) return false;
-        const nextService = new Date(e.lastService); nextService.setMonth(nextService.getMonth() + Number(e.interval));
-        return ((nextService - today) / (1000 * 3600 * 24)) <= 14;
-    });
-    let eqHtml = eqAlerts.length > 0 ? eqAlerts.map(e => `<div style="color:var(--orange); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚙️ <strong>${esc(e.name)}</strong> is due for service soon.</div>`).join('') : '';
+    const isWeekend = [0, 5, 6].includes(today.getDay());
+    const hour = today.getHours();
+    const E = window.esc;
 
-    const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
-    const overdueTasks = (window.rotationalTasks || []).filter(t => {
+    // --- DATE HELPERS ---
+    const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const parseDate = (str) => { const m = str && str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])) : null; };
+    const getSalesForDate = (d) => (window.salesData||[]).find(s => s.date === fmtDate(d));
+
+    // --- TODAY'S DATA ---
+    const todaySales = getSalesForDate(today);
+    const todayRev = todaySales ? Number(todaySales.total||0) : 0;
+    const todayCovers = todaySales ? Number(todaySales.covers||0) : 0;
+    const todayWages = todaySales ? Number(todaySales.wages||0) : 0;
+    const hasTodayData = !!todaySales && todayRev > 0;
+
+    // --- LAST WEEK SAME DAY ---
+    const lwDate = new Date(today); lwDate.setDate(lwDate.getDate() - 7);
+    const lwSales = getSalesForDate(lwDate);
+    const lwRev = lwSales ? Number(lwSales.total||0) : 0;
+    const revDelta = lwRev > 0 && hasTodayData ? ((todayRev - lwRev) / lwRev * 100) : null;
+
+    // --- 7-DAY HISTORY ---
+    const last7 = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(today); d.setDate(d.getDate() - i);
+        const s = getSalesForDate(d);
+        last7.push({ date: d, rev: s ? Number(s.total||0) : 0, covers: s ? Number(s.covers||0) : 0, wages: s ? Number(s.wages||0) : 0 });
+    }
+    const maxRev7 = Math.max(...last7.map(d => d.rev), 1);
+    const avg7Rev = last7.reduce((s,d)=>s+d.rev,0) / 7;
+
+    // --- STOCK HEALTH ---
+    const activeItems = (window.inventoryItems||[]).filter(i => !i.archived);
+    const lowStock = activeItems.filter(i => {
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return par > 0 && i.stock < par;
+    });
+    const totalInvValue = activeItems.reduce((s,i) => s + ((i.price||0)*(i.stock||0)), 0);
+    const itemsWithPar = activeItems.filter(i => (isWeekend?(i.parWeekend||i.par):( i.parWeekday||i.par)) > 0);
+    const stockHealthPct = itemsWithPar.length > 0 ? Math.round((1 - lowStock.length / itemsWithPar.length) * 100) : 100;
+
+    // --- COMPLIANCE ---
+    const todayTemps = (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr));
+    const breaches = todayTemps.filter(t => parseFloat(t.value) > 5);
+    const shiftType = hour < 14 ? 'opening' : hour < 20 ? 'preservice' : 'closing';
+    const activeList = ((window.shiftChecklistItems||{})[shiftType]) || [];
+    const checkSaved = JSON.parse(localStorage.getItem('shiftCheck_' + todayStr + '_' + shiftType) || '[]');
+    const checkPct = activeList.length > 0 ? Math.round(checkSaved.length / activeList.length * 100) : 100;
+
+    // --- TASKS ---
+    const freqMap = { 'Weekly':7, 'Fortnightly':14, 'Monthly':30, 'Quarterly':90 };
+    const overdueTasks = (window.rotationalTasks||[]).filter(t => {
         if (t.dueDateMode === 'specific') return t.specificDueDate && new Date(t.specificDueDate) <= today;
-        if (t.lastLogIso) return ((today - new Date(t.lastLogIso)) / 86400000) >= (freqMap[t.freq] || 7);
-        if (t.anchorDate) {
-            const ad = new Date(t.anchorDate);
-            if (ad > today) return false;
-            const ds = (today - ad) / 86400000;
-            const iv = freqMap[t.freq] || 7;
-            const intervalsPassed = Math.floor(ds / iv);
-            const nextDue = new Date(ad.getTime() + intervalsPassed * iv * 86400000);
-            return today >= nextDue;
-        }
+        if (t.lastLogIso) return ((today - new Date(t.lastLogIso)) / 86400000) >= (freqMap[t.freq]||7);
+        if (t.anchorDate) { const ad = new Date(t.anchorDate); if (ad > today) return false; const ds = (today-ad)/86400000; const iv = freqMap[t.freq]||7; return today >= new Date(ad.getTime()+Math.floor(ds/iv)*iv*86400000); }
         return true;
     });
-    let taskHtml = overdueTasks.length > 0 ? overdueTasks.map(t => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">🔄 <strong>${esc(t.name)}</strong> (${t.freq}) is DUE NOW.</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">All rotational tasks are current.</p>';
+    const openTickets = (window.defectLogs||[]).filter(d => d.status !== 'Resolved');
 
-    const todayIncidents = (window.incidentLogs || []).filter(i => i.time.includes(todayStr));
-    let incHtml = todayIncidents.length > 0 ? todayIncidents.map(i => `<div style="color:var(--red); font-size:13px; padding:8px 0; border-bottom:1px dashed var(--border);">⚠️ <strong>${esc(i.staff)}</strong>: ${esc(i.desc)}</div>`).join('') : '<p style="color:var(--text-muted); font-size:13px; margin:0;">No incidents logged today.</p>';
-
-    // Simple COGS Estimate metric
-    let totalInvValue = (window.inventoryItems||[]).reduce((sum, item) => sum + ((item.price||0) * (item.stock||0)), 0);
-
-
-    // Today's takings
-    const parseDate = (str) => { const m = str && str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])) : new Date(str); };
-    const todayDateStr = today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
-    const todaySales = (window.salesData||[]).find(s => s.date === todayDateStr);
-    const todayTotal = todaySales ? Number(todaySales.total||0) : null;
-    const todayTakingsStr = todayTotal !== null ? '$' + todayTotal.toLocaleString('en-AU',{minimumFractionDigits:0,maximumFractionDigits:0}) : 'Not logged';
-    const todayTakingsMeta = todayTotal !== null ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">EFTPOS: $'+(todaySales.eftpos||0)+' · Cash: $'+(todaySales.cash||0)+(todaySales.wages?(' · Wages: '+((todaySales.wages/todaySales.total)*100).toFixed(0)+'%'):'')+'</div>' : '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">No takings entry for today</div>';
-    const todayTakingsBtn = todayTotal === null ? '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="width:100%;font-size:13px;padding:8px;">+ Log Today\'s Takings</button>' : '<button onclick="window.manualTakingsForm(todaySales.date)" class="btn btn-outline" style="width:100%;font-size:13px;padding:8px;">✏️ Edit Today\'s Entry</button>';
-
-    // Expiring documents alert
-    const expiringDocs = (window.digitalSafe || []).filter(d => {
-        if (!d.expiry) return false;
-        const exp = new Date(d.expiry);
-        const daysLeft = (exp - today) / (1000 * 3600 * 24);
-        return daysLeft <= 30 && daysLeft > -30;
+    // --- TEAM ---
+    const activeStaff = (window.staffDirectory||[]).filter(s => s.status !== 'Inactive');
+    const expiringQuals = [];
+    activeStaff.forEach(s => {
+        (window.qualificationTypes||[]).forEach(qt => {
+            const q = (s.qualifications||{})[qt.id];
+            if (!q || !q.expiry) return;
+            const dl = (new Date(q.expiry) - today) / 86400000;
+            if (dl < 0) expiringQuals.push({ staff: s.name, qual: qt.name, status: 'expired' });
+            else if (dl <= 30) expiringQuals.push({ staff: s.name, qual: qt.name, status: 'expiring', days: Math.ceil(dl) });
+        });
     });
-    const expiredCount = expiringDocs.filter(d => new Date(d.expiry) < today).length;
-    const expiringSoonCount = expiringDocs.length - expiredCount;
-    let expiringHtml = '';
-    if (expiringDocs.length > 0) {
-        expiringHtml = '<div class="card" style="border-left:4px solid var(--red);padding:15px;margin-bottom:20px;">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-                '<strong style="color:var(--red);">📋 Document Alerts</strong>' +
-                '<button onclick="window.showView(\'safe\')"\ class="btn btn-outline" style="font-size:11px;padding:4px 10px;">View Safe</button>' +
-            '</div>' +
-            expiringDocs.map(d => {
-                const isExpired = new Date(d.expiry) < today;
-                return '<div style="font-size:13px;padding:6px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;">' +
-                    '<span>' + (isExpired ? '🔴 ' : '🟡 ') + esc(d.name) + '</span>' +
-                    '<span style="color:' + (isExpired ? 'var(--red)' : 'var(--orange)') + ';font-size:12px;">' + (isExpired ? 'EXPIRED' : 'Expires ' + d.expiry) + '</span>' +
-                '</div>';
-            }).join('') +
-        '</div>';
+
+    // --- MARGIN ALERTS ---
+    const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
+
+    // --- COGS (from today's wastage + depletion) ---
+    const todayWastage = (window.wastageLogs||[]).filter(w => w.time && w.time.includes(todayStr)).reduce((s,w)=>s+(w.value||0), 0);
+
+    // --- LABOR % ---
+    const laborPct = hasTodayData && todayWages > 0 ? (todayWages / todayRev * 100) : null;
+    const wageTarget = (window.salesTargets||{}).wageTarget || 30;
+
+    // --- HEALTH SCORE (0-100) ---
+    let healthScore = 100;
+    // Revenue: -20 if no data today
+    if (!hasTodayData) healthScore -= 15;
+    // Labor: -15 if over target
+    if (laborPct && laborPct > wageTarget) healthScore -= Math.min(15, Math.round((laborPct - wageTarget) / 2));
+    // Stock: -20 max based on % below par
+    healthScore -= Math.round((1 - stockHealthPct/100) * 20);
+    // Compliance: -15 for breaches, -10 for incomplete checklist
+    if (breaches.length > 0) healthScore -= Math.min(15, breaches.length * 5);
+    if (checkPct < 100) healthScore -= Math.round((1 - checkPct/100) * 10);
+    // Tasks: -3 per overdue
+    healthScore -= Math.min(15, overdueTasks.length * 3);
+    // Tickets: -2 per open
+    healthScore -= Math.min(10, openTickets.length * 2);
+    healthScore = Math.max(0, Math.min(100, healthScore));
+    const scoreColor = healthScore >= 80 ? 'var(--green)' : healthScore >= 50 ? 'var(--orange)' : 'var(--red)';
+    const scoreLabel = healthScore >= 80 ? 'Running Smoothly' : healthScore >= 50 ? 'Needs Attention' : 'Issues Detected';
+
+    // --- SVG HELPERS ---
+    const sparkline = (data, w, h, color) => {
+        if (!data.length || data.every(d => d === 0)) return '';
+        const max = Math.max(...data, 1);
+        const pts = data.map((v,i) => (i/(data.length-1))*w + ',' + (h - (v/max)*h*0.85)).join(' ');
+        return '<svg width="'+w+'" height="'+h+'" style="display:block;"><polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    };
+
+    const scoreRing = (pct, size, stroke, color) => {
+        const r = (size - stroke) / 2;
+        const c = Math.PI * 2 * r;
+        const offset = c - (pct / 100) * c;
+        return '<svg width="'+size+'" height="'+size+'" style="transform:rotate(-90deg);">' +
+            '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="var(--border)" stroke-width="'+stroke+'"/>' +
+            '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+stroke+'" stroke-linecap="round" stroke-dasharray="'+c+'" stroke-dashoffset="'+offset+'" style="transition:stroke-dashoffset 1s ease;"/>' +
+        '</svg>';
+    };
+
+    // --- EXPIRING DOCS ---
+    const expiringDocs = (window.digitalSafe||[]).filter(d => { if (!d.expiry) return false; const dl = (new Date(d.expiry)-today)/86400000; return dl <= 30 && dl > -30; });
+
+    // --- RECENT HANDOVER ---
+    const recentHandover = (window.handoverLogs||[]).slice().reverse().find(h => {
+        const hd = parseDate(h.date);
+        return hd && (today - hd) / 86400000 <= 2;
+    });
+
+    // --- TODAY'S FOCUS ---
+    const focusItems = [];
+    breaches.forEach(t => focusItems.push({pri:0, icon:'🌡️', color:'var(--red)', text:E((t.unit||'Unit')+' temp breach: '+t.value+'°C'), view:'compliance'}));
+    overdueTasks.forEach(t => focusItems.push({pri:1, icon:'🔄', color:'var(--red)', text:E(t.name)+' is overdue', view:'tasks'}));
+    expiringDocs.filter(d => (new Date(d.expiry)-today)/86400000 <= 7).forEach(d => {
+        const dl = (new Date(d.expiry)-today)/86400000;
+        focusItems.push({pri:2, icon:'📄', color:dl<0?'var(--red)':'var(--orange)', text:E(d.name)+' — '+(dl<0?'EXPIRED':'Expires in '+Math.ceil(dl)+'d'), view:'safe'});
+    });
+    lowStock.slice(0,4).forEach(i => focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:E(i.name)+' below par', view:'inventory'}));
+    if (lowStock.length > 4) focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:'+'+(lowStock.length-4)+' more below par', view:'inventory'});
+    openTickets.slice(0,2).forEach(t => focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:E(t.item)+' — open ticket', view:'maintenance'}));
+    expiringQuals.slice(0,2).forEach(q => focusItems.push({pri:5, icon:'🎓', color:q.status==='expired'?'var(--red)':'var(--orange)', text:E(q.staff)+' — '+E(q.qual)+(q.status==='expired'?' EXPIRED':' expires in '+q.days+'d'), view:'orientation'}));
+    marginAlerts.slice(0,2).forEach(a => focusItems.push({pri:6, icon:'📉', color:'var(--red)', text:E(a.name)+' margin: '+a.currentGp+'%', view:'margins'}));
+    focusItems.sort((a,b) => a.pri - b.pri);
+
+    // =====================================================
+    // BUILD HTML
+    // =====================================================
+    let html = '<div style="max-width:1100px;margin:auto;">';
+
+    // --- HERO BANNER ---
+    const gradBg = healthScore >= 80 ? 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.05))' :
+                   healthScore >= 50 ? 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.03))' :
+                   'linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.04))';
+    html += '<div style="background:'+gradBg+';border:1px solid var(--border);border-radius:14px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;">';
+    // Left: venue info
+    html += '<div style="flex:1;min-width:200px;">';
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;">Venue Pulse</div>';
+    html += '<h2 style="margin:4px 0 0;font-size:22px;color:var(--text-main);">' + today.toLocaleDateString('en-AU',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) + '</h2>';
+    html += '<div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">';
+    html += '<span style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue);border:1px solid rgba(59,130,246,0.2);">' + (isWeekend?'Weekend':'Weekday') + ' PAR</span>';
+    html += '<span style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(139,92,246,0.1);color:var(--purple);border:1px solid rgba(139,92,246,0.2);">' + ({opening:'Morning',preservice:'Pre-Service',closing:'Closing'}[shiftType]) + ' Shift</span>';
+    html += '<span id="pulse-weather" style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue);border:1px solid rgba(59,130,246,0.2);">--°C</span>';
+    html += '</div></div>';
+    // Right: health score ring
+    html += '<div style="text-align:center;position:relative;width:110px;height:110px;flex-shrink:0;">';
+    html += scoreRing(healthScore, 110, 8, scoreColor);
+    html += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(0deg);text-align:center;">';
+    html += '<div style="font-size:28px;font-weight:800;color:'+scoreColor+';line-height:1;">'+healthScore+'</div>';
+    html += '<div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-top:2px;">'+scoreLabel+'</div>';
+    html += '</div></div>';
+    html += '</div>';
+
+    // --- FINANCIAL ROW (3 cards) ---
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:14px;">';
+
+    // Card 1: Today's Revenue
+    html += '<div class="card" style="padding:20px;border-top:3px solid var(--green);">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+    html += '<div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Today\'s Revenue</div>';
+    html += '<div style="font-size:32px;font-weight:800;color:' + (hasTodayData?'var(--green)':'var(--text-muted)') + ';margin:4px 0;">' + (hasTodayData ? '$'+todayRev.toLocaleString('en-AU',{maximumFractionDigits:0}) : '—') + '</div>';
+    if (hasTodayData && todaySales) {
+        html += '<div style="font-size:11px;color:var(--text-muted);">EFT $'+(todaySales.eftpos||0)+' · Cash $'+(todaySales.cash||0)+(todaySales.meandu?' · Me&u $'+todaySales.meandu:'')+'</div>';
+    }
+    if (revDelta !== null) {
+        const arrow = revDelta >= 0 ? '↑' : '↓';
+        const dColor = revDelta >= 0 ? 'var(--green)' : 'var(--red)';
+        html += '<div style="font-size:12px;margin-top:4px;color:'+dColor+';font-weight:600;">'+arrow+' '+Math.abs(revDelta).toFixed(0)+'% vs last '+lwDate.toLocaleDateString('en-AU',{weekday:'short'})+'</div>';
+    }
+    html += '</div>';
+    html += '<div style="align-self:center;">'+sparkline(last7.map(d=>d.rev), 80, 40, '#10b981')+'</div>';
+    html += '</div>';
+    if (!hasTodayData) html += '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="width:100%;margin-top:12px;font-size:13px;">+ Log Takings</button>';
+    else html += '<button onclick="window.manualTakingsForm()" class="btn btn-outline" style="width:100%;margin-top:12px;font-size:12px;">✏️ Edit Entry</button>';
+    html += '</div>';
+
+    // Card 2: Labor Cost
+    html += '<div class="card" style="padding:20px;border-top:3px solid '+(laborPct!==null && laborPct > wageTarget?'var(--red)':'var(--blue)')+'">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Labor Cost</div>';
+    if (laborPct !== null) {
+        const labColor = laborPct <= wageTarget ? 'var(--green)' : laborPct <= wageTarget+5 ? 'var(--orange)' : 'var(--red)';
+        html += '<div style="font-size:32px;font-weight:800;color:'+labColor+';margin:4px 0;">'+laborPct.toFixed(0)+'%</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);">$'+todayWages.toLocaleString('en-AU',{maximumFractionDigits:0})+' wages on $'+todayRev.toLocaleString('en-AU',{maximumFractionDigits:0})+' rev</div>';
+        html += '<div style="margin-top:8px;background:var(--bg-main);border-radius:6px;height:6px;overflow:hidden;"><div style="height:100%;border-radius:6px;width:'+Math.min(laborPct/50*100,100)+'%;background:'+labColor+';"></div></div>';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Target: '+wageTarget+'%</div>';
+    } else {
+        html += '<div style="font-size:32px;font-weight:800;color:var(--text-muted);margin:4px 0;">—</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);">Log takings with wages to see labor %</div>';
+    }
+    // Tanda data
+    if (window._tandaData) html += '<div style="font-size:11px;color:var(--purple);margin-top:8px;">⏱️ Tanda: '+window._tandaData.staffCount+' staff · $'+window._tandaData.estimatedWageCost+'</div>';
+    html += '</div>';
+
+    // Card 3: Daily P&L Estimate
+    html += '<div class="card" style="padding:20px;border-top:3px solid var(--purple);">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Daily P&L Estimate</div>';
+    if (hasTodayData) {
+        const estCogs = todayWastage; // Will grow as depletion/stock tracking matures
+        const estProfit = todayRev - todayWages - estCogs;
+        const profitColor = estProfit > 0 ? 'var(--green)' : 'var(--red)';
+        html += '<div style="font-size:32px;font-weight:800;color:'+profitColor+';margin:4px 0;">$'+Math.round(estProfit).toLocaleString('en-AU')+'</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);line-height:1.8;">';
+        html += 'Revenue: <strong style="color:var(--green);">$'+todayRev.toLocaleString('en-AU',{maximumFractionDigits:0})+'</strong><br>';
+        html += 'Labor: <strong style="color:var(--red);">-$'+todayWages.toLocaleString('en-AU',{maximumFractionDigits:0})+'</strong><br>';
+        if (estCogs > 0) html += 'Wastage: <strong style="color:var(--orange);">-$'+estCogs.toFixed(0)+'</strong><br>';
+        html += '</div>';
+        if (todayCovers > 0) html += '<div style="font-size:11px;color:var(--blue);margin-top:4px;">👥 '+todayCovers+' covers · $'+(todayRev/todayCovers).toFixed(0)+' avg spend</div>';
+    } else {
+        html += '<div style="font-size:32px;font-weight:800;color:var(--text-muted);margin:4px 0;">—</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);">Revenue data needed for P&L</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // --- OPERATIONAL PULSE (4 compact metric cards) ---
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">';
+
+    // Stock Health
+    const shColor = stockHealthPct >= 90 ? 'var(--green)' : stockHealthPct >= 70 ? 'var(--orange)' : 'var(--red)';
+    html += '<div class="card" style="padding:14px;cursor:pointer;" onclick="window.showView(\'inventory\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">📦 Stock</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:'+shColor+';">'+stockHealthPct+'%</div>';
+    html += '</div>';
+    html += '<div style="background:var(--bg-main);border-radius:4px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;width:'+stockHealthPct+'%;background:'+shColor+';border-radius:4px;"></div></div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">' + lowStock.length + ' below PAR · $' + totalInvValue.toLocaleString('en-AU',{maximumFractionDigits:0}) + ' value</div>';
+    html += '</div>';
+
+    // Compliance
+    const compColor = breaches.length > 0 ? 'var(--red)' : checkPct === 100 ? 'var(--green)' : 'var(--orange)';
+    html += '<div class="card" style="padding:14px;cursor:pointer;" onclick="window.showView(\'compliance\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">🌡️ Compliance</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:'+compColor+';">'+(breaches.length>0?breaches.length+'!':checkPct+'%')+'</div>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+todayTemps.length+' temp logs · '+(breaches.length>0?'<span style="color:var(--red);font-weight:600;">'+breaches.length+' breach'+(breaches.length===1?'':'es')+'</span>':'0 breaches')+'</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Checklist: '+checkPct+'% complete</div>';
+    html += '</div>';
+
+    // Tasks
+    const taskColor = overdueTasks.length === 0 ? 'var(--green)' : 'var(--red)';
+    html += '<div class="card" style="padding:14px;cursor:pointer;" onclick="window.showView(\'tasks\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">🔄 Tasks</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:'+taskColor+';">'+overdueTasks.length+'</div>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+(overdueTasks.length === 0 ? 'All current' : overdueTasks.length+' overdue')+'</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+(window.rotationalTasks||[]).length+' total tasks tracked</div>';
+    html += '</div>';
+
+    // Team
+    html += '<div class="card" style="padding:14px;cursor:pointer;" onclick="window._staffHubTab=\'qualifications\';window.showView(\'orientation\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">👥 Team</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:'+(expiringQuals.length>0?'var(--orange)':'var(--green)')+';">'+activeStaff.length+'</div>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+(expiringQuals.length > 0 ? '<span style="color:var(--orange);font-weight:600;">'+expiringQuals.length+' qual alert'+(expiringQuals.length===1?'':'s')+'</span>' : 'All qualifications OK')+'</div>';
+    if (openTickets.length > 0) html += '<div style="font-size:11px;color:var(--orange);margin-top:2px;">🛠️ '+openTickets.length+' open ticket'+(openTickets.length===1?'':'s')+'</div>';
+    html += '</div>';
+    html += '</div>';
+
+    // --- 7-DAY REVENUE CHART ---
+    html += '<div class="card" style="padding:20px;margin-bottom:14px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+    html += '<div><div style="font-size:14px;font-weight:700;">7-Day Revenue</div><div style="font-size:11px;color:var(--text-muted);">Avg $'+Math.round(avg7Rev).toLocaleString('en-AU')+'/day</div></div>';
+    html += '<button onclick="window.showView(\'sales\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button>';
+    html += '</div>';
+    // Bar chart
+    html += '<div style="display:flex;gap:6px;align-items:flex-end;height:120px;">';
+    last7.forEach((d, i) => {
+        const h = maxRev7 > 0 ? Math.max(4, (d.rev / maxRev7) * 100) : 4;
+        const isToday = i === 6;
+        const dayLabel = d.date.toLocaleDateString('en-AU',{weekday:'short'}).substring(0,3);
+        const barColor = isToday ? 'var(--green)' : d.rev > 0 ? 'var(--blue)' : 'var(--border)';
+        html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">';
+        html += '<div style="font-size:10px;color:var(--text-muted);">'+(d.rev>0?'$'+Math.round(d.rev/1000)+'k':'')+'</div>';
+        html += '<div style="width:100%;height:'+h+'px;background:'+barColor+';border-radius:4px 4px 0 0;min-height:4px;transition:height 0.5s ease;'+(isToday?'box-shadow:0 0 8px rgba(16,185,129,0.3);':'')+'"></div>';
+        html += '<div style="font-size:10px;color:'+(isToday?'var(--green)':'var(--text-muted)')+';font-weight:'+(isToday?'700':'400')+';">'+dayLabel+'</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    // Covers sparkline if data exists
+    const coversData = last7.map(d => d.covers);
+    if (coversData.some(c => c > 0)) {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">';
+        html += '<div style="font-size:12px;color:var(--text-muted);">👥 Covers trend (7d)</div>';
+        html += sparkline(coversData, 120, 30, '#3b82f6');
+        html += '<div style="font-size:12px;color:var(--blue);font-weight:600;">'+coversData.reduce((s,c)=>s+c,0)+' total</div>';
+        html += '</div>';
+    }
+    html += '</div>';
+
+    // --- TODAY'S FOCUS + QUICK ACTIONS (2-column) ---
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px;">';
+
+    // Focus
+    html += '<div class="card" style="padding:0;overflow:hidden;'+(focusItems.length > 0 ? 'border-top:3px solid var(--red);' : 'border-top:3px solid var(--green);')+'">';
+    if (focusItems.length === 0) {
+        html += '<div style="padding:24px;text-align:center;"><span style="font-size:28px;">✅</span><div style="font-weight:600;color:var(--green);margin-top:8px;">All Clear</div><div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Nothing needs your attention</div></div>';
+    } else {
+        html += '<div style="padding:12px 16px;background:rgba(239,68,68,0.04);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">';
+        html += '<strong style="font-size:13px;">🎯 Today\'s Focus</strong>';
+        html += '<span style="font-size:11px;color:var(--text-muted);">'+focusItems.length+' item'+(focusItems.length===1?'':'s')+'</span></div>';
+        focusItems.slice(0,6).forEach(f => {
+            html += '<div class="focus-item" onclick="window.showView(\''+f.view+'\')" style="border-bottom:1px solid var(--border);">';
+            html += '<span style="font-size:14px;">'+f.icon+'</span><span style="flex:1;color:'+f.color+';font-size:13px;">'+f.text+'</span>';
+            html += '<span style="color:var(--text-muted);font-size:10px;">→</span></div>';
+        });
+    }
+    html += '</div>';
+
+    // Quick Actions
+    html += '<div class="card" style="padding:16px;">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:12px;">⚡ Quick Actions</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">';
+    const actions = [
+        {label:'Stock Count', icon:'✅', view:'stock-count', color:'var(--green)'},
+        {label:'Log Temps', icon:'🌡️', view:'compliance', color:'var(--blue)'},
+        {label:'Wastage', icon:'🗑️', view:'wastage', color:'var(--orange)'},
+        {label:'Handover', icon:'📝', onclick:'window.newHandoverForm()', color:'var(--purple)'},
+        {label:'Incident', icon:'⚠️', view:'incidents', color:'var(--red)'},
+        {label:'Covers', icon:'👥', onclick:'window.logCoversForm()', color:'var(--blue)'},
+        {label:'EOD Run', icon:'✨', onclick:'window.openAiDepletion()', color:'var(--purple)'},
+        {label:'All Venues', icon:'🏢', onclick:'window.renderCrossVenueDashboard()', color:'var(--green)'}
+    ];
+    actions.forEach(a => {
+        const click = a.onclick || "window.showView('"+a.view+"')";
+        html += '<button onclick="'+click+'" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:'+a.color+';cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;" onmouseover="this.style.borderColor=\''+a.color+'\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+        html += '<span style="font-size:16px;">'+a.icon+'</span>'+a.label+'</button>';
+    });
+    html += '</div></div>';
+    html += '</div>';
+
+    // --- RECENT HANDOVER ---
+    if (recentHandover) {
+        html += '<div class="card" style="padding:16px;margin-bottom:14px;border-left:3px solid var(--purple);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<div style="font-size:13px;font-weight:700;">📝 Latest Handover</div>';
+        html += '<div style="font-size:11px;color:var(--text-muted);">'+E(recentHandover.date||'')+' · '+E(recentHandover.shift||'')+' · '+E(recentHandover.manager||'')+'</div>';
+        html += '</div>';
+        if (recentHandover.urgent) html += '<div style="color:var(--red);font-size:12px;font-weight:600;margin-bottom:6px;">🚨 URGENT FLAG</div>';
+        const handoverText = recentHandover.debrief || recentHandover.notes || '';
+        html += '<div style="font-size:13px;color:var(--text-muted);line-height:1.6;max-height:80px;overflow:hidden;">'+E(handoverText.substring(0,300))+(handoverText.length>300?'...':'')+'</div>';
+        html += '<button onclick="window.showView(\'handover\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;margin-top:8px;">View All Handovers →</button>';
+        html += '</div>';
     }
 
-    // Shift checklist progress
-    const hour = today.getHours();
-    const shiftType = hour < 14 ? 'opening' : hour < 20 ? 'preservice' : 'closing';
-    const shiftLabel = { opening:'Opening', preservice:'Pre-Service', closing:'Closing' }[shiftType];
-    const allLists = window.shiftChecklistItems || {};
-    const activeList = allLists[shiftType] || [];
-    const checkStateKey = 'shiftCheck_' + today.toLocaleDateString() + '_' + shiftType;
-    const checkSaved = JSON.parse(localStorage.getItem(checkStateKey) || '[]');
-    const checkPct = activeList.length > 0 ? Math.round(checkSaved.length / activeList.length * 100) : 0;
-    const checkColor = checkPct === 100 ? 'var(--green)' : checkPct > 50 ? 'var(--orange)' : 'var(--red)';
-    const checklistWidget = activeList.length > 0 ? '<div class="card" style="border-top:4px solid ' + checkColor + ';padding:15px;margin-bottom:20px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-            '<strong>' + shiftLabel + ' Checklist</strong>' +
-            '<span style="font-size:20px;font-weight:bold;color:' + checkColor + ';">' + checkPct + '%</span>' +
-        '</div>' +
-        '<div style="background:var(--bg-main);border-radius:6px;height:8px;overflow:hidden;">' +
-            '<div style="background:' + checkColor + ';height:100%;border-radius:6px;width:' + checkPct + '%;transition:width 0.3s;"></div>' +
-        '</div>' +
-        '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text-muted);">' +
-            '<span>' + checkSaved.length + ' / ' + activeList.length + ' done</span>' +
-            '<button onclick="window.showView(\'compliance\')"\ style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;">Go to Checklist →</button>' +
-        '</div>' +
-    '</div>' : '';
+    // --- MARGIN ALERTS ---
+    if (marginAlerts.length > 0) {
+        html += '<div class="card" style="padding:16px;margin-bottom:14px;border-left:3px solid var(--purple);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<div style="font-size:13px;font-weight:700;">📉 Margin Alerts <span style="font-size:11px;background:var(--purple);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;">'+marginAlerts.length+'</span></div>';
+        html += '<button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button></div>';
+        marginAlerts.slice(0,4).forEach(a => {
+            html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span style="color:var(--red);">'+E(a.name)+'</span><span><strong>'+a.currentGp+'%</strong> GP</span></div>';
+        });
+        html += '</div>';
+    }
 
-    return `<div style="max-width: 1100px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h2 style="margin:0; font-size:22px;">Command Center</h2>
-            <div style="text-align:right;">
-                <div style="color:var(--brand-dark); font-size:16px; font-weight:bold;">${today.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                <div style="color:var(--brand-accent); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin-top:2px;">Targeting ${isWeekend ? 'WEEKEND' : 'WEEKDAY'} Pars</div>
-            </div>
-        </div>
-        <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; background:var(--card-bg); padding:8px 12px; border-radius:8px; border:1px solid var(--border);">
-            <span style="font-size:11px; color:var(--text-muted); align-self:center; margin-right:4px; text-transform:uppercase; letter-spacing:1px;">Quick Log:</span>
-            <button onclick="window.showView('stock-count')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">✅ Stock Count</button>
-            <button onclick="window.showView('compliance')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">🌡️ Temps</button>
-            <button onclick="window.showView('wastage')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--orange); color:var(--orange);">🗑️ Wastage</button>
-            <button onclick="window.newHandoverForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">📝 Handover</button>
-            <button onclick="window.showView('incidents')" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--red); color:var(--red);">⚠️ Incident</button>
-            <button onclick="window.manualTakingsForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">💰 Takings</button>
-            <button onclick="window.logCoversForm()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--blue); color:var(--blue);">👥 Covers</button>
-            <button onclick="window.openAiDepletion()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--purple); color:var(--purple);">✨ EOD</button>
-            <button onclick="window.generateWeeklySummary()" class="btn btn-outline" style="font-size:12px; padding:6px 12px;">📊 Weekly Summary</button>
-            <button onclick="window.renderCrossVenueDashboard()" class="btn btn-outline" style="font-size:12px; padding:6px 12px; border-color:var(--green); color:var(--green);">🏢 All Venues</button>
-        </div>
-    
-    ${(function(){
-        // C2: Today's Focus — auto-prioritized alert list
-        const focusItems = [];
-        // HACCP breaches today
-        const todayStr2 = today.toLocaleDateString();
-        (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr2) && parseFloat(t.value) > 5).forEach(t => {
-            focusItems.push({pri:0, icon:'🌡️', color:'var(--red)', text:esc((t.unit||'Unit')+' temp breach: '+t.value+'°C'), view:'compliance'});
-        });
-        // Overdue rotational tasks
-        overdueTasks.forEach(t => {
-            focusItems.push({pri:1, icon:'🔄', color:'var(--red)', text:esc(t.name)+' is overdue ('+t.freq+')', view:'tasks'});
-        });
-        // Documents expiring within 7 days
-        (window.digitalSafe||[]).forEach(d => {
-            if (!d.expiry) return;
-            const daysLeft = (new Date(d.expiry) - today) / 86400000;
-            if (daysLeft <= 7 && daysLeft > -30) {
-                const lbl = daysLeft < 0 ? 'EXPIRED' : 'Expires in '+Math.ceil(daysLeft)+' days';
-                focusItems.push({pri:2, icon:'📄', color: daysLeft<0?'var(--red)':'var(--orange)', text:esc(d.name)+' — '+lbl, view:'safe'});
-            }
-        });
-        // Stock below par
-        lowStock.slice(0,5).forEach(i => {
-            focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:esc(i.name)+' below par ('+Number(i.stock).toFixed(1)+')', view:'inventory'});
-        });
-        if (lowStock.length > 5) focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:'+'+(lowStock.length-5)+' more items below par', view:'inventory'});
-        // Open maintenance tickets
-        openTickets.slice(0,3).forEach(t => {
-            focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:esc(t.item)+' needs fixing', view:'maintenance'});
-        });
-        // Unresolved incidents this week
-        const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
-        (window.incidentLogs||[]).filter(i => new Date(i.time) >= weekAgo).slice(0,2).forEach(i => {
-            focusItems.push({pri:5, icon:'⚠️', color:'var(--orange)', text:'Incident: '+esc(i.staff)+' — '+esc((i.desc||'').substring(0,40)), view:'incidents'});
-        });
-        focusItems.sort((a,b)=>a.pri-b.pri);
-        if (focusItems.length === 0) {
-            return '<div class="card" style="border-left:4px solid var(--green);padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">✅</span><div><strong style="color:var(--green);">All clear</strong><div style="font-size:13px;color:var(--text-muted);">Nothing needs your attention right now</div></div></div>';
-        }
-        return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;border-top:4px solid var(--red);">' +
-            '<div style="padding:12px 16px;background:rgba(239,68,68,0.06);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
-                '<strong style="font-size:14px;">🎯 Today\'s Focus</strong>' +
-                '<span style="font-size:12px;color:var(--text-muted);">'+focusItems.length+' item'+(focusItems.length===1?'':'s')+' need attention</span>' +
-            '</div>' +
-            focusItems.slice(0,8).map(f =>
-                '<div class="focus-item" onclick="window.showView(\''+f.view+'\')" style="border-bottom:1px solid var(--border);">' +
-                    '<span style="font-size:16px;">'+f.icon+'</span>' +
-                    '<span style="flex:1;color:'+f.color+';">'+f.text+'</span>' +
-                    '<span style="color:var(--text-muted);font-size:11px;">→</span>' +
-                '</div>'
-            ).join('') +
-        '</div>';
-    })()}
-    ${expiringHtml}
-    ${checklistWidget}
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
-        <div class="card" style="border-top:5px solid var(--green); padding:20px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
-                <div>
-                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">💰 Today's Takings</div>
-                    <div style="font-size:28px;font-weight:bold;color:var(--green);margin-top:4px;">${todayTakingsStr}</div>
-                    ${todayTakingsMeta}
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🌤️ Hobart</div>
-                    <div id="hobart-temp" style="font-size:20px;font-weight:bold;color:var(--blue);margin-top:4px;">--°C</div>
-                </div>
-            </div>
-            ${todayTakingsBtn}
-        </div>
-        <div class="card" style="background: rgba(139, 92, 246, 0.1); border:1px solid rgba(139, 92, 246, 0.3);">
-            <h3 style="margin-top:0; color:var(--purple); display:flex; justify-content:space-between;"><span>🚨 Margin Alerts</span> <span style="font-size:12px; background:var(--purple); color:white; padding:2px 8px; border-radius:10px;">${marginAlerts.length}</span></h3>
-            <div style="max-height:120px; overflow-y:auto; padding-right:10px;">${marginHtml}</div>
-        </div>
-        <div class="card" style="border-top:5px solid var(--green); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
-            <h3 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">Est. Stock Value</h3>
-            <div style="font-size:30px; font-weight:bold; color:var(--green); margin:8px 0;">$${totalInvValue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</div>
-            <p style="margin:0; color:var(--text-muted); font-size:12px;">Based on Current Buy Units</p>
-        </div>
-    </div>
-
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
-        <div class="card" style="border-top:5px solid var(--blue);"><h3 style="margin-top:0; color:var(--brand-accent);">📦 Inventory Alerts <small style="color:var(--text-muted); font-weight:normal;">(${isWeekend?'Weekend':'Weekday'} PAR)</small></h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${stockHtml}</div></div>
-        <div class="card" style="border-top:5px solid var(--orange);"><h3 style="margin-top:0; color:var(--brand-accent);">🛠️ Maintenance Tickets</h3><div style="max-height:200px; overflow-y:auto; padding-right:10px;">${ticketHtml}${eqHtml}</div></div>
-    </div>
-    
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
-        <div class="card" style="border-top:5px solid var(--red);"><h3 style="margin-top:0; color:var(--brand-accent);">🔄 Overdue Tasks</h3><div style="max-height:150px; overflow-y:auto; padding-right:10px;">${taskHtml}</div></div>
-        <div class="card" style="border-top:5px solid var(--red);"><h3 style="margin-top:0; color:var(--brand-accent);">⚠️ Today's Incidents</h3><div style="max-height:150px; overflow-y:auto; padding-right:10px;">${incHtml}</div></div>
-    </div>
-    
-    </div>`;
+    html += '</div>';
+    return html;
 };
 
 // --- 10. HANDOVER ---
@@ -3290,8 +3451,8 @@ window.renderRosterView = () => {
         let actualIndex = window.shiftRosters.length - 1 - i;
         let displayHtml = '';
         if (r.data) {
-            if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${r.data}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; } 
-            else { displayHtml = `<iframe src="${r.data}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
+            if (r.data.includes('.jpg') || r.data.includes('.png') || r.data.includes('.jpeg') || r.data.includes('image')) { displayHtml = `<img src="${window.safeUrl(r.data)}" style="max-width:100%; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);">`; }
+            else { displayHtml = `<iframe src="${window.safeUrl(r.data)}" style="width:100%; height:600px; border:none; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"></iframe>`; }
         }
         return `<div class="card" style="margin-bottom:14px; border-top: 4px solid var(--blue); padding:18px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><strong style="font-size:22px; color:var(--brand-dark);">${esc(r.name)}</strong><br><small style="color:var(--text-muted); margin-top:5px; display:block;">Uploaded: ${r.date}</small></div><div style="display:flex; gap:10px;">${r.data ? `<a href="${r.data}" target="_blank" download="${esc(r.name)}" class="btn btn-outline" style="text-decoration:none;">Download / Fullscreen</a>` : ''}<button onclick="window.deleteRoster(${actualIndex})" class="btn btn-red">Delete</button></div></div>${displayHtml}</div>`;
     }).join('')}</div>`;
