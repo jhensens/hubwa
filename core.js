@@ -609,34 +609,73 @@ window.loadTandaData = async () => {
         window._tandaDepartments = depts.map(d => ({ id: d.id, name: d.name || 'Unknown' }));
     }
 
-    // 3. Schedules (rostered / planned)
-    const schedData = await window.fetchTanda(
-        'schedules?from=' + dateStr + '&to=' + dateStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true'
+    // 3. Weekly roster — Mon to Sun of current week
+    const dayOfWeek = today.getDay(); // 0=Sun
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(today); weekStart.setDate(today.getDate() + mondayOffset);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+    const weekSchedData = await window.fetchTanda(
+        'schedules?from=' + weekStartStr + '&to=' + weekEndStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true'
     );
-    const schedules = schedData ? (Array.isArray(schedData) ? schedData : (schedData.schedules || [])) : [];
+    const weekSchedules = weekSchedData ? (Array.isArray(weekSchedData) ? weekSchedData : (weekSchedData.schedules || [])) : [];
+
+    // Parse today's schedules from the weekly pull
     let rosteredHours = 0, rosteredCost = 0, rosteredStaff = [];
-    schedules.forEach(s => {
+    // Build weekly roster grid: { date: [ { name, start, finish, hours, dept } ] }
+    const weeklyRoster = {};
+    for (let d = 0; d < 7; d++) {
+        const dt = new Date(weekStart); dt.setDate(weekStart.getDate() + d);
+        weeklyRoster[dt.toISOString().split('T')[0]] = [];
+    }
+
+    weekSchedules.forEach(s => {
         const hrs = window._tandaCalcHours(s);
-        rosteredHours += hrs;
-        if (s.cost) rosteredCost += Number(s.cost);
         const user = users.find(u => u.id === s.user_id);
         const name = (user && user.name) || s.user_name || ('Staff #' + (s.user_id || ''));
-        if (name) rosteredStaff.push({ name, hours: hrs > 0 ? hrs.toFixed(1) : 'Rostered', start: s.start_time || '' });
+        const dept = window._tandaDepartments.find(d => d.id === s.department_id);
+        const startTime = s.start_time || (s.start ? new Date(s.start * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '');
+        const finishTime = s.finish_time || (s.finish ? new Date(s.finish * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '');
+        // Determine date from start timestamp or from schedule date
+        let schedDate = dateStr;
+        if (s.start) { schedDate = new Date(s.start * 1000).toISOString().split('T')[0]; }
+        else if (s.date) { schedDate = s.date; }
+        if (weeklyRoster[schedDate]) {
+            weeklyRoster[schedDate].push({ name, start: startTime, finish: finishTime, hours: hrs.toFixed(1), dept: dept ? dept.name : '', userId: s.user_id });
+        }
+        // Accumulate today's totals
+        if (schedDate === dateStr) {
+            rosteredHours += hrs;
+            if (s.cost) rosteredCost += Number(s.cost);
+            rosteredStaff.push({ name, hours: hrs > 0 ? hrs.toFixed(1) : 'Rostered', start: startTime });
+        }
     });
 
-    // 4. Shifts (actual hours worked)
-    const shiftsData = await window.fetchTanda(
-        'shifts?from=' + dateStr + '&to=' + dateStr + '&show_costs=true'
+    // 4. Weekly shifts (actual hours worked)
+    const weekShiftsData = await window.fetchTanda(
+        'shifts?from=' + weekStartStr + '&to=' + weekEndStr + '&show_costs=true'
     );
-    const shifts = shiftsData ? (Array.isArray(shiftsData) ? shiftsData : (shiftsData.shifts || [])) : [];
+    const weekShifts = weekShiftsData ? (Array.isArray(weekShiftsData) ? weekShiftsData : (weekShiftsData.shifts || [])) : [];
     let actualHours = 0, actualCost = 0, actualStaff = [];
-    shifts.forEach(s => {
+    const weeklyActual = {};
+    weekShifts.forEach(s => {
         const hrs = window._tandaCalcHours(s);
-        actualHours += hrs;
-        if (s.cost) actualCost += Number(s.cost);
         const user = users.find(u => u.id === s.user_id);
         const name = (user && user.name) || ('Staff #' + (s.user_id || ''));
-        if (name) actualStaff.push({ name, hours: hrs.toFixed(1) });
+        let shiftDate = dateStr;
+        if (s.start) shiftDate = new Date(s.start * 1000).toISOString().split('T')[0];
+        if (!weeklyActual[shiftDate]) weeklyActual[shiftDate] = { hours: 0, cost: 0, count: 0 };
+        weeklyActual[shiftDate].hours += hrs;
+        if (s.cost) weeklyActual[shiftDate].cost += Number(s.cost);
+        weeklyActual[shiftDate].count++;
+        // Today's totals
+        if (shiftDate === dateStr) {
+            actualHours += hrs;
+            if (s.cost) actualCost += Number(s.cost);
+            actualStaff.push({ name, hours: hrs.toFixed(1) });
+        }
     });
 
     // 5. Clocked in right now
@@ -646,7 +685,7 @@ window.loadTandaData = async () => {
         const cArr = Array.isArray(clockedData) ? clockedData : (clockedData.users || []);
         clockedIn = cArr.map(u => {
             const name = u.name || ('Staff #' + u.id);
-            const since = u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const since = u.clocked_in_at ? new Date(u.clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
             return { name, since };
         });
     }
@@ -663,30 +702,78 @@ window.loadTandaData = async () => {
             return {
                 name: (user && user.name) || ('Staff #' + l.user_id),
                 from: l.start_date || l.from || '',
-                to: l.end_date || l.to || '',
+                to: l.finish_date || l.end_date || l.to || '',
                 type: l.leave_type || l.type || 'Leave',
                 status: l.status || 'approved'
             };
         });
     }
 
+    // 7. Leave balances
+    let leaveBalances = [];
+    const balData = await window.fetchTanda('leave_balances?user_ids=' + userIds);
+    if (balData) {
+        const bArr = Array.isArray(balData) ? balData : (balData.leave_balances || []);
+        leaveBalances = bArr.map(b => {
+            const user = users.find(u => u.id === b.user_id);
+            return { name: (user && user.name) || ('Staff #' + b.user_id), balance: b.balance || 0, typeId: b.leave_type_id };
+        });
+    }
+
+    // 8. Qualifications (RSA, Food Handler, etc.)
+    let qualifications = [];
+    const qualData = await window.fetchTanda('qualifications');
+    if (qualData) {
+        const qArr = Array.isArray(qualData) ? qualData : (qualData.qualifications || []);
+        qualifications = qArr.map(q => {
+            const user = users.find(u => u.id === q.user_id);
+            return {
+                name: (user && user.name) || ('Staff #' + q.user_id),
+                userId: q.user_id,
+                type: q.qualification_type || q.name || 'Unknown',
+                expiry: q.expiry_date || q.expiry || null,
+                issued: q.issue_date || null
+            };
+        });
+    }
+
+    // 9. Unavailability (next 14 days)
+    let unavailability = [];
+    const unavData = await window.fetchTanda('unavailability?from=' + dateStr + '&to=' + leaveEndStr);
+    if (unavData) {
+        const uArr = Array.isArray(unavData) ? unavData : (unavData.unavailability || []);
+        unavailability = uArr.map(u => {
+            const user = users.find(usr => usr.id === u.user_id);
+            return { name: (user && user.name) || ('Staff #' + u.user_id), from: u.start_date || '', to: u.finish_date || '', reason: u.reason || '', recurring: !!u.recurring };
+        });
+    }
+
     // Build combined data object
     window._tandaData = {
         date: dateStr,
-        // Rostered (planned)
+        // Rostered (planned) — today
         rosteredHours: rosteredHours.toFixed(1),
         estimatedWageCost: rosteredCost.toFixed(2),
         staffCount: rosteredStaff.length,
         staff: rosteredStaff,
-        // Actual (worked)
+        // Actual (worked) — today
         actualHours: actualHours.toFixed(1),
         actualWageCost: actualCost.toFixed(2),
         actualStaffCount: actualStaff.length,
         actualStaff: actualStaff,
+        // Weekly roster grid
+        weeklyRoster: weeklyRoster,
+        weeklyActual: weeklyActual,
+        weekStart: weekStartStr,
+        weekEnd: weekEndStr,
         // Live
         clockedIn: clockedIn,
-        // Leave
+        // Leave & availability
         upcomingLeave: upcomingLeave,
+        leaveBalances: leaveBalances,
+        unavailability: unavailability,
+        // Qualifications
+        qualifications: qualifications,
         // Meta
         lastUpdated: new Date().toLocaleTimeString(),
         userCount: users.length
@@ -758,8 +845,27 @@ window.syncTandaStaff = () => {
             added++;
         }
     });
+    // Sync qualifications from Tanda
+    let qualSynced = 0;
+    if (window._tandaData && window._tandaData.qualifications) {
+        window._tandaData.qualifications.forEach(function(tq) {
+            const staff = (window.staffDirectory || []).find(s => s.name && tq.name && s.name.toLowerCase().trim() === tq.name.toLowerCase().trim());
+            if (!staff) return;
+            if (!staff.qualifications) staff.qualifications = {};
+            // Map Tanda qual type to a slug
+            const slug = tq.type.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+            if (!staff.qualifications[slug] || (tq.expiry && !staff.qualifications[slug].expiry)) {
+                staff.qualifications[slug] = { expiry: tq.expiry || '', verified: true };
+                qualSynced++;
+            }
+            // Ensure qualification type exists in Hub
+            if (window.qualificationTypes && !window.qualificationTypes.find(qt => qt.id === slug)) {
+                window.qualificationTypes.push({ id: slug, name: tq.type, requiresExpiry: !!tq.expiry });
+            }
+        });
+    }
     window.saveToDisk();
-    window.showToast('Tanda sync: ' + added + ' added, ' + updated + ' updated.');
+    window.showToast('Tanda sync: ' + added + ' added, ' + updated + ' fields updated' + (qualSynced > 0 ? ', ' + qualSynced + ' quals synced' : '') + '.');
     if (window.currentView === 'orientation') window.showView('orientation');
 };
 

@@ -3502,8 +3502,115 @@ window.deleteSOP = (i) => {
 
 
 // --- 12. ROSTERS ---
+window._rosterTab = window._rosterTab || 'tanda';
+
+window._renderTandaRoster = (tabPills) => {
+    const E = window.esc;
+    const td = window._tandaData;
+    if (!td || !td.weeklyRoster) {
+        const noConn = !window.getTandaToken || !window.getTandaToken();
+        return '<div style="max-width:900px;margin:auto;"><div style="margin-bottom:12px;">' + tabPills + '</div>' +
+            '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">⏱️</div>' +
+            '<div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">' + (noConn ? 'Tanda Not Connected' : 'Loading Roster...') + '</div>' +
+            '<div style="font-size:13px;max-width:320px;margin:0 auto 16px;line-height:1.5;">' + (noConn ? 'Connect Tanda in Settings to see your live weekly roster here.' : 'Tanda data is loading. Try refreshing.') + '</div>' +
+            (noConn ? '<button onclick="window.openTandaSettings()" class="btn btn-purple">⏱️ Connect Tanda</button>' : '<button onclick="window.loadTandaData()" class="btn btn-outline">🔄 Refresh</button>') +
+            '</div></div>';
+    }
+
+    const days = Object.keys(td.weeklyRoster).sort();
+    const todayStr = td.date;
+    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    // Collect unique staff across the week
+    const allStaff = new Map();
+    days.forEach(d => {
+        (td.weeklyRoster[d] || []).forEach(s => {
+            if (!allStaff.has(s.name)) allStaff.set(s.name, {});
+            allStaff.get(s.name)[d] = s;
+        });
+    });
+    const staffNames = [...allStaff.keys()].sort();
+
+    // Weekly totals
+    let weekHours = 0, weekCost = 0;
+    days.forEach(d => {
+        const actual = td.weeklyActual && td.weeklyActual[d];
+        if (actual) { weekHours += actual.hours; weekCost += actual.cost; }
+        else { (td.weeklyRoster[d] || []).forEach(s => { weekHours += Number(s.hours) || 0; }); }
+    });
+
+    let html = '<div style="max-width:1100px;margin:auto;">';
+    html += '<div style="margin-bottom:12px;">' + tabPills + '</div>';
+
+    // Header
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">';
+    html += '<div><h2 style="margin:0;">⏱️ Live Roster</h2><div style="font-size:13px;color:var(--text-muted);margin-top:2px;">Week of ' + days[0] + ' to ' + days[6] + ' · ' + staffNames.length + ' staff · ' + weekHours.toFixed(0) + 'h' + (weekCost > 0 ? ' · $' + weekCost.toFixed(0) : '') + '</div></div>';
+    html += '<div style="display:flex;gap:8px;"><button onclick="window.showLoadingOverlay(\'Refreshing Tanda...\');window.loadTandaData().then(()=>window.hideLoadingOverlay())" class="btn btn-outline" style="font-size:12px;">🔄 Refresh</button></div>';
+    html += '</div>';
+
+    // Leave & unavailability alerts
+    if ((td.upcomingLeave || []).length > 0 || (td.unavailability || []).length > 0) {
+        html += '<div class="card" style="padding:12px;margin-bottom:12px;border-left:4px solid var(--orange);">';
+        (td.upcomingLeave || []).slice(0, 4).forEach(function(l) { html += '<div style="font-size:12px;color:var(--orange);margin-bottom:3px;">🏖️ ' + E(l.name) + ' — ' + E(l.type) + ' (' + l.from + ' to ' + l.to + ') <span style="color:var(--text-muted);">' + E(l.status) + '</span></div>'; });
+        (td.unavailability || []).slice(0, 4).forEach(function(u) { html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:3px;">🚫 ' + E(u.name) + ' unavailable ' + u.from + ' to ' + u.to + (u.reason ? ' — ' + E(u.reason) : '') + '</div>'; });
+        html += '</div>';
+    }
+
+    // Weekly grid table
+    html += '<div class="card" style="padding:0;overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px;">';
+    html += '<thead><tr style="background:#0a0a0c;"><th style="padding:8px 10px;text-align:left;color:var(--text-muted);font-size:11px;width:120px;border-bottom:1px solid var(--border);">STAFF</th>';
+    days.forEach(function(d, i) {
+        var isToday = d === todayStr;
+        var bg = isToday ? 'background:rgba(139,92,246,0.15);' : '';
+        var dayCount = (td.weeklyRoster[d] || []).length;
+        html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:' + (isToday ? 'var(--purple)' : 'var(--text-muted)') + ';border-bottom:1px solid var(--border);' + bg + '">' + dayNames[i] + '<br><span style="font-size:10px;font-weight:normal;">' + d.slice(5) + '</span><br><span style="font-size:10px;font-weight:normal;color:var(--text-muted);">' + dayCount + ' staff</span></th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    staffNames.forEach(function(name) {
+        var shifts = allStaff.get(name);
+        html += '<tr style="border-bottom:1px solid var(--border);">';
+        html += '<td style="padding:6px 10px;font-weight:600;white-space:nowrap;">' + E(name) + '</td>';
+        days.forEach(function(d) {
+            var isToday = d === todayStr;
+            var bg = isToday ? 'background:rgba(139,92,246,0.08);' : '';
+            var s = shifts[d];
+            if (s) {
+                var deptBadge = s.dept ? '<div style="font-size:9px;color:var(--purple);opacity:0.8;">' + E(s.dept) + '</div>' : '';
+                html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><div style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:3px 4px;font-size:11px;"><div style="font-weight:600;">' + s.start + '-' + s.finish + '</div><div style="font-size:10px;color:var(--text-muted);">' + s.hours + 'h</div>' + deptBadge + '</div></td>';
+            } else {
+                html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><span style="color:var(--border);">—</span></td>';
+            }
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Clocked in now
+    if ((td.clockedIn || []).length > 0) {
+        html += '<div class="card" style="padding:14px;margin-top:12px;border-left:4px solid var(--green);">';
+        html += '<div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:8px;">🟢 Currently On Floor (' + td.clockedIn.length + ')</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+        td.clockedIn.forEach(function(c) { html += '<span style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);padding:4px 10px;border-radius:20px;font-size:12px;">' + E(c.name) + (c.since ? ' <span style="color:var(--text-muted);font-size:10px;">since ' + c.since + '</span>' : '') + '</span>'; });
+        html += '</div></div>';
+    }
+
+    html += '</div>';
+    return html;
+};
+
 window.renderRosterView = () => {
-    return `<div style="max-width: 900px; margin: auto;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px"><div><h2 style="margin:0">🗓️ Shift Rosters</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Upload weekly roster PDFs or images for staff to view</div></div><label class="btn btn-blue" style="cursor:pointer;">+ Upload Roster PDF/Image<input type="file" id="roster-upload" accept="application/pdf,image/*" style="display:none;" onchange="window.handleRosterUpload(event)"></label></div>${(window.shiftRosters || []).length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🗓️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rosters uploaded</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Upload your weekly roster PDF or image for staff to view here</div></div>' : window.shiftRosters.slice().reverse().map((r, i) => {
+    const tab = window._rosterTab || 'tanda';
+    const tabPills = ['tanda', 'uploads'].map(t => {
+        const labels = { tanda: '⏱️ Tanda Live Roster', uploads: '📄 Uploaded Rosters' };
+        return '<span class="tag-pill ' + (tab === t ? 'active' : '') + '" onclick="window._rosterTab=\'' + t + '\';window.showView(\'rosters\');">' + labels[t] + '</span>';
+    }).join('');
+
+    if (tab === 'tanda') return window._renderTandaRoster(tabPills);
+
+    return `<div style="max-width: 900px; margin: auto;"><div style="margin-bottom:12px;">${tabPills}</div><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px"><div><h2 style="margin:0">📄 Uploaded Rosters</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Upload weekly roster PDFs or images for staff to view</div></div><label class="btn btn-blue" style="cursor:pointer;">+ Upload Roster PDF/Image<input type="file" id="roster-upload" accept="application/pdf,image/*" style="display:none;" onchange="window.handleRosterUpload(event)"></label></div>${(window.shiftRosters || []).length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🗓️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rosters uploaded</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Upload your weekly roster PDF or image for staff to view here</div></div>' : window.shiftRosters.slice().reverse().map((r, i) => {
         let actualIndex = window.shiftRosters.length - 1 - i;
         let displayHtml = '';
         if (r.data) {
