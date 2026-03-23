@@ -136,7 +136,8 @@ window._marginsTabBar = function(activeView) {
 window._orderTabBar = function(activeView) {
     const tabs = [
         { id: 'prep-list', label: '📝 Order List', view: 'prep-list' },
-        { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' }
+        { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' },
+        { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' }
     ];
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
         tabs.map(t => `<span class="tag-pill ${t.id===activeView?'active':''}" onclick="window.showView('${t.view}')">${t.label}</span>`).join('') +
@@ -436,6 +437,26 @@ window.exportInventoryCSV = () => {
 
 window.invFilters = window.invFilters || { search: '', filter: 'Active', groupBy: 'Category' };
 window._invSelected = window._invSelected || new Set();
+window._invHubTab = window._invHubTab || 'levels';
+
+window.renderInventoryHub = () => {
+    const tab = window._invHubTab;
+    const tabs = [
+        { id: 'levels', label: '📦 Stock Levels' },
+        { id: 'stocktake', label: '✅ Stocktake' },
+        { id: 'audit', label: '📋 Stock Audit' },
+        { id: 'par', label: '📊 PAR Editor' }
+    ];
+    const tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">' +
+        tabs.map(t => '<span class="tag-pill ' + (tab === t.id ? 'active' : '') + '" onclick="window._invHubTab=\'' + t.id + '\';window.showView(\'inventory\');">' + t.label + '</span>').join('') +
+    '</div>';
+    let content = '';
+    if (tab === 'levels') content = window.renderInventoryView ? window.renderInventoryView() : '';
+    else if (tab === 'stocktake') content = window.renderStocktakeView ? window.renderStocktakeView() : '';
+    else if (tab === 'audit') content = window.renderStockAuditView ? window.renderStockAuditView() : '';
+    else if (tab === 'par') content = window.renderParEditor ? window.renderParEditor() : '';
+    return '<div style="max-width:1100px;margin:auto;">' + tabBar + '</div>' + content;
+};
 
 window.renderInventoryView = () => {
     let isWeekend = [0, 5, 6].includes(new Date().getDay());
@@ -1272,6 +1293,29 @@ window._courseToStation = (course) => {
     if (c.includes('cocktail') || c.includes('mocktail') || c.includes('bar') || c.includes('batched')) return 'Bar';
     if (c.includes('prep') || c.includes('preparation')) return 'Prep';
     return 'Kitchen';
+};
+
+window._recHubTab = window._recHubTab || 'recipes';
+
+window.renderRecipeHub = () => {
+    const tab = window._recHubTab;
+    const tabs = [
+        { id: 'recipes', label: '⚖️ Recipes' },
+        { id: 'margins', label: '📊 Margins' },
+        { id: 'linker', label: '🔗 Ingredients' },
+        { id: 'allergens', label: '🧪 Allergens' },
+        { id: 'runsheet', label: '📄 Run Sheet' }
+    ];
+    const tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">' +
+        tabs.map(t => '<span class="tag-pill ' + (tab === t.id ? 'active' : '') + '" onclick="window._recHubTab=\'' + t.id + '\';window.showView(\'recipes\');">' + t.label + '</span>').join('') +
+    '</div>';
+    let content = '';
+    if (tab === 'recipes') content = window.renderRecipeView ? window.renderRecipeView() : '';
+    else if (tab === 'margins') content = window.renderMarginView ? window.renderMarginView() : '';
+    else if (tab === 'linker') content = window.renderAiBatchLinker ? window.renderAiBatchLinker() : '';
+    else if (tab === 'allergens') content = window.renderAllergenView ? window.renderAllergenView() : '';
+    else if (tab === 'runsheet') content = window.renderSheetGenView ? window.renderSheetGenView() : '';
+    return '<div style="max-width:1200px;margin:auto;">' + tabBar + '</div>' + content;
 };
 
 window.renderRecipeView = () => {
@@ -3318,6 +3362,7 @@ window._guessZoneFromName = (name) => {
 window.renderInvoiceView = () => {
     return `
     <div style="max-width: 1300px; margin: auto;">
+        ${window._orderTabBar('invoice')}
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
             <div>
                 <h2 style="margin:0">🧾 Invoice Ripper Pro</h2>

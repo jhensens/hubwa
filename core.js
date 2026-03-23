@@ -1082,10 +1082,30 @@ window.showView = (view) => {
     }
     
     try {
-        if (view === 'dashboard' && window.renderManagerHub) content.innerHTML = window.renderManagerHub();
-        else if (view === 'inventory' && window.renderInventoryView) content.innerHTML = window.renderInventoryView();
+        // --- INVENTORY HUB (absorbs stocktake, stock-audit, par-editor, stock-count) ---
+        if (view === 'inventory') { content.innerHTML = window.renderInventoryHub(); }
+        else if (view === 'stocktake') { window._invHubTab = 'stocktake'; content.innerHTML = window.renderInventoryHub(); }
+        else if (view === 'stock-audit') { window._invHubTab = 'audit'; content.innerHTML = window.renderInventoryHub(); }
+        else if (view === 'par-editor') { window._invHubTab = 'par'; content.innerHTML = window.renderInventoryHub(); }
+        else if (view === 'stock-count') { window._invHubTab = 'levels'; content.innerHTML = window.renderInventoryHub(); }
+        // --- RECIPE HUB (absorbs margins, batch-linker, allergens, sheet-gen) ---
+        else if (view === 'recipes') { content.innerHTML = window.renderRecipeHub(); }
+        else if (view === 'margins') { window._recHubTab = 'margins'; content.innerHTML = window.renderRecipeHub(); }
+        else if (view === 'batch-linker') { window._recHubTab = 'linker'; content.innerHTML = window.renderRecipeHub(); }
+        else if (view === 'allergens') { window._recHubTab = 'allergens'; content.innerHTML = window.renderRecipeHub(); }
+        else if ((view === 'runsheet' || view === 'sheet-gen')) { window._recHubTab = 'runsheet'; content.innerHTML = window.renderRecipeHub(); }
+        // --- ANALYTICS HUB (absorbs prime-cost, variance, forecast) ---
+        else if (view === 'sales') { content.innerHTML = window.renderAnalyticsHub(); }
+        else if (view === 'prime-cost') { window._analyticsTab = 'primecost'; content.innerHTML = window.renderAnalyticsHub(); }
+        else if (view === 'variance') { window._analyticsTab = 'variance'; content.innerHTML = window.renderAnalyticsHub(); }
+        else if (view === 'forecast') { window._analyticsTab = 'forecast'; content.innerHTML = window.renderAnalyticsHub(); }
+        // --- ORDER HUB (invoice now has tab bar) ---
+        else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
+        else if (view === 'invoice' && window.renderInvoiceView) content.innerHTML = window.renderInvoiceView();
+        else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
+        // --- STANDALONE VIEWS ---
+        else if (view === 'dashboard' && window.renderManagerHub) content.innerHTML = window.renderManagerHub();
         else if (view === 'suppliers' && window.renderSupplierView) content.innerHTML = window.renderSupplierView();
-        else if (view === 'sales' && window.renderSalesView) content.innerHTML = window.renderSalesView();
         else if ((view === 'orientation' || view === 'training') && window.renderStaffHubView) { if (view === 'training') window._staffHubTab = 'onboarding'; content.innerHTML = window.renderStaffHubView(); }
         else if (view === 'tasks' && window.renderTaskView) content.innerHTML = window.renderTaskView();
         else if (view === 'compliance' && window.renderComplianceView) content.innerHTML = window.renderComplianceView();
@@ -1096,32 +1116,17 @@ window.showView = (view) => {
         else if (view === 'handover' && window.renderHandoverView) content.innerHTML = window.renderHandoverView();
         else if ((view === 'knowledge' || view === 'sops') && window.renderKnowledgeView) content.innerHTML = window.renderKnowledgeView();
         else if (view === 'rosters' && window.renderRosterView) content.innerHTML = window.renderRosterView();
-        else if (view === 'recipes' && window.renderRecipeView) content.innerHTML = window.renderRecipeView();
-        else if (view === 'invoice' && window.renderInvoiceView) content.innerHTML = window.renderInvoiceView();
         else if (view === 'wastage' && window.renderWastageView) content.innerHTML = window.renderWastageView();
-        else if (view === 'allergens' && window.renderAllergenView) content.innerHTML = window.renderAllergenView();
-        else if ((view === 'runsheet' || view === 'sheet-gen') && window.renderSheetGenView) content.innerHTML = window.renderSheetGenView();
-        else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
         else if (view === 'zones' && window.renderZoneManager) content.innerHTML = window.renderZoneManager();
-        else if (view === 'margins' && window.renderMarginView) content.innerHTML = window.renderMarginView();
         else if (view === 'menu-engineering' && window.renderMenuEngineeringView) content.innerHTML = window.renderMenuEngineeringView();
-        else if (view === 'batch-linker' && window.renderAiBatchLinker) content.innerHTML = window.renderAiBatchLinker();
-        else if (view === 'par-editor' && window.renderParEditor) content.innerHTML = window.renderParEditor();
         else if (view === 'sell-price-editor' && window.renderSellPriceEditor) content.innerHTML = window.renderSellPriceEditor();
         else if (view === 'price-alerts' && window.renderPriceAlertsView) content.innerHTML = window.renderPriceAlertsView();
         else if (view === 'staff-directory' && window.renderStaffHubView) { window._staffHubTab = 'directory'; content.innerHTML = window.renderStaffHubView(); }
-        else if (view === 'forecast' && window.renderForecastView) content.innerHTML = window.renderForecastView();
         else if (view === 'cross-venue') { if (window.renderCrossVenueDashboard) window.renderCrossVenueDashboard(); }
-        else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
-        else if (view === 'prime-cost' && window.renderPrimeCostView) content.innerHTML = window.renderPrimeCostView();
         else if (view === 'lightspeed-import' && window.renderLightspeedImportView) content.innerHTML = window.renderLightspeedImportView();
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
-        else if (view === 'stock-count' && window.renderQuickStockCount) content.innerHTML = window.renderQuickStockCount();
-        else if (view === 'variance' && window.renderVarianceReport) content.innerHTML = window.renderVarianceReport();
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
-        else if (view === 'stock-audit' && window.renderStockAuditView) content.innerHTML = window.renderStockAuditView();
-        else if (view === 'stocktake' && window.renderStocktakeView) content.innerHTML = window.renderStocktakeView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);

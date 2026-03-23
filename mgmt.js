@@ -208,6 +208,27 @@ window.renderForecastView = () => {
     '</div>';
 };
 
+window._analyticsTab = window._analyticsTab || 'takings';
+
+window.renderAnalyticsHub = () => {
+    const tab = window._analyticsTab;
+    const tabs = [
+        { id: 'takings', label: '📈 Takings & KPIs' },
+        { id: 'primecost', label: '💎 Prime Cost' },
+        { id: 'variance', label: '📊 Variance' },
+        { id: 'forecast', label: '🔮 Forecast' }
+    ];
+    const tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">' +
+        tabs.map(t => '<span class="tag-pill ' + (tab === t.id ? 'active' : '') + '" onclick="window._analyticsTab=\'' + t.id + '\';window.showView(\'sales\');">' + t.label + '</span>').join('') +
+    '</div>';
+    let content = '';
+    if (tab === 'takings') content = window.renderSalesView ? window.renderSalesView() : '';
+    else if (tab === 'primecost') content = window.renderPrimeCostView ? window.renderPrimeCostView() : '';
+    else if (tab === 'variance') content = window.renderVarianceReport ? window.renderVarianceReport() : '';
+    else if (tab === 'forecast') content = window.renderForecastView ? window.renderForecastView() : '';
+    return '<div style="max-width:1200px;margin:auto;">' + tabBar + '</div>' + content;
+};
+
 window.renderSalesView = () => {
     // Parse BWI date format DD/MM/YYYY into JS Date
     const parseDate = (str) => {
