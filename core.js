@@ -684,7 +684,10 @@ window.loadTandaData = async () => {
     if (clockedData) {
         const cArr = Array.isArray(clockedData) ? clockedData : (clockedData.users || []);
         clockedIn = cArr.map(u => {
-            const name = u.name || ('Staff #' + u.id);
+            // Look up name from users array since clocked_in may only return IDs
+            const userId = u.id || u.user_id;
+            const knownUser = userId ? users.find(usr => usr.id === userId) : null;
+            const name = u.name || (knownUser && knownUser.name) || ('Staff #' + (userId || '?'));
             const since = u.clocked_in_at ? new Date(u.clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
             return { name, since };
         });
@@ -789,8 +792,10 @@ window.loadTandaClockedIn = async () => {
     if (!clockedData) return;
     const cArr = Array.isArray(clockedData) ? clockedData : (clockedData.users || []);
     window._tandaData.clockedIn = cArr.map(u => {
-        const name = u.name || ('Staff #' + u.id);
-        const since = u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const userId = u.id || u.user_id;
+        const knownUser = userId ? (window._tandaStaff || []).find(s => s.id === userId) : null;
+        const name = u.name || (knownUser && knownUser.name) || ('Staff #' + (userId || '?'));
+        const since = u.clocked_in_at ? new Date(u.clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (u.last_clocked_in_at ? new Date(u.last_clocked_in_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
         return { name, since };
     });
     window._tandaData.lastUpdated = new Date().toLocaleTimeString();

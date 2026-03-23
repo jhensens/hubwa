@@ -3521,15 +3521,24 @@ window._renderTandaRoster = (tabPills) => {
     const todayStr = td.date;
     const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-    // Collect unique staff across the week
+    // Collect unique staff across the week, grouped by department
     const allStaff = new Map();
     days.forEach(d => {
         (td.weeklyRoster[d] || []).forEach(s => {
-            if (!allStaff.has(s.name)) allStaff.set(s.name, {});
-            allStaff.get(s.name)[d] = s;
+            if (!allStaff.has(s.name)) allStaff.set(s.name, { shifts: {}, dept: s.dept || 'Other' });
+            allStaff.get(s.name).shifts[d] = s;
+            if (s.dept && allStaff.get(s.name).dept === 'Other') allStaff.get(s.name).dept = s.dept;
         });
     });
     const staffNames = [...allStaff.keys()].sort();
+    // Group by department
+    const deptGroups = {};
+    staffNames.forEach(name => {
+        const dept = allStaff.get(name).dept || 'Other';
+        if (!deptGroups[dept]) deptGroups[dept] = [];
+        deptGroups[dept].push(name);
+    });
+    const deptOrder = Object.keys(deptGroups).sort((a, b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b));
 
     // Weekly totals
     let weekHours = 0, weekCost = 0;
@@ -3568,22 +3577,28 @@ window._renderTandaRoster = (tabPills) => {
     });
     html += '</tr></thead><tbody>';
 
-    staffNames.forEach(function(name) {
-        var shifts = allStaff.get(name);
-        html += '<tr style="border-bottom:1px solid var(--border);">';
-        html += '<td style="padding:6px 10px;font-weight:600;white-space:nowrap;">' + E(name) + '</td>';
-        days.forEach(function(d) {
-            var isToday = d === todayStr;
-            var bg = isToday ? 'background:rgba(139,92,246,0.08);' : '';
-            var s = shifts[d];
-            if (s) {
-                var deptBadge = s.dept ? '<div style="font-size:9px;color:var(--purple);opacity:0.8;">' + E(s.dept) + '</div>' : '';
-                html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><div style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:3px 4px;font-size:11px;"><div style="font-weight:600;">' + s.start + '-' + s.finish + '</div><div style="font-size:10px;color:var(--text-muted);">' + s.hours + 'h</div>' + deptBadge + '</div></td>';
-            } else {
-                html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><span style="color:var(--border);">—</span></td>';
-            }
+    var deptColors = { 'FOH': 'var(--blue)', 'BOH': 'var(--orange)', 'Kitchen': 'var(--orange)', 'Kitchen Hand': 'var(--orange)', 'Bar': 'var(--purple)', 'Management': 'var(--green)' };
+    deptOrder.forEach(function(dept) {
+        var deptColor = deptColors[dept] || 'var(--text-muted)';
+        // Department header row
+        html += '<tr><td colspan="' + (days.length + 1) + '" style="padding:8px 10px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:' + deptColor + ';background:rgba(255,255,255,0.03);border-bottom:2px solid ' + deptColor + ';">' + E(dept) + ' <span style="font-weight:normal;font-size:11px;color:var(--text-muted);">(' + deptGroups[dept].length + ')</span></td></tr>';
+        deptGroups[dept].forEach(function(name) {
+            var staffData = allStaff.get(name);
+            var shifts = staffData.shifts;
+            html += '<tr style="border-bottom:1px solid var(--border);">';
+            html += '<td style="padding:6px 10px;font-weight:600;white-space:nowrap;">' + E(name) + '</td>';
+            days.forEach(function(d) {
+                var isToday = d === todayStr;
+                var bg = isToday ? 'background:rgba(139,92,246,0.08);' : '';
+                var s = shifts[d];
+                if (s) {
+                    html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><div style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:3px 4px;font-size:11px;"><div style="font-weight:600;">' + s.start + '-' + s.finish + '</div><div style="font-size:10px;color:var(--text-muted);">' + s.hours + 'h</div></div></td>';
+                } else {
+                    html += '<td style="padding:4px 6px;text-align:center;' + bg + '"><span style="color:var(--border);">—</span></td>';
+                }
+            });
+            html += '</tr>';
         });
-        html += '</tr>';
     });
 
     html += '</tbody></table></div>';
