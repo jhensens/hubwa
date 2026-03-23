@@ -3658,11 +3658,27 @@ window.renderRosterView = () => {
 };
 window.handleRosterUpload = async (e) => {
     if(!e.target.files.length) return;
-    const file = e.target.files[0]; let weekName = prompt("Enter Roster Week Name:", file.name.split('.')[0]); if(!weekName) return;
+    const file = e.target.files[0];
+    const defaultName = file.name.split('.')[0];
+    window._pendingRosterFile = file;
+    window.openModal('🗓️ Name This Roster', `
+        <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;">Give this roster week a name (e.g. "Week 12 March")</p>
+        <input type="text" id="_roster-name" class="input-box" value="${window.escAttr(defaultName)}" style="font-size:14px;padding:10px;margin:0 0 16px;">
+        <div style="display:flex;gap:10px;">
+            <button onclick="window._commitRosterUpload()" class="btn btn-green" style="flex:1;padding:10px;">Upload</button>
+            <button onclick="window.closeModal();window._pendingRosterFile=null;" class="btn" style="flex:1;padding:10px;">Cancel</button>
+        </div>`);
+};
+window._commitRosterUpload = async () => {
+    const weekName = document.getElementById('_roster-name').value.trim();
+    if (!weekName) return window.showToast('Name is required.', 'error');
+    const file = window._pendingRosterFile; if (!file) return;
+    window._pendingRosterFile = null;
+    window.closeModal();
     window.showToast("Uploading roster, please wait... ⏳");
     try {
-        const fileRef = storage.ref().child(`rosters/${Date.now()}_${file.name}`); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
-        window.shiftRosters.push({ name: weekName, date: new Date().toLocaleDateString(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster Uploaded successfully!");
-    } catch(err) { console.error("Upload failed", err); window.showToast("Upload failed.", "error"); }
+        const fileRef = storage.ref().child('rosters/' + Date.now() + '_' + file.name); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
+        window.shiftRosters.push({ name: weekName, date: new Date().toLocaleDateString(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster uploaded!");
+    } catch(err) { window.showToast("Upload failed.", "error"); }
 };
 window.deleteRoster = (i) => { window.confirmAction({ title:'🗓️ Delete Roster', message:'Delete this roster?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } }); };

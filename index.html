@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#7c3aed">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hobart Hub">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./bwi-logo.png">
     <title>Hobart Hub</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -130,7 +136,7 @@
         <div class="main-header no-print">
             <button id="venue-badge" onclick="window.renderVenueSwitcher()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:10px;">🏢 Loading...</button>
             <div style="flex:1;max-width:400px;position:relative;margin:0 15px;">
-                <input type="text" id="global-search-input" placeholder="🔍 Search everything..." oninput="window.renderGlobalSearchResults(this.value)" onfocus="if(this.value.length>=2)window.renderGlobalSearchResults(this.value)" class="input-box" style="margin:0;padding:8px 15px;border-radius:20px;font-size:13px;background:var(--bg-main);">
+                <input type="text" id="global-search-input" placeholder="🔍 Search everything..." oninput="window._debouncedGlobalSearch(this.value)" onfocus="if(this.value.length>=2)window.renderGlobalSearchResults(this.value)" class="input-box" style="margin:0;padding:8px 15px;border-radius:20px;font-size:13px;background:var(--bg-main);">
                 <div id="global-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;margin-top:5px;max-height:400px;overflow-y:auto;box-shadow:0 15px 40px rgba(0,0,0,0.5);z-index:100;"></div>
             </div>
             <div id="notif-bell" onclick="window.toggleNotifPanel()" style="position:relative;cursor:pointer;font-size:20px;margin-right:12px;padding:4px;" title="Notifications">
@@ -217,6 +223,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Register Service Worker for offline support
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
 </script>
 
 </body>

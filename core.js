@@ -588,9 +588,9 @@ window.loadTandaData = async () => {
 
     // 1. Users (full profiles)
     const usersData = await window.fetchTanda('users');
-    if (!usersData) { console.log('Tanda: could not fetch users'); return; }
+    if (!usersData) { return; }
     const users = Array.isArray(usersData) ? usersData : (usersData.users || []);
-    if (users.length === 0) { console.log('Tanda: no users found'); return; }
+    if (users.length === 0) { return; }
 
     // Store full staff profiles
     window._tandaStaff = users.map(u => ({
@@ -781,7 +781,6 @@ window.loadTandaData = async () => {
         lastUpdated: new Date().toLocaleTimeString(),
         userCount: users.length
     };
-    console.log('Tanda loaded:', window._tandaData);
     if (['dashboard', 'prime-cost', 'orientation'].includes(window.currentView)) window.showView(window.currentView);
 };
 
@@ -928,18 +927,73 @@ window.saveTandaToken = () => {
     window.loadTandaData().then(() => { window.hideLoadingOverlay(); window.startTandaAutoRefresh(); });
 };
 
+// --- LOG TRIMMING (prevent unbounded growth) ---
+window._trimLogs = () => {
+    const caps = { stockMovements: 500, depletionLogs: 200, wastageLogs: 200 };
+    Object.keys(caps).forEach(k => {
+        if (window[k] && Array.isArray(window[k]) && window[k].length > caps[k]) {
+            window[k] = window[k].slice(-caps[k]);
+        }
+    });
+};
+
+// --- DATA SIZE MONITOR ---
+window.getStorageUsage = () => {
+    var total = 0;
+    try { for (var i = 0; i < localStorage.length; i++) { var key = localStorage.key(i); total += (key.length + localStorage.getItem(key).length) * 2; } } catch(e) {}
+    return total;
+};
+window.checkStorageHealth = () => {
+    var bytes = window.getStorageUsage();
+    var mb = (bytes / (1024 * 1024)).toFixed(1);
+    if (bytes > 4 * 1024 * 1024 && !window._storageBannerShown) {
+        window._storageBannerShown = true;
+        if (window.showToast) window.showToast('Storage at ' + mb + 'MB / 5MB — consider exporting a backup and clearing old data.', 'error');
+    }
+    return { bytes: bytes, mb: parseFloat(mb) };
+};
+
+// --- AUTO-BACKUP TO FIREBASE ---
+window._lastBackupDate = localStorage.getItem('lastBackupDate') || '';
+window._runDailyBackup = () => {
+    var today = new Date().toISOString().split('T')[0];
+    if (window._lastBackupDate === today) return;
+    if (typeof db === 'undefined') return;
+    var vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    var payload = {}; window.saveKeys.forEach(k => { payload[k] = window[k]; });
+    payload._backupTime = new Date().toISOString();
+    db.collection('backups').doc(vid + '_' + today).set(payload)
+        .then(() => {
+            window._lastBackupDate = today;
+            localStorage.setItem('lastBackupDate', today);
+            // Clean old backups (keep 7 days)
+            var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+            var cutoffStr = cutoff.toISOString().split('T')[0];
+            db.collection('backups').where('__name__', '<', vid + '_' + cutoffStr)
+                .get().then(snap => { snap.forEach(doc => doc.ref.delete()); }).catch(() => {});
+        }).catch(() => {});
+};
+
 // Debounced Firebase write — max once every 4 seconds
 window._saveTimer = null;
 window._lastFirebaseSave = 0;
 window._firebaseRetryCount = 0;
 
 window.saveToDisk = () => {
+    // Trim unbounded log arrays before saving
+    window._trimLogs();
     const syncLabel = document.getElementById('sync-status');
     const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
 
     // Always save to localStorage immediately
     window.saveKeys.forEach(k => {
-        try { localStorage.setItem(vid+'_'+k, JSON.stringify(window[k])); } catch(e) {}
+        try {
+            localStorage.setItem(vid+'_'+k, JSON.stringify(window[k]));
+        } catch(e) {
+            if (e.name === 'QuotaExceededError' || e.code === 22) {
+                if (window.showToast && !window._quotaWarned) { window.showToast('Storage nearly full — data saved to cloud only. Consider exporting a backup.', 'error'); window._quotaWarned = true; }
+            }
+        }
     });
 
     if (syncLabel) { syncLabel.innerHTML = '💾 Saved Local'; syncLabel.style.color = 'var(--blue)'; }
@@ -960,6 +1014,7 @@ window.saveToDisk = () => {
             .then(() => {
                 window._firebaseRetryCount = 0;
                 if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }
+                window._runDailyBackup();
             })
             .catch(err => {
                 console.error('Firebase save error:', err);
@@ -1145,14 +1200,14 @@ window.globalSearch = (query) => {
     // Search inventory
     (window.inventoryItems || []).filter(i => !i.archived).forEach(item => {
         if (item.name.toLowerCase().includes(q) || (item.sku && item.sku.toLowerCase().includes(q)) || (item.supplier && item.supplier.toLowerCase().includes(q))) {
-            results.push({ type: 'inventory', icon: '📦', label: item.name, sub: (item.category || '') + ' · ' + (item.supplier || 'No supplier'), action: "window.editInvItem('" + item.id + "')" });
+            results.push({ type: 'inventory', icon: '📦', label: item.name, sub: (item.category || '') + ' · ' + (item.supplier || 'No supplier'), action: "window.editInvItem('" + window.escAttr(item.id) + "')" });
         }
     });
     
     // Search recipes
     (window.recipes || []).filter(r => !r.archived).forEach(r => {
         if (r.name.toLowerCase().includes(q) || (r.posAlias && r.posAlias.toLowerCase().includes(q))) {
-            results.push({ type: 'recipe', icon: '⚖️', label: r.name, sub: r.type + ' · ' + (r.station || 'Kitchen'), action: "window.editRecipeForm('" + r.id + "')" });
+            results.push({ type: 'recipe', icon: '⚖️', label: r.name, sub: r.type + ' · ' + (r.station || 'Kitchen'), action: "window.editRecipeForm('" + window.escAttr(r.id) + "')" });
         }
     });
     
@@ -1194,6 +1249,8 @@ window.globalSearch = (query) => {
     return results.slice(0, 15);
 };
 
+window._debouncedGlobalSearch = window.debounce ? window.debounce((val) => window.renderGlobalSearchResults(val), 250) : (val) => window.renderGlobalSearchResults(val);
+
 window._highlightMatch = (text, query) => {
     if (!query || !text) return text;
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1206,7 +1263,7 @@ window.renderGlobalSearchResults = (query) => {
     if (!query || query.length < 2) { resultsDiv.style.display = 'none'; return; }
     const results = window.globalSearch(query);
     if (results.length === 0) {
-        resultsDiv.innerHTML = '<div style="padding:15px;color:var(--text-muted);font-size:13px;text-align:center;">No results for "' + query + '"</div>';
+        resultsDiv.innerHTML = '<div style="padding:15px;color:var(--text-muted);font-size:13px;text-align:center;">No results for "' + window.esc(query) + '"</div>';
         resultsDiv.style.display = 'block';
         return;
     }
@@ -1360,6 +1417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateVenueBadge();
     window.showView('dashboard');
     setTimeout(() => window.updateNotifBadge(), 500);
+    setTimeout(() => { window.checkStorageHealth(); }, 1500);
     setTimeout(() => { window.loadTandaData(); window.startTandaAutoRefresh(); }, 2000);
 
     // Force PIN setup if no PIN exists

@@ -7,8 +7,14 @@
 window.getApiKey = () => {
     let key = localStorage.getItem('geminiApiKey');
     if (!key) {
-        key = prompt("Enter your Gemini API Key (from Google AI Studio):");
-        if (key) localStorage.setItem('geminiApiKey', key.trim());
+        window.openModal('🔑 Gemini API Key', `
+            <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;">Enter your API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue);">Google AI Studio</a>. This is stored locally on your device only.</p>
+            <input type="password" id="_api-key-input" class="input-box" placeholder="Paste your API key..." style="font-size:14px;padding:10px;margin:0 0 16px;">
+            <div style="display:flex;gap:10px;">
+                <button onclick="var k=document.getElementById('_api-key-input').value.trim();if(k){localStorage.setItem('geminiApiKey',k);window.closeModal();window.showToast('API key saved.');}else{window.showToast('Key cannot be empty.','error');}" class="btn btn-green" style="flex:1;padding:10px;">Save Key</button>
+                <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Cancel</button>
+            </div>`);
+        return null;
     }
     return key;
 };
@@ -486,6 +492,11 @@ window.renderInventoryView = () => {
         (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c) + '</div>'
     ).join('');
 
+    // Performance: show total count, cap render at 200 items
+    const totalFiltered = filtered.length;
+    const RENDER_CAP = 200;
+    if (filtered.length > RENDER_CAP) filtered = filtered.slice(0, RENDER_CAP);
+
     let grouped = {};
     filtered.forEach(item => {
         let key = window.invFilters.groupBy === 'Zone'
@@ -577,7 +588,7 @@ window.renderInventoryView = () => {
     return `
     <div style="max-width:1100px; margin:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-            <div><h2 style="margin:0">📦 Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${filtered.length} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
+            <div><h2 style="margin:0">📦 Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${totalFiltered > filtered.length ? filtered.length + ' of ' + totalFiltered : filtered.length} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button onclick="window.showView('stock-count')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--green); color:var(--green);">✅ Quick Count</button>
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
@@ -1865,11 +1876,20 @@ window.updateUnitHint = () => {
         else {const b=window.recipes.find(x=>x.id===sel.value.replace('batch_',''));if(b)hint.innerHTML=`Enter qty in: <span style="background:var(--purple);color:white;padding:1px 6px;border-radius:4px;">${esc(b.yieldUnit)}</span>`;}
     };
     window.scaleRecipe = () => {
-        const mult=parseFloat(prompt("Scale multiplier (e.g. 2=double, 0.5=halve):","2"));
-        if (!mult||isNaN(mult)) return;
+        window.openModal('📏 Scale Recipe', `
+            <p style="margin:0 0 12px;color:var(--text-muted);font-size:13px;">Multiply all ingredient quantities. Use 2 to double, 0.5 to halve.</p>
+            <input type="number" id="_scale-val" class="input-box" value="2" step="0.1" min="0.1" style="font-size:16px;padding:10px;margin:0 0 16px;">
+            <div style="display:flex;gap:10px;">
+                <button onclick="window._applyScale()" class="btn btn-green" style="flex:1;padding:10px;">Scale</button>
+                <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Cancel</button>
+            </div>`);
+    };
+    window._applyScale = () => {
+        const mult=parseFloat(document.getElementById('_scale-val').value);
+        if (!mult||isNaN(mult)) return window.showToast('Invalid multiplier.','error');
         window.tempIngs.forEach(ing=>{if(ing.qty)ing.qty=parseFloat((ing.qty*mult).toFixed(3));});
         if (document.getElementById('r-yq')) document.getElementById('r-yq').value=(parseFloat(document.getElementById('r-yq').value)*mult).toFixed(2);
-        window.refreshRB(); window.showToast(`Scaled by ${mult}x`);
+        window.closeModal(); window.refreshRB(); window.showToast('Scaled by ' + mult + 'x');
     };
     window.updateIngQty = (idx,val) => { window.tempIngs[idx].qty=parseFloat(val)||0; window.refreshRB(); };
     window.rmIng = (tIdx) => { window.tempIngs.splice(tIdx,1); window.refreshRB(); };
