@@ -28,6 +28,8 @@ window.knowledgeBase = [];
 window.shiftRosters = [];
 window.depletionLogs = [];
 window.orderHistory = [];
+window.stockMovements = [];
+window.stocktakes = [];
 window.staffDirectory = [];
 window.qualificationTypes = [
     { id: 'rsa', name: 'RSA', expiryRequired: true },
@@ -313,7 +315,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes'];
 
 
 // =============================================================================
@@ -777,6 +779,8 @@ window.showView = (view) => {
         else if (view === 'stock-count' && window.renderQuickStockCount) content.innerHTML = window.renderQuickStockCount();
         else if (view === 'variance' && window.renderVarianceReport) content.innerHTML = window.renderVarianceReport();
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
+        else if (view === 'stock-audit' && window.renderStockAuditView) content.innerHTML = window.renderStockAuditView();
+        else if (view === 'stocktake' && window.renderStocktakeView) content.innerHTML = window.renderStocktakeView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
@@ -993,6 +997,9 @@ document.addEventListener('DOMContentLoaded', () => {
             try { window[k] = JSON.parse(stored); } catch(e) {}
         }
     });
+
+    // Run init callbacks (e.g., restore active stocktake)
+    (window._hubInitCallbacks || []).forEach(function(fn) { try { fn(); } catch(e) { console.error('Init callback error:', e); } });
 
     // Render immediately from localStorage
     window.checkLockState();

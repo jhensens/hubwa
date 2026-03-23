@@ -14,6 +14,112 @@ window.getApiKey = () => {
 };
 window.resetApiKey = () => { localStorage.removeItem('geminiApiKey'); window.showToast("API Key cleared."); };
 
+// --- STOCK MOVEMENT AUDIT TRAIL ---
+window.logStockMovement = function(itemId, qtyChange, source, opts) {
+    opts = opts || {};
+    var item = (window.inventoryItems || []).find(function(i) { return i.id === itemId; });
+    var before = item ? (item.stock || 0) : 0;
+    var after = Math.max(0, before + qtyChange);
+    window.stockMovements = window.stockMovements || [];
+    window.stockMovements.push({
+        id: window.generateId('sm'),
+        ts: new Date().toISOString(),
+        itemId: itemId,
+        itemName: item ? item.name : (opts.itemName || 'Unknown'),
+        source: source,
+        sourceRef: opts.sourceRef || '',
+        qtyChange: qtyChange,
+        before: before,
+        after: after,
+        unit: item ? (item.buyUnit || 'unit') : 'unit',
+        staff: opts.staff || '',
+        notes: opts.notes || ''
+    });
+};
+
+// --- SHARED CASCADE DEPLETION ---
+// Unified recipe-cascade deduction used by both CSV and AI depletion paths
+window.cascadeSalesDeductions = function(salesItems, source) {
+    var recipes = window.recipes || [];
+    var inventory = window.inventoryItems || [];
+    var mappings = window.posMappings || {};
+    var deductions = {}; // { invId: useUnitsToDeduct }
+    var matched = [], unmatched = [];
+
+    salesItems.forEach(function(item) {
+        var rawName = item.rawName;
+        var qtySold = item.qtySold || 0;
+        var recipeId = null;
+        var directInv = null;
+
+        // 1. Check learned posMappings
+        if (mappings[rawName]) recipeId = mappings[rawName];
+        // 2. Check recipe posAlias
+        if (!recipeId) {
+            var r = recipes.find(function(rc) { return rc.posAlias && rc.posAlias.toLowerCase() === rawName.toLowerCase(); });
+            if (r) recipeId = r.id;
+        }
+        // 3. Check recipe name
+        if (!recipeId) {
+            var r2 = recipes.find(function(rc) { return rc.name && rc.name.toLowerCase() === rawName.toLowerCase(); });
+            if (r2) recipeId = r2.id;
+        }
+        // 4. Direct inventory match (fallback)
+        if (!recipeId) {
+            directInv = inventory.find(function(i) {
+                return !i.archived && (
+                    i.name.toLowerCase() === rawName.toLowerCase() ||
+                    (i.posAlias && i.posAlias.toLowerCase() === rawName.toLowerCase()) ||
+                    rawName.toLowerCase().indexOf(i.name.toLowerCase().substring(0, 6)) !== -1
+                );
+            });
+        }
+
+        if (recipeId) {
+            // Cascade through recipe ingredients
+            var recipe = recipes.find(function(rc) { return rc.id === recipeId; });
+            if (recipe) {
+                matched.push({ rawName: rawName, matchType: 'recipe', matchName: recipe.name, qtySold: qtySold });
+                (recipe.ingredients || []).forEach(function(ing) {
+                    if (ing.type === 'inv') {
+                        deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * qtySold);
+                    } else if (ing.type === 'batch') {
+                        var batch = recipes.find(function(rc) { return rc.id === ing.ref; });
+                        if (batch) {
+                            var batchRatio = (ing.qty * qtySold) / (batch.yieldQty || 1);
+                            (batch.ingredients || []).forEach(function(bIng) {
+                                if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
+                            });
+                        }
+                    }
+                });
+            } else { unmatched.push({ rawName: rawName, qtySold: qtySold }); }
+        } else if (directInv) {
+            // Direct inventory deduction
+            var depletion = qtySold * (directInv.yield ? (1 / directInv.yield) : (directInv.useToBy || 1));
+            deductions[directInv.id] = (deductions[directInv.id] || 0) + depletion;
+            matched.push({ rawName: rawName, matchType: 'inventory', matchName: directInv.name, qtySold: qtySold });
+        } else {
+            unmatched.push({ rawName: rawName, qtySold: qtySold });
+        }
+    });
+
+    // Apply deductions
+    var deductedCount = 0;
+    Object.keys(deductions).forEach(function(invId) {
+        var inv = inventory.find(function(i) { return i.id === invId; });
+        if (inv) {
+            var useUnits = deductions[invId];
+            var buyUnits = useUnits / (inv.yield || 1);
+            window.logStockMovement(inv.id, -buyUnits, source, { sourceRef: source === 'csv-depletion' ? 'Lightspeed CSV' : 'AI POS Depletion' });
+            inv.stock = Math.max(0, (inv.stock || 0) - buyUnits);
+            deductedCount++;
+        }
+    });
+
+    return { deductions: deductions, matched: matched, unmatched: unmatched, deductedCount: deductedCount };
+};
+
 // --- SHARED TAB BARS ---
 window._marginsTabBar = function(activeView) {
     const tabs = [
@@ -304,7 +410,7 @@ window.resetAllStock = () => {
         tier: 'dangerous',
         onConfirm: () => {
             let count = 0;
-            (window.inventoryItems || []).forEach(i => { i.stock = 0; count++; });
+            (window.inventoryItems || []).forEach(i => { if (i.stock > 0) window.logStockMovement(i.id, -(i.stock || 0), 'stock-wipe'); i.stock = 0; count++; });
             window.saveToDisk(); window.showView('inventory');
             window.showToast(count + ' items reset to 0 stock.', 'error');
         }
@@ -511,6 +617,7 @@ window._inlineEditStock = (id) => {
     const val = prompt('Update stock for "' + item.name + '" (current: ' + item.stock + ' ' + item.buyUnit + '):', item.stock);
     if (val === null) return;
     const n = parseFloat(val); if (isNaN(n)) return window.showToast('Invalid number.','error');
+    window.logStockMovement(item.id, n - (item.stock || 0), 'manual-adjust', { notes: 'Inline edit' });
     item.stock = n; window.saveToDisk(); window.showToast(item.name + ' → ' + n + ' ' + item.buyUnit); window.showView('inventory');
 };
 window._inlineEditPar = (id) => {
@@ -901,6 +1008,7 @@ window.saveQuickStockCount = () => {
             // Record in price history as stock count event
             if (!window.priceHistory[item.id]) window.priceHistory[item.id] = [];
             window.priceHistory[item.id].push({ type:'count', date: timestamp, oldStock: item.stock, newStock: newVal });
+            window.logStockMovement(item.id, newVal - (item.stock || 0), 'stocktake', { notes: 'Quick stock count' });
             item.stock = newVal;
             updated++;
         }
@@ -2470,23 +2578,13 @@ window.parseLsSalesBy = (lines) => {
         totalSales += saleAmt;
         totalCost += cost;
         productSales.push({ name, qty, saleAmt, cost, gpPct });
-
-        // Match to inventory and deplete
-        const invMatch = (window.inventoryItems||[]).find(i =>
-            !i.archived && (
-                i.name.toLowerCase() === name.toLowerCase() ||
-                (i.posAlias && i.posAlias.toLowerCase() === name.toLowerCase()) ||
-                name.toLowerCase().includes(i.name.toLowerCase().substring(0,6))
-            )
-        );
-        if (invMatch) {
-            matched++;
-            // Deplete by qty in use units
-            const depletion = qty * (invMatch.useToBy || 1);
-            invMatch.stock = Math.max(0, (invMatch.stock || 0) - depletion);
-            depleted++;
-        }
     });
+
+    // Cascade depletion through recipes + inventory
+    const salesItems = productSales.map(p => ({ rawName: p.name, qtySold: p.qty }));
+    const cascadeResult = window.cascadeSalesDeductions(salesItems, 'csv-depletion');
+    matched = cascadeResult.matched.length;
+    depleted = cascadeResult.deductedCount;
 
     // Calculate food vs bev split
     const foodKeywords = ['gyoza','chicken','edamame','rice','salad','pork','beef','wagyu','tofu','tempura','katsu','takoyaki','karaage','dumpling','noodle','ramen','curry','soup'];
@@ -3000,6 +3098,7 @@ window.logWastage = () => {
         dollarVal = qtyInput * (invMatch.price || 0);
         displayUnit = invMatch.buyUnit;
     }
+    window.logStockMovement(invMatch.id, -deductBuyUnits, 'waste', { staff: document.getElementById('w-staff').value, notes: document.getElementById('w-rsn').value });
     invMatch.stock = Math.max(0, (invMatch.stock || 0) - deductBuyUnits);
     window.wastageLogs.push({
         itemName: invMatch.name, logQty: qtyInput, unitLog: displayUnit,
@@ -3104,6 +3203,7 @@ window.renderDepletionConfirmation = () => {
 };
 
 window.executeDepletion = () => {
+    // Resolve unknown mappings
     window.pendingMap.unknown.forEach((u, i) => {
         let selectedId = document.getElementById(`map-unknown-${i}`).value;
         if (selectedId) {
@@ -3112,37 +3212,15 @@ window.executeDepletion = () => {
             window.pendingMap.known.push({ posName: u.posName, recipeId: selectedId, qtySold: u.qtySold });
         }
     });
-    let deductions = {};
+    // Use shared cascade — build salesItems from known mappings
+    // Since these are already mapped to recipes, we temporarily inject them into posMappings
     window.pendingMap.known.forEach(k => {
-        const recipe = window.recipes.find(r => r.id === k.recipeId);
-        if (recipe) {
-            (recipe.ingredients || []).forEach(ing => {
-                if (ing.type === 'inv') {
-                    deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * k.qtySold);
-                } else if (ing.type === 'batch') {
-                    const batch = window.recipes.find(r => r.id === ing.ref);
-                    if (batch) {
-                        const batchRatio = (ing.qty * k.qtySold) / (batch.yieldQty || 1);
-                        (batch.ingredients || []).forEach(bIng => {
-                            if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
-                        });
-                    }
-                }
-            });
-        }
+        if (!window.posMappings[k.posName]) window.posMappings[k.posName] = k.recipeId;
     });
-    let deductedCount = 0;
-    Object.keys(deductions).forEach(invId => {
-        let inv = window.inventoryItems.find(i => i.id === invId);
-        if (inv) {
-            const useUnitsToDeduct = deductions[invId];
-            const buyUnitsToDeduct = useUnitsToDeduct / (inv.yield || 1);
-            inv.stock = Math.max(0, (inv.stock || 0) - buyUnitsToDeduct);
-            deductedCount++;
-        }
-    });
+    const salesItems = window.pendingMap.known.map(k => ({ rawName: k.posName, qtySold: k.qtySold }));
+    const result = window.cascadeSalesDeductions(salesItems, 'ai-depletion');
     window.saveToDisk();
-    window.showToast(`Success! Deducted ${deductedCount} stock lines.`);
+    window.showToast(`Success! Deducted ${result.deductedCount} stock lines.`);
     window.showView('inventory');
 };
 
@@ -3700,7 +3778,7 @@ window._doCommitInvoice = (ai, state, isHistorical) => {
             inv.history.push({ date: ai.date||new Date().toLocaleDateString('en-AU'), supplier: ai.supplier||'', invoiceNo: ai.invoiceNumber||'', qty, price: unitPrice, prevPrice });
             if (unitPrice > 0) { inv.price = unitPrice; if (unitPrice !== prevPrice) changedInvIds.push(inv.id); }
             inv.supplier = ai.supplier || inv.supplier;
-            if (!isHistorical) inv.stock = (inv.stock||0) + qty;
+            if (!isHistorical) { window.logStockMovement(inv.id, qty, 'invoice', { sourceRef: ai.invoiceNumber || '', notes: ai.supplier || '' }); inv.stock = (inv.stock||0) + qty; }
             updatedCount++;
         } else { skippedCount++; }
     });
@@ -3978,4 +4056,440 @@ window.checkRecipeMargins = () => {
         recipe.gp = parseFloat(newGp);
     });
     return alerts;
+};
+
+// =============================================================================
+// STOCK AUDIT TRAIL VIEW
+// =============================================================================
+window._auditPage = 0;
+window._auditFilters = { source: 'all', search: '', from: '', to: '' };
+
+window.renderStockAuditView = function() {
+    var f = window._auditFilters;
+    var now = new Date();
+    if (!f.from) { var d = new Date(now); d.setDate(d.getDate() - 7); f.from = d.toISOString().split('T')[0]; }
+    if (!f.to) f.to = now.toISOString().split('T')[0];
+    var moves = (window.stockMovements || []).slice().reverse();
+    // Apply filters
+    var fromDate = new Date(f.from + 'T00:00:00');
+    var toDate = new Date(f.to + 'T23:59:59');
+    moves = moves.filter(function(m) {
+        var t = new Date(m.ts);
+        if (t < fromDate || t > toDate) return false;
+        if (f.source !== 'all' && m.source !== f.source) return false;
+        if (f.search && m.itemName.toLowerCase().indexOf(f.search.toLowerCase()) === -1) return false;
+        return true;
+    });
+    // Summary
+    var totalIn = 0, totalOut = 0, totalMoves = moves.length;
+    moves.forEach(function(m) {
+        var item = (window.inventoryItems || []).find(function(i) { return i.id === m.itemId; });
+        var price = item ? (item.price || 0) : 0;
+        if (m.qtyChange > 0) totalIn += m.qtyChange * price;
+        else totalOut += Math.abs(m.qtyChange) * price;
+    });
+    // Paginate
+    var perPage = 50;
+    var page = window._auditPage || 0;
+    var pageItems = moves.slice(0, (page + 1) * perPage);
+    var hasMore = moves.length > pageItems.length;
+
+    var sourceOpts = ['all','invoice','csv-depletion','ai-depletion','waste','manual-adjust','stocktake','stock-wipe'];
+    var sourceLabels = { all:'All Sources', invoice:'Invoice', 'csv-depletion':'CSV Depletion', 'ai-depletion':'AI Depletion', waste:'Wastage', 'manual-adjust':'Manual Adjust', stocktake:'Stocktake', 'stock-wipe':'Stock Wipe' };
+
+    var html = '<div style="max-width:1200px;margin:0 auto;">';
+    html += '<h2 style="margin:0 0 4px;">📋 Stock Movement Audit</h2><p style="color:var(--text-muted);margin:0 0 20px;">Full traceability of every stock change</p>';
+    // Filters
+    html += '<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:12px 16px;">';
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;">From</label><input type="date" class="input-box" value="' + f.from + '" onchange="window._auditFilters.from=this.value;window._auditPage=0;window.showView(\'stock-audit\')" style="margin:0;padding:6px 10px;"></div>';
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;">To</label><input type="date" class="input-box" value="' + f.to + '" onchange="window._auditFilters.to=this.value;window._auditPage=0;window.showView(\'stock-audit\')" style="margin:0;padding:6px 10px;"></div>';
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;">Source</label><select class="input-box" onchange="window._auditFilters.source=this.value;window._auditPage=0;window.showView(\'stock-audit\')" style="margin:0;padding:6px 10px;">';
+    sourceOpts.forEach(function(s) { html += '<option value="' + s + '"' + (f.source === s ? ' selected' : '') + '>' + sourceLabels[s] + '</option>'; });
+    html += '</select></div>';
+    html += '<div style="flex:1;min-width:150px;"><label style="font-size:11px;color:var(--text-muted);display:block;">Search Item</label><input type="text" class="input-box" placeholder="Search..." value="' + (f.search || '') + '" oninput="window._auditFilters.search=this.value;window._auditPage=0;window.showView(\'stock-audit\')" style="margin:0;padding:6px 10px;"></div>';
+    html += '</div>';
+    // Summary cards
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;">';
+    html += '<div class="card" style="text-align:center;padding:14px;"><div style="font-size:24px;font-weight:700;">' + totalMoves + '</div><div style="color:var(--text-muted);font-size:12px;">Movements</div></div>';
+    html += '<div class="card" style="text-align:center;padding:14px;"><div style="font-size:24px;font-weight:700;color:var(--green);">$' + totalIn.toFixed(0) + '</div><div style="color:var(--text-muted);font-size:12px;">Stock In Value</div></div>';
+    html += '<div class="card" style="text-align:center;padding:14px;"><div style="font-size:24px;font-weight:700;color:var(--red);">$' + totalOut.toFixed(0) + '</div><div style="color:var(--text-muted);font-size:12px;">Stock Out Value</div></div>';
+    html += '<div class="card" style="text-align:center;padding:14px;"><div style="font-size:24px;font-weight:700;">$' + (totalIn - totalOut).toFixed(0) + '</div><div style="color:var(--text-muted);font-size:12px;">Net Change</div></div>';
+    html += '</div>';
+    // Table
+    if (pageItems.length === 0) {
+        html += '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted);">No stock movements found for this period.</div>';
+    } else {
+        html += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+        html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;"><th style="padding:10px 12px;">Time</th><th style="padding:10px 8px;">Item</th><th style="padding:10px 8px;">Source</th><th style="padding:10px 8px;text-align:right;">Change</th><th style="padding:10px 8px;text-align:right;">Before</th><th style="padding:10px 8px;text-align:right;">After</th><th style="padding:10px 8px;">Notes</th></tr></thead><tbody>';
+        pageItems.forEach(function(m) {
+            var isIn = m.qtyChange > 0;
+            var rowBg = isIn ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)';
+            var changeColor = isIn ? 'var(--green)' : 'var(--red)';
+            var sign = isIn ? '+' : '';
+            var timeStr = new Date(m.ts).toLocaleString('en-AU', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+            var srcBadge = sourceLabels[m.source] || m.source;
+            html += '<tr style="border-bottom:1px solid var(--border);background:' + rowBg + ';">';
+            html += '<td style="padding:8px 12px;white-space:nowrap;">' + timeStr + '</td>';
+            html += '<td style="padding:8px;font-weight:500;">' + (m.itemName || '') + '</td>';
+            html += '<td style="padding:8px;"><span style="background:var(--bg-main);padding:2px 8px;border-radius:8px;font-size:11px;">' + srcBadge + '</span></td>';
+            html += '<td style="padding:8px;text-align:right;font-weight:600;color:' + changeColor + ';">' + sign + (m.qtyChange || 0).toFixed(2) + ' ' + (m.unit || '') + '</td>';
+            html += '<td style="padding:8px;text-align:right;color:var(--text-muted);">' + (m.before || 0).toFixed(2) + '</td>';
+            html += '<td style="padding:8px;text-align:right;">' + (m.after || 0).toFixed(2) + '</td>';
+            html += '<td style="padding:8px;color:var(--text-muted);font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + (m.sourceRef || m.notes || '') + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        if (hasMore) {
+            html += '<div style="text-align:center;margin:16px 0;"><button class="btn" onclick="window._auditPage++;window.showView(\'stock-audit\')" style="padding:10px 24px;">Load More (' + (moves.length - pageItems.length) + ' remaining)</button></div>';
+        }
+    }
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
+// STOCKTAKE WORKFLOW
+// =============================================================================
+window._activeStocktake = null;
+window._stocktakeTab = 'start';
+window._stocktakeZone = 'all';
+window._stocktakeSearch = '';
+
+// Restore active stocktake on load
+(function() {
+    var orig = window._hubInitCallbacks || [];
+    orig.push(function() {
+        var takes = window.stocktakes || [];
+        for (var i = takes.length - 1; i >= 0; i--) {
+            if (takes[i].status === 'in-progress') { window._activeStocktake = takes[i]; window._stocktakeTab = 'count'; break; }
+        }
+    });
+    window._hubInitCallbacks = orig;
+})();
+
+window.renderStocktakeView = function() {
+    var tab = window._stocktakeTab || 'start';
+    if (window._activeStocktake && window._activeStocktake.status === 'in-progress') tab = 'count';
+    var html = '<div style="max-width:1200px;margin:0 auto;">';
+    html += '<h2 style="margin:0 0 4px;">📊 Stocktake</h2><p style="color:var(--text-muted);margin:0 0 16px;">Physical stock count, variance analysis, and inventory reconciliation</p>';
+    // Tab bar
+    var tabs = [{ id:'start', label:'Start New' }, { id:'count', label:'Active Count' }, { id:'history', label:'History' }];
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">';
+    tabs.forEach(function(t) {
+        var isActive = tab === t.id;
+        var disabled = t.id === 'count' && !window._activeStocktake;
+        html += '<button class="btn" onclick="window._stocktakeTab=\'' + t.id + '\';window.showView(\'stocktake\')" style="padding:8px 18px;border-radius:20px;font-size:13px;font-weight:' + (isActive ? '600' : '400') + ';background:' + (isActive ? 'var(--purple)' : 'var(--bg-main)') + ';color:' + (isActive ? '#fff' : 'var(--text-muted)') + ';border:1px solid ' + (isActive ? 'var(--purple)' : 'var(--border)') + ';' + (disabled ? 'opacity:0.4;pointer-events:none;' : '') + '">' + t.label + '</button>';
+    });
+    html += '</div>';
+
+    if (tab === 'start') html += window._renderStocktakeStart();
+    else if (tab === 'count') html += window._renderStocktakeCount();
+    else if (tab === 'history') html += window._renderStocktakeHistory();
+    html += '</div>';
+    return html;
+};
+
+window._renderStocktakeStart = function() {
+    if (window._activeStocktake) {
+        return '<div class="card" style="text-align:center;padding:30px;"><p style="font-size:16px;">A stocktake is already in progress.</p><button class="btn" onclick="window._stocktakeTab=\'count\';window.showView(\'stocktake\')" style="margin-top:12px;padding:10px 24px;">Go to Active Count</button></div>';
+    }
+    var activeItems = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
+    var html = '<div class="card" style="text-align:center;padding:40px;">';
+    html += '<div style="font-size:48px;margin-bottom:12px;">📋</div>';
+    html += '<h3 style="margin:0 0 8px;">Start a New Stocktake</h3>';
+    html += '<p style="color:var(--text-muted);margin:0 0 20px;">This will snapshot ' + activeItems.length + ' active inventory items at their current theoretical stock levels. You can then enter physical counts and compare.</p>';
+    html += '<div style="max-width:300px;margin:0 auto 20px;"><label style="font-size:12px;color:var(--text-muted);display:block;text-align:left;margin-bottom:4px;">Staff Member</label><input type="text" id="st-staff" class="input-box" placeholder="Who is counting?" style="margin:0;"></div>';
+    html += '<button class="btn" onclick="window.startStocktake()" style="padding:12px 32px;font-size:15px;background:var(--purple);color:#fff;">Start Stocktake</button>';
+    html += '</div>';
+    return html;
+};
+
+window.startStocktake = function() {
+    var staff = (document.getElementById('st-staff') ? document.getElementById('st-staff').value : '').trim();
+    if (!staff) return window.showToast('Enter staff name.', 'error');
+    var items = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
+    var snapshot = {};
+    items.forEach(function(i) {
+        snapshot[i.id] = { name: i.name, stock: i.stock || 0, price: i.price || 0, location: i.location || '', category: i.category || '', buyUnit: i.buyUnit || 'unit' };
+    });
+    var st = {
+        id: window.generateId('st'),
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        status: 'in-progress',
+        staff: staff,
+        theoreticalSnapshot: snapshot,
+        counts: {},
+        variances: {},
+        summary: {}
+    };
+    window._activeStocktake = st;
+    window.stocktakes = window.stocktakes || [];
+    window.stocktakes.push(st);
+    window._stocktakeTab = 'count';
+    window.saveToDisk();
+    window.showView('stocktake');
+};
+
+window._renderStocktakeCount = function() {
+    var st = window._activeStocktake;
+    if (!st) return '<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);">No active stocktake. Start a new one.</div>';
+    var snapshot = st.theoreticalSnapshot || {};
+    var counts = st.counts || {};
+    var ids = Object.keys(snapshot);
+    // Zone tabs
+    var zones = ['all'];
+    var zoneSet = {};
+    ids.forEach(function(id) { var z = snapshot[id].location || 'Unassigned'; if (!zoneSet[z]) { zoneSet[z] = true; zones.push(z); } });
+    var activeZone = window._stocktakeZone || 'all';
+    // Filter by zone
+    var filtered = ids;
+    if (activeZone !== 'all') filtered = ids.filter(function(id) { return (snapshot[id].location || 'Unassigned') === activeZone; });
+    // Filter by search
+    var search = (window._stocktakeSearch || '').toLowerCase();
+    if (search) filtered = filtered.filter(function(id) { return snapshot[id].name.toLowerCase().indexOf(search) !== -1; });
+    // Sort by name
+    filtered.sort(function(a, b) { return snapshot[a].name.localeCompare(snapshot[b].name); });
+    // Progress
+    var counted = Object.keys(counts).length;
+    var total = ids.length;
+    var pct = total > 0 ? Math.round(counted / total * 100) : 0;
+
+    var html = '';
+    // Progress bar
+    html += '<div class="card" style="padding:12px 16px;margin-bottom:16px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-weight:600;">' + counted + ' / ' + total + ' items counted</span><span style="color:var(--text-muted);font-size:13px;">Started by ' + st.staff + '</span></div>';
+    html += '<div style="height:8px;background:var(--bg-main);border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--purple);border-radius:4px;transition:width 0.3s;"></div></div>';
+    html += '</div>';
+    // Zone tabs
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">';
+    zones.forEach(function(z) {
+        var isActive = activeZone === z;
+        var label = z === 'all' ? 'All Zones' : z;
+        html += '<button class="btn" onclick="window._stocktakeZone=\'' + z.replace(/'/g, "\\'") + '\';window.showView(\'stocktake\')" style="padding:6px 14px;border-radius:16px;font-size:12px;background:' + (isActive ? 'var(--purple)' : 'var(--bg-main)') + ';color:' + (isActive ? '#fff' : 'var(--text-muted)') + ';border:1px solid ' + (isActive ? 'var(--purple)' : 'var(--border)') + ';">' + label + '</button>';
+    });
+    html += '</div>';
+    // Search
+    html += '<input type="text" class="input-box" placeholder="Search items..." value="' + (window._stocktakeSearch || '') + '" oninput="window._stocktakeSearch=this.value;window.showView(\'stocktake\')" style="margin:0 0 12px;padding:8px 14px;">';
+    // Item list
+    html += '<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);"><th style="padding:10px 12px;text-align:left;">Item</th><th style="padding:10px 8px;text-align:left;">Zone</th><th style="padding:10px 8px;text-align:right;">Theoretical</th><th style="padding:10px 8px;text-align:center;min-width:120px;">Actual Count</th><th style="padding:10px 8px;text-align:right;">Variance</th></tr></thead><tbody>';
+    filtered.forEach(function(id) {
+        var s = snapshot[id];
+        var c = counts[id];
+        var hasCounted = c !== undefined && c !== null;
+        var countVal = hasCounted ? c.counted : '';
+        var variance = hasCounted ? (c.counted - s.stock) : null;
+        var varColor = variance === null ? 'var(--text-muted)' : variance > 0 ? 'var(--green)' : variance < 0 ? 'var(--red)' : 'var(--text-muted)';
+        var varStr = variance === null ? '-' : (variance > 0 ? '+' : '') + variance.toFixed(2);
+        html += '<tr style="border-bottom:1px solid var(--border);">';
+        html += '<td style="padding:8px 12px;font-weight:500;">' + s.name + '<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">' + s.buyUnit + '</span></td>';
+        html += '<td style="padding:8px;font-size:12px;color:var(--text-muted);">' + (s.location || 'Unassigned') + '</td>';
+        html += '<td style="padding:8px;text-align:right;color:var(--text-muted);">' + (s.stock || 0).toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:center;"><input type="number" step="0.01" min="0" class="input-box" value="' + countVal + '" placeholder="—" onchange="window._saveStocktakeCount(\'' + id + '\',this.value)" style="margin:0;padding:8px;text-align:center;width:100px;font-size:14px;font-weight:600;"></td>';
+        html += '<td style="padding:8px;text-align:right;font-weight:500;color:' + varColor + ';">' + varStr + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    // Actions
+    html += '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">';
+    html += '<button class="btn" onclick="window._stocktakeTab=\'variance\';window._reviewStocktakeVariances()" style="padding:10px 24px;background:var(--purple);color:#fff;"' + (counted === 0 ? ' disabled style="opacity:0.4;pointer-events:none;"' : '') + '>Review Variances</button>';
+    html += '<button class="btn" onclick="window._discardStocktake()" style="padding:10px 24px;background:var(--bg-main);color:var(--red);border:1px solid var(--red);">Discard Stocktake</button>';
+    html += '</div>';
+    return html;
+};
+
+// Debounced auto-save for count entries
+window._stCountSaveTimer = null;
+window._saveStocktakeCount = function(invId, val) {
+    if (!window._activeStocktake) return;
+    if (val === '' || val === null || val === undefined) {
+        delete window._activeStocktake.counts[invId];
+    } else {
+        window._activeStocktake.counts[invId] = { counted: parseFloat(val) || 0, notes: '' };
+    }
+    // Debounce save
+    clearTimeout(window._stCountSaveTimer);
+    window._stCountSaveTimer = setTimeout(function() { window.saveToDisk(); }, 3000);
+};
+
+window._discardStocktake = function() {
+    window.confirmAction({
+        title: 'Discard Stocktake?',
+        message: 'All count data will be lost. This cannot be undone.',
+        confirmLabel: 'Discard',
+        confirmColor: 'var(--red)',
+        tier: 'standard',
+        onConfirm: function() {
+            var idx = (window.stocktakes || []).findIndex(function(s) { return s.id === window._activeStocktake.id; });
+            if (idx !== -1) window.stocktakes.splice(idx, 1);
+            window._activeStocktake = null;
+            window._stocktakeTab = 'start';
+            window.saveToDisk();
+            window.showView('stocktake');
+            window.showToast('Stocktake discarded.');
+        }
+    });
+};
+
+window._reviewStocktakeVariances = function() {
+    var st = window._activeStocktake;
+    if (!st) return;
+    // Compute variances
+    var snapshot = st.theoreticalSnapshot || {};
+    var counts = st.counts || {};
+    var variances = {};
+    var totalVar = 0, posCount = 0, negCount = 0, countedCount = 0;
+    Object.keys(snapshot).forEach(function(id) {
+        var s = snapshot[id];
+        var c = counts[id];
+        if (c !== undefined && c !== null) {
+            var delta = c.counted - s.stock;
+            var dollarVar = delta * (s.price || 0);
+            variances[id] = { theoretical: s.stock, actual: c.counted, delta: delta, dollarVariance: dollarVar, name: s.name, location: s.location, buyUnit: s.buyUnit };
+            totalVar += dollarVar;
+            if (delta > 0.01) posCount++;
+            else if (delta < -0.01) negCount++;
+            countedCount++;
+        }
+    });
+    st.variances = variances;
+    st.summary = { totalItems: Object.keys(snapshot).length, countedItems: countedCount, totalDollarVariance: totalVar, positiveVarianceItems: posCount, negativeVarianceItems: negCount };
+    window._stocktakeVarianceFilter = 'all';
+    // Show variance modal
+    window.openModal('📊 Variance Report', window._buildVarianceHtml(st));
+};
+
+window._stocktakeVarianceFilter = 'all';
+
+window._buildVarianceHtml = function(st) {
+    var variances = st.variances || {};
+    var summary = st.summary || {};
+    var filter = window._stocktakeVarianceFilter || 'all';
+    var ids = Object.keys(variances);
+    // Sort by absolute dollar variance
+    ids.sort(function(a, b) { return Math.abs(variances[b].dollarVariance) - Math.abs(variances[a].dollarVariance); });
+    // Filter
+    if (filter === 'over') ids = ids.filter(function(id) { return variances[id].delta > 0.01; });
+    else if (filter === 'under') ids = ids.filter(function(id) { return variances[id].delta < -0.01; });
+    else if (filter === 'significant') ids = ids.filter(function(id) { return Math.abs(variances[id].dollarVariance) > 5; });
+
+    var totalVar = summary.totalDollarVariance || 0;
+    var varColor = totalVar >= 0 ? 'var(--green)' : 'var(--red)';
+    var html = '<div style="margin-bottom:16px;">';
+    // Summary banner
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">';
+    html += '<div style="text-align:center;padding:12px;background:var(--bg-main);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:' + varColor + ';">$' + totalVar.toFixed(2) + '</div><div style="font-size:11px;color:var(--text-muted);">Total $ Variance</div></div>';
+    html += '<div style="text-align:center;padding:12px;background:var(--bg-main);border-radius:8px;"><div style="font-size:20px;font-weight:700;">' + (summary.countedItems || 0) + '/' + (summary.totalItems || 0) + '</div><div style="font-size:11px;color:var(--text-muted);">Items Counted</div></div>';
+    html += '<div style="text-align:center;padding:12px;background:var(--bg-main);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:var(--green);">' + (summary.positiveVarianceItems || 0) + '</div><div style="font-size:11px;color:var(--text-muted);">Over</div></div>';
+    html += '<div style="text-align:center;padding:12px;background:var(--bg-main);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:var(--red);">' + (summary.negativeVarianceItems || 0) + '</div><div style="font-size:11px;color:var(--text-muted);">Under</div></div>';
+    html += '</div>';
+    // Filter pills
+    var filters = [['all','All'],['over','Over'],['under','Under'],['significant','Significant (>$5)']];
+    html += '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+    filters.forEach(function(f) {
+        var isActive = filter === f[0];
+        html += '<button class="btn" onclick="window._stocktakeVarianceFilter=\'' + f[0] + '\';document.getElementById(\'global-modal-content\').querySelector(\'.st-variance-body\').innerHTML=window._buildVarianceTableHtml(window._activeStocktake)" style="padding:5px 12px;border-radius:14px;font-size:11px;background:' + (isActive ? 'var(--purple)' : 'var(--bg-main)') + ';color:' + (isActive ? '#fff' : 'var(--text-muted)') + ';border:1px solid ' + (isActive ? 'var(--purple)' : 'var(--border)') + ';">' + f[1] + '</button>';
+    });
+    html += '</div>';
+    // Table
+    html += '<div class="st-variance-body">' + window._buildVarianceTableHtml(st) + '</div>';
+    // Actions
+    html += '<div style="display:flex;gap:10px;margin-top:16px;">';
+    html += '<button class="btn" onclick="window._applyStocktakeCounts()" style="padding:10px 20px;background:var(--green);color:#fff;">Apply Counts</button>';
+    html += '<button class="btn" onclick="window.closeModal();window._stocktakeTab=\'count\';window.showView(\'stocktake\')" style="padding:10px 20px;">Back to Count</button>';
+    html += '</div></div>';
+    return html;
+};
+
+window._buildVarianceTableHtml = function(st) {
+    var variances = st.variances || {};
+    var filter = window._stocktakeVarianceFilter || 'all';
+    var ids = Object.keys(variances);
+    ids.sort(function(a, b) { return Math.abs(variances[b].dollarVariance) - Math.abs(variances[a].dollarVariance); });
+    if (filter === 'over') ids = ids.filter(function(id) { return variances[id].delta > 0.01; });
+    else if (filter === 'under') ids = ids.filter(function(id) { return variances[id].delta < -0.01; });
+    else if (filter === 'significant') ids = ids.filter(function(id) { return Math.abs(variances[id].dollarVariance) > 5; });
+
+    if (ids.length === 0) return '<div style="text-align:center;padding:20px;color:var(--text-muted);">No items match this filter.</div>';
+    var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);"><th style="padding:8px;text-align:left;">Item</th><th style="padding:8px;">Zone</th><th style="padding:8px;text-align:right;">Theoretical</th><th style="padding:8px;text-align:right;">Actual</th><th style="padding:8px;text-align:right;">+/-</th><th style="padding:8px;text-align:right;">$ Var</th></tr></thead><tbody>';
+    ids.forEach(function(id) {
+        var v = variances[id];
+        var dColor = v.delta > 0.01 ? 'var(--green)' : v.delta < -0.01 ? 'var(--red)' : 'var(--text-muted)';
+        html += '<tr style="border-bottom:1px solid var(--border);">';
+        html += '<td style="padding:6px 8px;font-weight:500;">' + v.name + '</td>';
+        html += '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + (v.location || '') + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right;color:var(--text-muted);">' + v.theoretical.toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right;">' + v.actual.toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:' + dColor + ';">' + (v.delta > 0 ? '+' : '') + v.delta.toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:' + dColor + ';">$' + v.dollarVariance.toFixed(2) + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+};
+
+window._applyStocktakeCounts = function() {
+    window.confirmAction({
+        title: 'Apply Stocktake Counts?',
+        message: 'This will overwrite current stock levels with your counted values. All changes will be logged in the audit trail.',
+        confirmLabel: 'Apply Counts',
+        confirmColor: 'var(--green)',
+        tier: 'dangerous',
+        onConfirm: function() {
+            window.closeModal();
+            var st = window._activeStocktake;
+            if (!st) return;
+            var counts = st.counts || {};
+            var snapshot = st.theoreticalSnapshot || {};
+            var updated = 0;
+            Object.keys(counts).forEach(function(invId) {
+                var inv = (window.inventoryItems || []).find(function(i) { return i.id === invId; });
+                if (!inv) return;
+                var counted = counts[invId].counted;
+                var delta = counted - (inv.stock || 0);
+                if (Math.abs(delta) > 0.001) {
+                    window.logStockMovement(inv.id, delta, 'stocktake', { sourceRef: st.id, staff: st.staff });
+                    inv.stock = counted;
+                    updated++;
+                }
+            });
+            st.status = 'completed';
+            st.completedAt = new Date().toISOString();
+            window._activeStocktake = null;
+            window._stocktakeTab = 'history';
+            window.saveToDisk();
+            window.showView('stocktake');
+            window.showToast(updated + ' stock levels updated from stocktake.');
+        }
+    });
+};
+
+window._renderStocktakeHistory = function() {
+    var takes = (window.stocktakes || []).filter(function(s) { return s.status === 'completed'; }).reverse();
+    if (takes.length === 0) return '<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);">No completed stocktakes yet.</div>';
+    var html = '<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);"><th style="padding:10px 12px;text-align:left;">Date</th><th style="padding:10px 8px;">Staff</th><th style="padding:10px 8px;text-align:right;">Items Counted</th><th style="padding:10px 8px;text-align:right;">$ Variance</th><th style="padding:10px 8px;"></th></tr></thead><tbody>';
+    takes.forEach(function(st) {
+        var sum = st.summary || {};
+        var totalVar = sum.totalDollarVariance || 0;
+        var varColor = totalVar >= 0 ? 'var(--green)' : 'var(--red)';
+        var dateStr = new Date(st.completedAt).toLocaleDateString('en-AU', { day:'2-digit', month:'short', year:'numeric' });
+        html += '<tr style="border-bottom:1px solid var(--border);">';
+        html += '<td style="padding:8px 12px;">' + dateStr + '</td>';
+        html += '<td style="padding:8px;">' + (st.staff || '') + '</td>';
+        html += '<td style="padding:8px;text-align:right;">' + (sum.countedItems || 0) + '/' + (sum.totalItems || 0) + '</td>';
+        html += '<td style="padding:8px;text-align:right;font-weight:600;color:' + varColor + ';">$' + totalVar.toFixed(2) + '</td>';
+        html += '<td style="padding:8px;text-align:right;"><button class="btn" onclick="window._viewHistoricStocktake(\'' + st.id + '\')" style="padding:5px 12px;font-size:12px;">View</button></td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+};
+
+window._viewHistoricStocktake = function(stId) {
+    var st = (window.stocktakes || []).find(function(s) { return s.id === stId; });
+    if (!st) return;
+    window.openModal('📊 Stocktake — ' + new Date(st.completedAt).toLocaleDateString('en-AU'), window._buildVarianceHtml(st).replace('window._applyStocktakeCounts()', '').replace('>Apply Counts<', ' style="display:none"><'));
 };
