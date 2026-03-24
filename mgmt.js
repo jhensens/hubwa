@@ -472,6 +472,21 @@ window.renderSalesView = () => {
         const dayLabel = d ? dayNames[d.getDay()] : '';
         const wageAmt = Number(s.wages || 0);
         const wagePctDay = Number(s.total || 0) > 0 && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+
+        // Tanda wage lookup: convert DD/MM/YYYY to YYYY-MM-DD
+        var tandaWageCell = '—';
+        var tandaData = window._tandaData || {};
+        var weeklyActual = tandaData.weeklyActual || {};
+        if (d) {
+            var isoDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            var tandaDay = weeklyActual[isoDate];
+            if (tandaDay && tandaDay.cost > 0) {
+                var tandaPct = Number(s.total || 0) > 0 ? ' (' + ((tandaDay.cost / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+                tandaWageCell = '<span style="color:var(--blue);">$' + Math.round(tandaDay.cost).toLocaleString('en-AU') + tandaPct + '</span>' +
+                    '<br><small style="color:var(--text-muted);">' + tandaDay.hours.toFixed(1) + 'h · ' + tandaDay.count + ' staff</small>';
+            }
+        }
+
         return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;" onclick="window.manualTakingsForm(\''+s.date+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
             '<td style="padding:7px 8px;font-size:12px;">' + s.date + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
@@ -479,6 +494,7 @@ window.renderSalesView = () => {
             '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
             '<td style="padding:6px 8px;font-size:13px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
+            '<td style="padding:10px;font-size:12px;">' + tandaWageCell + '</td>' +
             '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + esc(s.notes || '') + '</td>' +
         '</tr>';
@@ -538,9 +554,9 @@ window.renderSalesView = () => {
             '<div style="max-height:300px;overflow-y:auto;">' +
                 '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
                     '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);background:#0a0a0c;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-                        '<th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;">Day</th><th style="padding:6px 8px;">EFTPOS</th><th style="padding:6px 8px;">Cash</th><th style="padding:6px 8px;">Me&u</th><th style="padding:6px 8px;color:var(--green);">Total</th><th style="padding:6px 8px;color:var(--orange);">Wages</th><th style="padding:6px 8px;">Notes</th>' +
+                        '<th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;">Day</th><th style="padding:6px 8px;">EFTPOS</th><th style="padding:6px 8px;">Cash</th><th style="padding:6px 8px;">Me&u</th><th style="padding:6px 8px;color:var(--green);">Total</th><th style="padding:6px 8px;color:var(--blue);">Tanda</th><th style="padding:6px 8px;color:var(--orange);">Wages</th><th style="padding:6px 8px;">Notes</th>' +
                     '</tr></thead>' +
-                    '<tbody>' + (tableRows || '<tr><td colspan="8" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
+                    '<tbody>' + (tableRows || '<tr><td colspan="9" style="padding:15px;color:var(--text-muted);text-align:center;">No data for this period.</td></tr>') + '</tbody>' +
                 '</table>' +
             '</div>' +
         '</div>' +
