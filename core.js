@@ -282,7 +282,8 @@ window._restrictedViews = [
     'sales', 'suppliers', 'recipes', 'invoice', 'orientation', 'safe', 'handover',
     'margins', 'menu-engineering', 'sell-price-editor', 'price-alerts', 'forecast',
     'staff-directory', 'bulk-category-editor', 'pos-alias-editor', 'ai-order',
-    'cross-venue', 'par-editor', 'batch-linker', 'costing-report', 'prime-cost', 'lightspeed-import'
+    'cross-venue', 'par-editor', 'batch-linker', 'costing-report', 'prime-cost', 'lightspeed-import',
+    'badge-management', 'staff-hub-config', 'audit-log'
 ];
 
 window.checkLockState = () => {
@@ -295,7 +296,10 @@ window.checkLockState = () => {
         if (staffBtn) staffBtn.style.display = 'flex';
         if (window._restrictedViews.includes(window.currentView)) window.showView('dashboard');
     } else {
-        restrictedItems.forEach(el => el.style.display = 'flex');
+        restrictedItems.forEach(el => {
+            // Restore correct display type — nav-section uses block, nav-item uses flex
+            el.style.display = el.classList.contains('nav-section') ? 'block' : 'flex';
+        });
         if (lockBtn) { lockBtn.innerHTML = '🔒 Lock Hub'; lockBtn.style.background = 'rgba(239,68,68,0.1)'; lockBtn.style.color = 'var(--red)'; lockBtn.style.borderColor = 'rgba(239,68,68,0.2)'; }
         if (staffBtn) staffBtn.style.display = 'none';
         window._activeStaffMember = null;
