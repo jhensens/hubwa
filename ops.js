@@ -3684,6 +3684,19 @@ window.executeUnifiedDepletion = function() {
 };
 
 // Reverse a depletion run — restores stock to pre-depletion levels
+// Wrapper for undo button — avoids nested escaping in onclick attributes
+window._undoDepletionRun = function(runId) {
+    window.confirmAction({
+        title: 'Undo Depletion',
+        message: 'This will restore stock levels to before this depletion run. Continue?',
+        tier: 'dangerous',
+        onConfirm: function() {
+            window.reverseDepletionRun(runId);
+            window.showView('depletion-history');
+        }
+    });
+};
+
 window.reverseDepletionRun = function(runId) {
     var logs = window.depletionLogs || [];
     var run = logs.find(function(d) { return d.id === runId; });
@@ -3762,7 +3775,7 @@ window.renderDepletionHistoryView = function() {
             // Undo button (only for non-reversed runs)
             if (!d.reversed) {
                 html += '<div style="margin-top:15px; text-align:right;">' +
-                    '<button onclick="window.confirmAction({title:\'Undo Depletion\',message:\'This will restore stock levels to before this depletion run. Continue?\',tier:\'dangerous\',onConfirm:function(){window.reverseDepletionRun(\\\'' + d.id + '\\\');window.showView(\\\'depletion-history\\\');}})" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">Undo This Run</button>' +
+                    '<button onclick="window._undoDepletionRun(\'' + d.id + '\')" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">Undo This Run</button>' +
                 '</div>';
             } else {
                 html += '<div style="margin-top:15px; text-align:right; font-size:12px; color:var(--text-muted);">Reversed at ' + (d.reversedAt ? new Date(d.reversedAt).toLocaleString() : '?') + '</div>';
