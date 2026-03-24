@@ -3055,6 +3055,25 @@ window.renderManagerHub = () => {
         html += '</div>';
     }
 
+    // --- KUDOS BOARD (on dashboard) ---
+    if (window.renderKudosCard) html += window.renderKudosCard();
+
+    // --- ACTIVE ANNOUNCEMENTS SUMMARY ---
+    const activeAnns = (window.announcements || []).filter(a => !a.expiry || new Date(a.expiry) >= today).slice(0, 3);
+    if (activeAnns.length > 0) {
+        const prioColors = {urgent:'var(--red)',warning:'var(--orange)',info:'var(--blue)'};
+        html += '<div class="card" style="padding:16px;margin-bottom:14px;border-top:3px solid var(--blue);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:13px;font-weight:700;">📢 Noticeboard</div>';
+        html += '<button onclick="window.showView(\'noticeboard\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button></div>';
+        activeAnns.forEach(a => {
+            html += '<div style="padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;display:flex;gap:8px;align-items:center;">';
+            html += '<span style="width:8px;height:8px;border-radius:50%;background:'+(prioColors[a.priority]||'var(--blue)')+';flex-shrink:0;"></span>';
+            html += '<span style="flex:1;">'+E(a.title)+'</span>';
+            html += '<span style="font-size:11px;color:var(--text-muted);">'+E(a.date||'')+'</span></div>';
+        });
+        html += '</div>';
+    }
+
     html += '</div>';
     return html;
 };
@@ -3141,27 +3160,21 @@ window.newHandoverForm = () => {
     const hh = String(now.getHours()).padStart(2,'0');
     const mm = String(now.getMinutes()).padStart(2,'0');
     const timeNow = hh + ':' + mm;
-    // Auto-populate stock alerts and 86'd items
-    const isWeekend = [0,5,6].includes(new Date().getDay());
-    const stockAlerts = (window.inventoryItems||[]).filter(i => {
-        if (i.archived) return false;
-        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
-        return i.stock < par;
-    }).slice(0, 8).map(i => i.name + ' (' + Number(i.stock).toFixed(1) + ')').join(', ');
-    const eightySixed = (window.recipes||[]).filter(r => r.status === "86'd" && !r.archived).map(r => r.name).join(', ');
-    
+    // Enhanced auto-populate from today's data
+    const prefills = window._generateHandoverPrefill ? window._generateHandoverPrefill() : {};
+
     const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
-    
+
     const sectionFields = sections.map((sec, i) => {
         let placeholder = 'Notes...';
-        let prefill = '';
-        if (sec.toLowerCase().includes('86')) { placeholder = "List any items 86'd during service..."; prefill = eightySixed || ''; }
-        if (sec.toLowerCase().includes('stock')) { placeholder = 'Stock issues or items running low...'; prefill = stockAlerts ? 'Below PAR: ' + stockAlerts : ''; }
+        const prefill = prefills[sec] || '';
+        if (sec.toLowerCase().includes('86')) placeholder = "List any items 86'd during service...";
+        if (sec.toLowerCase().includes('stock')) placeholder = 'Stock issues or items running low...';
         if (sec.toLowerCase().includes('service summary')) placeholder = 'How was the shift? Covers, vibe, any issues...';
         if (sec.toLowerCase().includes('opening')) placeholder = 'What does the opening team need to know?';
         if (sec.toLowerCase().includes('issue') || sec.toLowerCase().includes('follow')) placeholder = 'Equipment issues, booking follow-ups, staff matters...';
-        
-        return '<div class="handover-section" style="padding:12px;margin-bottom:8px;"><h4 style="margin:0 0 6px 0;font-size:12px;">' + sec + '</h4>' +
+
+        return '<div class="handover-section" style="padding:12px;margin-bottom:8px;"><h4 style="margin:0 0 6px 0;font-size:12px;">' + sec + (prefill ? ' <span style="font-size:10px;color:var(--green);">✓ auto-filled</span>' : '') + '</h4>' +
             '<textarea id="h-sec-' + i + '" class="input-box" placeholder="' + placeholder + '" style="height:70px;margin:0;line-height:1.5;">' + prefill + '</textarea></div>';
     }).join('');
     
@@ -3682,3 +3695,313 @@ window._commitRosterUpload = async () => {
     } catch(err) { window.showToast("Upload failed.", "error"); }
 };
 window.deleteRoster = (i) => { window.confirmAction({ title:'🗓️ Delete Roster', message:'Delete this roster?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } }); };
+
+// =============================================================================
+// NOTICEBOARD / ANNOUNCEMENTS
+// =============================================================================
+window.renderNoticeboardView = () => {
+    const E = window.esc;
+    const now = new Date();
+    const all = (window.announcements || []).slice().sort((a, b) => {
+        const pa = {urgent:0,warning:1,info:2}; return (pa[a.priority]||2) - (pa[b.priority]||2) || new Date(b.date) - new Date(a.date);
+    });
+    const active = all.filter(a => !a.expiry || new Date(a.expiry) >= now);
+    const expired = all.filter(a => a.expiry && new Date(a.expiry) < now);
+
+    const priorityStyle = { urgent:'background:rgba(239,68,68,0.1);border-left:4px solid var(--red);', warning:'background:rgba(245,158,11,0.1);border-left:4px solid var(--orange);', info:'background:rgba(59,130,246,0.06);border-left:4px solid var(--blue);' };
+    const priorityLabel = { urgent:'🔴 Urgent', warning:'🟠 Important', info:'🔵 Info' };
+
+    const renderCard = (a, idx) => {
+        const ackCount = (a.acknowledged || []).length;
+        const staffCount = (window.staffDirectory || []).filter(s => s.status !== 'Inactive').length || 1;
+        return `<div class="card" style="margin-bottom:12px;padding:16px;${priorityStyle[a.priority]||priorityStyle.info}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                <div style="flex:1;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-weight:600;">${priorityLabel[a.priority]||'Info'}</span>
+                        <span style="font-size:11px;color:var(--text-muted);">${E(a.date || '')}</span>
+                        ${a.expiry ? '<span style="font-size:11px;color:var(--text-muted);">Expires: '+E(a.expiry)+'</span>' : ''}
+                    </div>
+                    <h3 style="margin:0 0 6px;font-size:16px;">${E(a.title)}</h3>
+                    <p style="margin:0;font-size:14px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap;">${E(a.body || '')}</p>
+                    <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Posted by ${E(a.author||'Manager')} · ${ackCount}/${staffCount} acknowledged</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button onclick="window.acknowledgeAnnouncement('${E(a.id)}')" class="btn btn-outline" style="font-size:11px;padding:5px 10px;">✅ Ack</button>
+                    <button onclick="window.editAnnouncement('${E(a.id)}')" class="btn btn-outline" style="font-size:11px;padding:5px 10px;">✏️</button>
+                    <button onclick="window.deleteAnnouncement('${E(a.id)}')" class="btn btn-outline" style="font-size:11px;padding:5px 10px;color:var(--red);">✕</button>
+                </div>
+            </div>
+        </div>`;
+    };
+
+    const activeHtml = active.length > 0 ? active.map(renderCard).join('') : '<div style="text-align:center;padding:48px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📢</div><p style="font-size:15px;font-weight:600;color:var(--text-main);">No active announcements</p><p style="font-size:13px;">Post a notice for your team — menu changes, reminders, important updates.</p></div>';
+
+    const expiredHtml = expired.length > 0 ? '<details style="margin-top:20px;"><summary style="cursor:pointer;color:var(--text-muted);font-size:13px;font-weight:600;">Expired Notices (' + expired.length + ')</summary><div style="margin-top:10px;">' + expired.map(renderCard).join('') + '</div></details>' : '';
+
+    return `<div style="max-width:800px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            <div>
+                <h2 style="margin:0;">📢 Noticeboard</h2>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Team announcements, updates & reminders</div>
+            </div>
+            <button onclick="window.newAnnouncementForm()" class="btn btn-purple" style="padding:10px 20px;">+ Post Notice</button>
+        </div>
+        ${activeHtml}${expiredHtml}
+    </div>`;
+};
+
+window.newAnnouncementForm = () => {
+    const html = `
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">Title</label>
+            <input type="text" id="ann-title" class="input-box" placeholder="e.g. New cocktail menu launching Friday" style="margin:0;">
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">Message</label>
+            <textarea id="ann-body" class="input-box" placeholder="Details for the team..." style="margin:0;height:100px;"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+                <label style="font-size:11px;color:var(--text-muted);">Priority</label>
+                <select id="ann-priority" class="input-box" style="margin:0;">
+                    <option value="info">🔵 Info</option>
+                    <option value="warning">🟠 Important</option>
+                    <option value="urgent">🔴 Urgent</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;color:var(--text-muted);">Expires (optional)</label>
+                <input type="date" id="ann-expiry" class="input-box" style="margin:0;">
+            </div>
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">Posted By</label>
+            <input type="text" id="ann-author" class="input-box" placeholder="Your name" style="margin:0;">
+        </div>
+        <button onclick="window.saveAnnouncement()" class="btn btn-green" style="width:100%;padding:12px;">Post Notice</button>`;
+    window.openModal('📢 New Announcement', html);
+};
+
+window.saveAnnouncement = (editId) => {
+    const title = document.getElementById('ann-title').value.trim();
+    const body = document.getElementById('ann-body').value.trim();
+    const priority = document.getElementById('ann-priority').value;
+    const expiry = document.getElementById('ann-expiry').value;
+    const author = document.getElementById('ann-author').value.trim();
+    if (!title) return window.showToast('Title is required.', 'error');
+    if (!window.announcements) window.announcements = [];
+
+    if (editId) {
+        const existing = window.announcements.find(a => a.id === editId);
+        if (existing) { existing.title = title; existing.body = body; existing.priority = priority; existing.expiry = expiry; existing.author = author || existing.author; }
+    } else {
+        window.announcements.unshift({
+            id: window.generateId('ann'),
+            title, body, priority, expiry, author: author || 'Manager',
+            date: new Date().toLocaleDateString('en-AU'),
+            acknowledged: []
+        });
+    }
+    window.logAudit('announcements', editId ? 'edit' : 'create', editId || '', title);
+    window.saveToDisk(); window.closeModal(); window.showView('noticeboard');
+    window.showToast(editId ? 'Notice updated.' : 'Notice posted!');
+};
+
+window.editAnnouncement = (id) => {
+    const a = (window.announcements || []).find(x => x.id === id);
+    if (!a) return;
+    window.newAnnouncementForm();
+    setTimeout(() => {
+        document.getElementById('ann-title').value = a.title || '';
+        document.getElementById('ann-body').value = a.body || '';
+        document.getElementById('ann-priority').value = a.priority || 'info';
+        document.getElementById('ann-expiry').value = a.expiry || '';
+        document.getElementById('ann-author').value = a.author || '';
+        const btn = document.querySelector('#global-modal-content button.btn-green');
+        if (btn) { btn.textContent = 'Update Notice'; btn.setAttribute('onclick', "window.saveAnnouncement('" + window.escAttr(id) + "')"); }
+    }, 50);
+};
+
+window.acknowledgeAnnouncement = (id) => {
+    const a = (window.announcements || []).find(x => x.id === id);
+    if (!a) return;
+    if (!a.acknowledged) a.acknowledged = [];
+    const name = prompt('Your name:');
+    if (!name) return;
+    if (!a.acknowledged.includes(name)) {
+        a.acknowledged.push(name);
+        window.saveToDisk(); window.showView('noticeboard');
+        window.showToast('Acknowledged!');
+    } else {
+        window.showToast('Already acknowledged.', 'error');
+    }
+};
+
+window.deleteAnnouncement = (id) => {
+    window.confirmAction({ title:'📢 Delete Notice', message:'Remove this announcement?', confirmLabel:'Delete', tier:'standard', onConfirm:() => {
+        window.announcements = (window.announcements || []).filter(a => a.id !== id);
+        window.logAudit('announcements', 'delete', id, '');
+        window.saveToDisk(); window.showView('noticeboard');
+    }});
+};
+
+// =============================================================================
+// KUDOS / RECOGNITION BOARD
+// =============================================================================
+window.renderKudosCard = () => {
+    const E = window.esc;
+    const recent = (window.kudos || []).slice(0, 5);
+    if (recent.length === 0) return '';
+    const items = recent.map(k => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+        <span style="color:var(--purple);font-weight:600;">${E(k.to)}</span> <span style="color:var(--text-muted);">— "${E(k.message)}"</span>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">From ${E(k.from)} · ${E(k.date||'')}</div>
+    </div>`).join('');
+    return `<div class="card" style="border-top:3px solid var(--purple);padding:16px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <h3 style="margin:0;font-size:15px;">⭐ Team Kudos</h3>
+            <button onclick="window.giveKudosForm()" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">+ Give Kudos</button>
+        </div>
+        ${items}
+    </div>`;
+};
+
+window.giveKudosForm = () => {
+    const staffOpts = (window.staffDirectory || []).filter(s => s.status !== 'Inactive').map(s =>
+        '<option value="' + window.escAttr(s.name) + '">' + window.esc(s.name) + '</option>'
+    ).join('');
+    const html = `
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">Who deserves a shout-out?</label>
+            <select id="kudos-to" class="input-box" style="margin:0;">
+                <option value="">Select team member...</option>
+                ${staffOpts}
+            </select>
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">What did they do?</label>
+            <input type="text" id="kudos-msg" class="input-box" placeholder="e.g. Stayed late to help with deep clean" style="margin:0;">
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:11px;color:var(--text-muted);">Your Name</label>
+            <input type="text" id="kudos-from" class="input-box" placeholder="Your name" style="margin:0;">
+        </div>
+        <button onclick="window.saveKudos()" class="btn btn-purple" style="width:100%;padding:12px;">⭐ Send Kudos</button>`;
+    window.openModal('⭐ Give Kudos', html);
+};
+
+window.saveKudos = () => {
+    const to = document.getElementById('kudos-to').value;
+    const msg = document.getElementById('kudos-msg').value.trim();
+    const from = document.getElementById('kudos-from').value.trim();
+    if (!to || !msg || !from) return window.showToast('All fields required.', 'error');
+    if (!window.kudos) window.kudos = [];
+    window.kudos.unshift({ id: window.generateId('kud'), to, from, message: msg, date: new Date().toLocaleDateString('en-AU') });
+    if (window.kudos.length > 100) window.kudos = window.kudos.slice(0, 100);
+    window.saveToDisk(); window.closeModal(); window.showView('dashboard');
+    window.showToast('Kudos sent to ' + to + '!');
+};
+
+// =============================================================================
+// AUDIT LOG VIEW
+// =============================================================================
+window.renderAuditLogView = () => {
+    const E = window.esc;
+    const logs = (window.auditLog || []).slice(0, 200);
+    if (logs.length === 0) {
+        return '<div style="max-width:800px;margin:auto;"><h2 style="margin:0 0 16px;">📋 Audit Trail</h2><div class="card" style="text-align:center;padding:48px;"><div style="font-size:36px;margin-bottom:12px;">📋</div><p style="color:var(--text-muted);">No audit entries yet. Changes will be logged automatically.</p></div></div>';
+    }
+    const actionColors = { create:'var(--green)', edit:'var(--blue)', delete:'var(--red)' };
+    const rows = logs.map(l => {
+        const d = l.timestamp ? new Date(l.timestamp) : null;
+        const timeStr = d ? d.toLocaleDateString('en-AU') + ' ' + d.toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit'}) : '';
+        return `<tr style="border-bottom:1px solid var(--border);font-size:13px;">
+            <td style="padding:8px 10px;white-space:nowrap;color:var(--text-muted);">${E(timeStr)}</td>
+            <td style="padding:8px 10px;"><span style="color:${actionColors[l.action]||'var(--text-main)'};font-weight:600;text-transform:uppercase;font-size:11px;">${E(l.action||'')}</span></td>
+            <td style="padding:8px 10px;">${E(l.collection||'')}</td>
+            <td style="padding:8px 10px;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;">${E(l.details||'')}</td>
+        </tr>`;
+    }).join('');
+    return `<div style="max-width:900px;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div><h2 style="margin:0;">📋 Audit Trail</h2><div style="font-size:13px;color:var(--text-muted);margin-top:2px;">All changes tracked automatically</div></div>
+            <span style="font-size:13px;color:var(--text-muted);">${logs.length} entries</span>
+        </div>
+        <div style="overflow-x:auto;"><table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">
+            <thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">
+                <th style="padding:10px;">Time</th><th style="padding:10px;">Action</th><th style="padding:10px;">Area</th><th style="padding:10px;">Details</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+};
+
+// =============================================================================
+// ENHANCED HANDOVER PRE-POPULATION
+// =============================================================================
+window._generateHandoverPrefill = () => {
+    const now = new Date();
+    const todayStr = now.toLocaleDateString();
+    const isWeekend = [0,5,6].includes(now.getDay());
+    const sections = (window.handoverTemplateConfig || {}).sections || [];
+    const prefills = {};
+
+    sections.forEach(sec => {
+        const lower = sec.toLowerCase();
+
+        if (lower.includes('86')) {
+            const items86 = (window.inventoryItems || []).filter(i => !i.archived && (i.stock <= 0)).map(i => i.name);
+            const recipes86 = (window.recipes || []).filter(r => r.status === "86'd" && !r.archived).map(r => r.name);
+            const all86 = [...new Set([...items86, ...recipes86])];
+            prefills[sec] = all86.length > 0 ? all86.join(', ') : 'Nothing 86\'d';
+        }
+
+        if (lower.includes('stock')) {
+            const belowPar = (window.inventoryItems || []).filter(i => {
+                if (i.archived) return false;
+                const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+                return par > 0 && i.stock < par;
+            }).slice(0, 10).map(i => {
+                const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+                return i.name + ' (' + Number(i.stock || 0).toFixed(1) + '/' + par + ')';
+            });
+            prefills[sec] = belowPar.length > 0 ? 'Below PAR: ' + belowPar.join(', ') : 'All stock at or above PAR levels.';
+        }
+
+        if (lower.includes('issue') || lower.includes('follow')) {
+            const parts = [];
+            // Open maintenance tickets
+            const openTickets = (window.defectLogs || []).filter(d => d.status !== 'Resolved');
+            if (openTickets.length > 0) parts.push('Open maintenance: ' + openTickets.map(d => d.item || d.description || 'Ticket').join(', '));
+            // Today's incidents
+            const todayIncidents = (window.incidentLogs || []).filter(i => i.time && i.time.includes(todayStr));
+            if (todayIncidents.length > 0) parts.push('Incidents today: ' + todayIncidents.length);
+            // Temp breaches
+            const breaches = (window.tempLogs || []).filter(t => t.time && t.time.includes(todayStr) && parseFloat(t.value) > 5);
+            if (breaches.length > 0) parts.push('Temp breaches: ' + breaches.map(t => (t.unit || 'Unit') + ' ' + t.value + '°C').join(', '));
+            prefills[sec] = parts.length > 0 ? parts.join('\n') : '';
+        }
+
+        if (lower.includes('service summary')) {
+            const parts = [];
+            const todaySales = (window.salesData || []).find(s => s.date === now.toLocaleDateString('en-AU'));
+            if (todaySales) {
+                parts.push('Revenue: $' + Number(todaySales.total || 0).toLocaleString());
+                if (todaySales.covers) parts.push('Covers: ' + todaySales.covers);
+            }
+            // Today's wastage
+            const todayWaste = (window.wastageLogs || []).filter(w => w.time && w.time.includes(todayStr));
+            const wasteTotal = todayWaste.reduce((s, w) => s + Number(w.value || 0), 0);
+            if (wasteTotal > 0) parts.push('Wastage: $' + wasteTotal.toFixed(2));
+            prefills[sec] = parts.length > 0 ? parts.join(' · ') : '';
+        }
+
+        if (lower.includes('opening') || lower.includes('tomorrow')) {
+            // Check for upcoming tasks due
+            const overdue = (window.rotationalTasks || []).filter(t => {
+                if (t.dueDateMode === 'specific' && t.specificDueDate) return new Date(t.specificDueDate) <= new Date(now.getTime() + 86400000);
+                return false;
+            }).map(t => t.name);
+            if (overdue.length > 0) prefills[sec] = 'Tasks due: ' + overdue.join(', ');
+        }
+    });
+    return prefills;
+};

@@ -2380,7 +2380,9 @@ window.renderMenuEngineeringView = () => {
         window._marginsTabBar('menu-engineering') +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
         '<div><h2 style="margin:0;">🎯 Menu Engineering Matrix</h2><small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+' covers/wk · '+menuRecipes.length+' active items</small></div>' +
+        '<button onclick="window.getMenuAiAdvice()" class="btn btn-purple" style="padding:10px 18px;font-size:13px;">🤖 AI Menu Advisor</button>' +
         '</div>' +
+        '<div id="ai-menu-advice"></div>' +
         warnHtml +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:25px;">' +
         '<div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">'+counts.star+'</div><div style="font-size:12px;color:var(--text-muted);">⭐ Stars</div></div>' +
@@ -2388,6 +2390,77 @@ window.renderMenuEngineeringView = () => {
         '<div class="card" style="text-align:center;border-top:4px solid var(--orange);"><div style="font-size:34px;font-weight:bold;color:var(--orange);">'+counts.plowhorse+'</div><div style="font-size:12px;color:var(--text-muted);">🐴 Plow Horses</div></div>' +
         '<div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">'+counts.dog+'</div><div style="font-size:12px;color:var(--text-muted);">🐶 Dogs</div></div></div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;">'+quadHtml+'</div></div>';
+};
+
+// =============================================================================
+// AI MENU ENGINEERING ADVISOR
+// =============================================================================
+window.getMenuAiAdvice = async () => {
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    const container = document.getElementById('ai-menu-advice');
+    if (!container) return;
+    container.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:16px;"><div style="display:flex;align-items:center;gap:10px;"><div class="loading-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span style="color:var(--purple);font-weight:600;">Analysing your menu...</span></div></div>';
+
+    const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active'&&!r.archived);
+    const GP_TARGET = window.GP_TARGET || 70;
+
+    // Recalculate costs
+    menuRecipes.forEach(r => {
+        let cost = 0;
+        (r.ingredients||[]).forEach(ing => {
+            if (ing.type === 'inv') { const inv = (window.inventoryItems||[]).find(i=>i.id===ing.ref); if (inv) cost += ing.qty * ((inv.price||0)/(inv.yield||1)); }
+            else if (ing.type === 'batch') { const b = (window.recipes||[]).find(x=>x.id===ing.ref); if (b) cost += ing.qty * ((b.cost||0)/(b.yieldQty||1)); }
+        });
+        r.cost = cost; r.gp = r.price > 0 ? parseFloat(((r.price - cost) / r.price * 100).toFixed(1)) : 0;
+    });
+
+    const avgGp = menuRecipes.length > 0 ? menuRecipes.reduce((s,r) => s + r.gp, 0) / menuRecipes.length : 0;
+    const avgCovers = menuRecipes.length > 0 ? menuRecipes.reduce((s,r) => s + (r.coversPerWeek||0), 0) / menuRecipes.length : 0;
+    const classify = r => { const hi = r.gp >= avgGp, hv = (r.coversPerWeek||0) >= avgCovers; return hi && hv ? 'Star' : hi && !hv ? 'Puzzle' : !hi && hv ? 'Plowhorse' : 'Dog'; };
+
+    const itemData = menuRecipes.map(r => `${r.name}: sell $${Number(r.price).toFixed(2)}, cost $${Number(r.cost).toFixed(2)}, GP ${r.gp}%, ${r.coversPerWeek||0} covers/wk, station: ${r.station||'Kitchen'}, category: ${classify(r)}`).join('\n');
+
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+
+    const prompt = `You are a hospitality menu engineering consultant analysing the menu for ${venue}, an Asian restaurant.
+
+Here is the menu data with categories (Star = high GP + high volume, Puzzle = high GP + low volume, Plowhorse = high volume + low GP, Dog = low GP + low volume):
+
+${itemData}
+
+Average GP: ${avgGp.toFixed(1)}% | Average covers/wk: ${avgCovers.toFixed(0)} | GP target: ${GP_TARGET}%
+
+Give 5-7 specific, actionable recommendations. For each:
+- Name the exact dish
+- State the category it's in
+- Give a concrete action (price change with exact amount, repositioning strategy, removal consideration, or promotional idea)
+- Explain why briefly
+
+Format as numbered list. Be direct and specific with dollar amounts. Focus on moves that improve total profit without alienating customers.`;
+
+    try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from AI.';
+
+        // Convert markdown-ish text to simple HTML
+        const htmlText = window.esc(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        container.innerHTML = `<div class="card" style="border-top:3px solid var(--purple);padding:20px;margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h3 style="margin:0;font-size:16px;">🤖 AI Menu Recommendations</h3>
+                <button onclick="document.getElementById('ai-menu-advice').innerHTML=''" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Dismiss</button>
+            </div>
+            <div style="font-size:13px;line-height:1.8;color:var(--text-main);">${htmlText}</div>
+        </div>`;
+    } catch (err) {
+        container.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">AI analysis failed: ' + window.esc(err.message) + '</div>';
+    }
 };
 
 // =============================================================================

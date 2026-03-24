@@ -31,6 +31,9 @@ window.orderHistory = [];
 window.stockMovements = [];
 window.stocktakes = [];
 window.staffDirectory = [];
+window.auditLog = [];
+window.announcements = [];
+window.kudos = [];
 window.qualificationTypes = [
     { id: 'rsa', name: 'RSA', expiryRequired: true },
     { id: 'food-handler', name: 'Food Handler Certificate', expiryRequired: true },
@@ -220,7 +223,27 @@ window.debounce = (fn, delay) => {
     };
 };
 
-// --- 3. KIOSK PIN SECURITY ---
+// --- 3. KIOSK PIN SECURITY (SHA-256 Hashed) ---
+window._hashPin = async (pin) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin + '_hobarthub_salt');
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+// Migrate plaintext PIN to hashed on first load
+(function() {
+    const storedPin = localStorage.getItem('venuePin');
+    if (storedPin && storedPin.length < 64) {
+        // Still plaintext — hash it now
+        window._hashPin(storedPin).then(hashed => {
+            localStorage.setItem('venuePin', hashed);
+            localStorage.setItem('venuePinHashed', 'true');
+        });
+    }
+})();
+
 window.isLocked = !!localStorage.getItem('venuePin');
 window._lastActivity = Date.now();
 window._autoLockMinutes = 10;
@@ -306,8 +329,9 @@ window.requirePin = (onSuccess) => {
     const pin = localStorage.getItem('venuePin');
     if (!pin) { onSuccess(); return; }
     if (!window.isLocked) { onSuccess(); return; }
-    window._showPinModal('🔒 Enter PIN', 'Manager PIN required to continue', (attempt) => {
-        if (attempt === pin) {
+    window._showPinModal('🔒 Enter PIN', 'Manager PIN required to continue', async (attempt) => {
+        const hashed = await window._hashPin(attempt);
+        if (hashed === pin) {
             window.isLocked = false;
             window._lastActivity = Date.now();
             window.closeModal();
@@ -328,9 +352,11 @@ window.toggleLock = () => {
     const pin = localStorage.getItem('venuePin');
     if (!pin) {
         // First time — set up PIN via styled modal
-        window._showPinModal('🔐 Set Manager PIN', 'Choose a 4+ digit PIN to secure restricted areas', (newPin) => {
+        window._showPinModal('🔐 Set Manager PIN', 'Choose a 4+ digit PIN to secure restricted areas', async (newPin) => {
             if (newPin.length >= 4) {
-                localStorage.setItem('venuePin', newPin);
+                const hashed = await window._hashPin(newPin);
+                localStorage.setItem('venuePin', hashed);
+                localStorage.setItem('venuePinHashed', 'true');
                 window.isLocked = true;
                 window.closeModal();
                 window.checkLockState();
@@ -348,7 +374,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos'];
 
 
 // =============================================================================
@@ -1182,6 +1208,8 @@ window.showView = (view) => {
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
+        else if (view === 'noticeboard' && window.renderNoticeboardView) content.innerHTML = window.renderNoticeboardView();
+        else if (view === 'audit-log' && window.renderAuditLogView) content.innerHTML = window.renderAuditLogView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
@@ -1293,6 +1321,22 @@ document.addEventListener('click', (e) => {
 });
 
 
+// --- 7b. AUDIT TRAIL ---
+window.logAudit = function(collection, action, itemId, details) {
+    if (!window.auditLog) window.auditLog = [];
+    window.auditLog.unshift({
+        id: window.generateId('aud'),
+        timestamp: new Date().toISOString(),
+        collection: collection,
+        action: action,
+        itemId: itemId || '',
+        details: details || '',
+        venue: window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'
+    });
+    // Keep last 500 entries
+    if (window.auditLog.length > 500) window.auditLog = window.auditLog.slice(0, 500);
+};
+
 // --- 8. NOTIFICATION CENTER ---
 window._notifOpen = false;
 window.getNotifications = function() {
@@ -1352,6 +1396,37 @@ window.getNotifications = function() {
         if (t.time && t.time.includes && t.time.includes(todayStr) && parseFloat(t.value) > 5) {
             notifs.push({type:'haccp', icon:'🌡️', text: (t.unit||'Unit') + ' temp breach: ' + t.value + '°C', view:'compliance', priority:0});
         }
+    });
+
+    // Supplier order cutoff reminders
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDay = dayNames[tomorrow.getDay()];
+    const currentHHMM = now.getHours() * 100 + now.getMinutes();
+    (window.suppliers || []).forEach(s => {
+        if (!s.cutoff || !s.deliveryDays) return;
+        // Check if supplier delivers tomorrow
+        if (!s.deliveryDays.includes(tomorrowDay)) return;
+        // Parse cutoff time (e.g. "15:00")
+        const parts = s.cutoff.split(':');
+        const cutoffMins = parseInt(parts[0]) * 100 + parseInt(parts[1] || 0);
+        // Alert if within 2 hours before cutoff
+        if (currentHHMM >= (cutoffMins - 200) && currentHHMM <= cutoffMins) {
+            // Check if any items from this supplier are below par
+            const lowItems = (window.inventoryItems || []).filter(i => !i.archived && i.supplier === s.name && i.par && i.stock < i.par);
+            if (lowItems.length > 0) {
+                notifs.push({type:'order', icon:'📦', text: s.name + ' cutoff ' + s.cutoff + ' — ' + lowItems.length + ' items below par', view:'prep-list', priority:0});
+            }
+        }
+    });
+
+    // Unread announcements
+    const unreadAnn = (window.announcements || []).filter(a => {
+        if (a.expiry && new Date(a.expiry) < now) return false;
+        return a.priority === 'urgent' && (!a.acknowledged || a.acknowledged.length === 0);
+    });
+    unreadAnn.forEach(a => {
+        notifs.push({type:'announce', icon:'📢', text: a.title, view:'noticeboard', priority:0});
     });
 
     // Sort by priority (0=critical first)
@@ -1423,9 +1498,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Force PIN setup if no PIN exists
     setTimeout(() => {
         if (!localStorage.getItem('venuePin')) {
-            window._showPinModal('🔐 Setup Manager PIN', 'A PIN is required to secure restricted areas. Choose a 4+ digit PIN.', (newPin) => {
+            window._showPinModal('🔐 Setup Manager PIN', 'A PIN is required to secure restricted areas. Choose a 4+ digit PIN.', async (newPin) => {
                 if (newPin.length >= 4) {
-                    localStorage.setItem('venuePin', newPin);
+                    const hashed = await window._hashPin(newPin);
+                    localStorage.setItem('venuePin', hashed);
+                    localStorage.setItem('venuePinHashed', 'true');
                     window.isLocked = true;
                     window.closeModal();
                     window.checkLockState();
