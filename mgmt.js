@@ -2807,6 +2807,22 @@ window.renderManagerHub = () => {
     // =====================================================
     let html = '<div style="max-width:1100px;margin:auto;">';
 
+    // --- AI MORNING BRIEFING (loaded async) ---
+    const todayKey = today.toISOString().split('T')[0];
+    const existingBriefing = (window.dailyBriefings || []).find(b => b.date === todayKey);
+    html += '<div id="ai-briefing-container">';
+    if (existingBriefing) {
+        html += window._renderBriefingCard(existingBriefing);
+    } else {
+        html += '<div class="card" style="border-top:3px solid var(--purple);padding:16px;margin-bottom:16px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+        html += '<div><div style="font-size:13px;font-weight:700;">🌅 AI Morning Briefing</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Get a personalised daily briefing from your Hub data</div></div>';
+        html += '<button onclick="window.generateMorningBriefing()" class="btn btn-purple" style="padding:8px 16px;font-size:12px;">✨ Generate Briefing</button>';
+        html += '</div></div>';
+    }
+    html += '</div>';
+
     // --- HERO BANNER ---
     const gradBg = healthScore >= 80 ? 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.05))' :
                    healthScore >= 50 ? 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.03))' :
@@ -3018,6 +3034,8 @@ window.renderManagerHub = () => {
         {label:'Handover', icon:'📝', onclick:'window.newHandoverForm()', color:'var(--purple)'},
         {label:'Incident', icon:'⚠️', view:'incidents', color:'var(--red)'},
         {label:'Covers', icon:'👥', onclick:'window.logCoversForm()', color:'var(--blue)'},
+        {label:'EOD Summary', icon:'📊', onclick:'window.generateEodSummary()', color:'var(--purple)'},
+        {label:'Ask Hub', icon:'🤖', onclick:"window.showView('ask-hub')", color:'var(--blue)'},
         {label:'EOD Run', icon:'✨', onclick:'window.openAiDepletion()', color:'var(--purple)'},
         {label:'All Venues', icon:'🏢', onclick:'window.renderCrossVenueDashboard()', color:'var(--green)'}
     ];
@@ -4004,4 +4022,529 @@ window._generateHandoverPrefill = () => {
         }
     });
     return prefills;
+};
+
+// =============================================================================
+// AI MORNING BRIEFING
+// =============================================================================
+window._renderBriefingCard = (briefing) => {
+    const E = window.esc;
+    const htmlText = E(briefing.text || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    return `<div class="card" style="border-top:3px solid var(--purple);padding:20px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:700;">🌅 Today's Briefing</div>
+            <div style="display:flex;gap:6px;">
+                <button onclick="window.generateMorningBriefing()" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">🔄 Refresh</button>
+                <button onclick="document.getElementById('ai-briefing-container').innerHTML=''" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Dismiss</button>
+            </div>
+        </div>
+        <div style="font-size:13px;line-height:1.8;color:var(--text-main);">${htmlText}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">Generated ${E(briefing.time || '')}</div>
+    </div>`;
+};
+
+window._collectBriefingContext = () => {
+    const now = new Date();
+    const todayStr = now.toLocaleDateString();
+    const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const isWeekend = [0,5,6].includes(now.getDay());
+    const dayName = now.toLocaleDateString('en-AU',{weekday:'long'});
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+
+    // Yesterday's sales
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const ySales = (window.salesData||[]).find(s => s.date === fmtDate(yesterday));
+    const yRev = ySales ? Number(ySales.total||0) : null;
+    const yCovers = ySales ? Number(ySales.covers||0) : null;
+
+    // Last week same day
+    const lwDate = new Date(now); lwDate.setDate(lwDate.getDate() - 7);
+    const lwSales = (window.salesData||[]).find(s => s.date === fmtDate(lwDate));
+    const lwRev = lwSales ? Number(lwSales.total||0) : null;
+
+    // Stock health
+    const activeItems = (window.inventoryItems||[]).filter(i => !i.archived);
+    const lowStock = activeItems.filter(i => {
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return par > 0 && i.stock < par;
+    }).slice(0,10);
+    const zeroStock = activeItems.filter(i => (i.stock||0) <= 0);
+
+    // Overdue tasks
+    const overdueTasks = (window.rotationalTasks||[]).filter(t => {
+        if (t.dueDateMode === 'specific' && t.specificDueDate) return new Date(t.specificDueDate) <= now;
+        if (t.lastLogIso) { const days = (now - new Date(t.lastLogIso))/86400000; const freq = {Weekly:7,Fortnightly:14,Monthly:30,Quarterly:90}; return days >= (freq[t.freq]||7); }
+        return false;
+    });
+
+    // Expiring docs
+    const expiringDocs = (window.digitalSafe||[]).filter(d => {
+        if (!d.expiry) return false; const dl = (new Date(d.expiry)-now)/86400000; return dl <= 14;
+    });
+
+    // Open maintenance
+    const openTickets = (window.defectLogs||[]).filter(d => d.status !== 'Resolved');
+
+    // Today's roster from Tanda
+    const tandaInfo = window._tandaData ? `Rostered: ${window._tandaData.staffCount} staff, ${window._tandaData.rosteredHours}h, est wages $${window._tandaData.estimatedWageCost}` : 'No Tanda data';
+
+    // Suppliers delivering today
+    const todayDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()];
+    const deliveringToday = (window.suppliers||[]).filter(s => s.deliveryDays && s.deliveryDays.includes(todayDay));
+
+    // Recent wastage
+    const recentWaste = (window.wastageLogs||[]).filter(w => {
+        if (!w.time) return false;
+        const d = new Date(w.time); return (now - d) < 86400000*2;
+    });
+    const wasteTotal = recentWaste.reduce((s,w) => s + Number(w.value||0), 0);
+
+    // Latest handover
+    const lastHandover = (window.handoverLogs||[]).slice(-1)[0];
+    const handoverSummary = lastHandover ? `Last handover (${lastHandover.date||'?'} ${lastHandover.shift||''}): ${(lastHandover.debrief||lastHandover.notes||'').substring(0,150)}` : 'No recent handover';
+
+    // Upcoming leave from Tanda
+    const leaveInfo = window._tandaLeave ? window._tandaLeave.slice(0,3).map(l => `${l.name}: ${l.type} (${l.startDate})`).join('; ') : '';
+
+    return { venue, dayName, isWeekend, yRev, yCovers, lwRev, lowStock, zeroStock, overdueTasks, expiringDocs, openTickets, tandaInfo, deliveringToday, wasteTotal, handoverSummary, leaveInfo };
+};
+
+window.generateMorningBriefing = async () => {
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    const container = document.getElementById('ai-briefing-container');
+    if (container) container.innerHTML = '<div class="card" style="border-top:3px solid var(--purple);padding:20px;margin-bottom:16px;"><div style="display:flex;align-items:center;gap:10px;"><div class="loading-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span style="color:var(--purple);font-weight:600;">Generating your morning briefing...</span></div></div>';
+
+    const ctx = window._collectBriefingContext();
+
+    const prompt = `You are the AI assistant for ${ctx.venue}, a hospitality venue in Hobart, Tasmania. Write a concise, actionable morning briefing for the manager opening today (${ctx.dayName}, ${ctx.isWeekend ? 'weekend' : 'weekday'}).
+
+DATA:
+- Yesterday's revenue: ${ctx.yRev !== null ? '$'+ctx.yRev.toLocaleString() : 'Not recorded'}
+- Yesterday's covers: ${ctx.yCovers || 'Not recorded'}
+- Same day last week revenue: ${ctx.lwRev !== null ? '$'+ctx.lwRev.toLocaleString() : 'Not recorded'}
+- Items at zero stock: ${ctx.zeroStock.length > 0 ? ctx.zeroStock.map(i=>i.name).join(', ') : 'None'}
+- Items below PAR (${ctx.lowStock.length}): ${ctx.lowStock.map(i=>i.name+' ('+Number(i.stock).toFixed(1)+')').join(', ') || 'All good'}
+- Overdue tasks (${ctx.overdueTasks.length}): ${ctx.overdueTasks.map(t=>t.name).join(', ') || 'None'}
+- Expiring documents (${ctx.expiringDocs.length}): ${ctx.expiringDocs.map(d=>d.name).join(', ') || 'None'}
+- Open maintenance tickets (${ctx.openTickets.length}): ${ctx.openTickets.map(d=>d.item||d.description||'Ticket').join(', ') || 'None'}
+- Roster: ${ctx.tandaInfo}
+- Suppliers delivering today: ${ctx.deliveringToday.map(s=>s.name + ' (cutoff '+s.cutoff+')').join(', ') || 'None'}
+- Recent wastage (48h): $${ctx.wasteTotal.toFixed(2)}
+- ${ctx.handoverSummary}
+${ctx.leaveInfo ? '- Upcoming leave: ' + ctx.leaveInfo : ''}
+
+INSTRUCTIONS:
+1. Start with a one-line greeting based on time of day and day of week
+2. Give 3-5 bullet points covering the most important things to focus on today
+3. Flag any urgent items (zero stock, overdue tasks, expired docs, maintenance)
+4. If revenue data exists, compare yesterday vs last week and note the trend
+5. Mention supplier cutoff times if deliveries are today
+6. Keep it under 200 words, punchy and practical
+7. End with a motivational one-liner for the day ahead`;
+
+    try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not generate briefing.';
+
+        const briefing = {
+            id: window.generateId('brief'),
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit'}),
+            text: text,
+            venue: window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'
+        };
+
+        if (!window.dailyBriefings) window.dailyBriefings = [];
+        // Replace today's existing briefing or add new
+        window.dailyBriefings = window.dailyBriefings.filter(b => b.date !== briefing.date);
+        window.dailyBriefings.unshift(briefing);
+        if (window.dailyBriefings.length > 14) window.dailyBriefings = window.dailyBriefings.slice(0, 14);
+        window.saveToDisk();
+
+        if (container) container.innerHTML = window._renderBriefingCard(briefing);
+    } catch (err) {
+        if (container) container.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);margin-bottom:16px;">Briefing failed: ' + window.esc(err.message) + '</div>';
+    }
+};
+
+// =============================================================================
+// END-OF-DAY SUMMARY
+// =============================================================================
+window.generateEodSummary = async () => {
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    window.showLoadingOverlay('Compiling end-of-day summary...');
+
+    const now = new Date();
+    const todayStr = now.toLocaleDateString();
+    const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const isWeekend = [0,5,6].includes(now.getDay());
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+
+    // Today's data
+    const todaySales = (window.salesData||[]).find(s => s.date === fmtDate(now));
+    const todayRev = todaySales ? Number(todaySales.total||0) : 0;
+    const todayCovers = todaySales ? Number(todaySales.covers||0) : 0;
+    const todayWages = todaySales ? Number(todaySales.wages||0) : 0;
+    const laborPct = todayRev > 0 ? ((todayWages/todayRev)*100).toFixed(1) : '—';
+
+    // Wastage
+    const todayWaste = (window.wastageLogs||[]).filter(w => w.time && w.time.includes(todayStr));
+    const wasteTotal = todayWaste.reduce((s,w) => s + Number(w.value||0), 0);
+
+    // Compliance
+    const todayTemps = (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr));
+    const breaches = todayTemps.filter(t => parseFloat(t.value) > 5);
+
+    // Incidents
+    const todayIncidents = (window.incidentLogs||[]).filter(i => i.time && i.time.includes(todayStr));
+
+    // Stock status
+    const lowStock = (window.inventoryItems||[]).filter(i => {
+        if (i.archived) return false;
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return par > 0 && i.stock < par;
+    });
+    const zeroItems = (window.inventoryItems||[]).filter(i => !i.archived && (i.stock||0) <= 0);
+
+    // Tanda actuals
+    const tandaInfo = window._tandaData || {};
+
+    // Last week comparison
+    const lwDate = new Date(now); lwDate.setDate(lwDate.getDate() - 7);
+    const lwSales = (window.salesData||[]).find(s => s.date === fmtDate(lwDate));
+    const lwRev = lwSales ? Number(lwSales.total||0) : 0;
+    const revDelta = lwRev > 0 && todayRev > 0 ? ((todayRev - lwRev)/lwRev*100).toFixed(1) : null;
+
+    const context = `Venue: ${venue}
+Date: ${fmtDate(now)} (${now.toLocaleDateString('en-AU',{weekday:'long'})})
+Revenue: $${todayRev.toLocaleString()} ${revDelta ? '('+( Number(revDelta)>=0?'+':'')+revDelta+'% vs last week)' : ''}
+Covers: ${todayCovers || 'Not recorded'}
+Labor cost: $${todayWages.toLocaleString()} (${laborPct}%)
+${tandaInfo.actualHours ? 'Actual hours: '+tandaInfo.actualHours+'h ('+tandaInfo.actualStaffCount+' staff)' : ''}
+Wastage: $${wasteTotal.toFixed(2)} (${todayWaste.length} items)
+Temp logs: ${todayTemps.length} recorded, ${breaches.length} breaches
+Incidents: ${todayIncidents.length}
+Stock: ${lowStock.length} below PAR, ${zeroItems.length} at zero
+86'd items: ${zeroItems.slice(0,5).map(i=>i.name).join(', ') || 'None'}`;
+
+    const prompt = `You are writing a concise end-of-day summary for ${venue}.
+
+DATA:
+${context}
+
+Write a structured EOD summary with these sections:
+1. 📊 Revenue & Performance (compare to last week if data available)
+2. 👥 Labor (hours, cost, percentage)
+3. 📦 Stock Status (items at zero, below PAR count)
+4. ⚠️ Issues (breaches, incidents, wastage)
+5. ✅ Action Items for Tomorrow (3-5 bullet points based on the data)
+
+Keep it factual, concise, under 250 words. Use numbers throughout. This will be shared with the ownership team.`;
+
+    try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not generate summary.';
+        window.hideLoadingOverlay();
+
+        const htmlText = window.esc(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        const modalHtml = `
+            <div style="max-height:60vh;overflow-y:auto;margin-bottom:16px;">
+                <div style="font-size:13px;line-height:1.8;color:var(--text-main);">${htmlText}</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window._copyEodSummary()" class="btn btn-green" style="flex:1;padding:10px;">📋 Copy to Clipboard</button>
+                <button onclick="window._saveEodToHandover()" class="btn btn-purple" style="flex:1;padding:10px;">📝 Save as Handover</button>
+                <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Close</button>
+            </div>`;
+        window._lastEodText = text;
+        window.openModal('📊 End-of-Day Summary — ' + fmtDate(now), modalHtml);
+    } catch (err) {
+        window.hideLoadingOverlay();
+        window.showToast('EOD summary failed: ' + err.message, 'error');
+    }
+};
+
+window._copyEodSummary = () => {
+    if (window._lastEodText) {
+        navigator.clipboard.writeText(window._lastEodText).then(() => {
+            window.showToast('Summary copied to clipboard!');
+        }).catch(() => {
+            // Fallback for iPad
+            const ta = document.createElement('textarea');
+            ta.value = window._lastEodText;
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); ta.remove();
+            window.showToast('Summary copied!');
+        });
+    }
+};
+
+window._saveEodToHandover = () => {
+    const now = new Date();
+    if (!window._lastEodText) return;
+    window.handoverLogs.push({
+        date: now.toLocaleDateString('en-AU'),
+        shift: 'PM Shift',
+        manager: 'AI Summary',
+        debrief: window._lastEodText,
+        closeTime: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'),
+        notes: 'Auto-generated EOD summary'
+    });
+    window.saveToDisk();
+    window.closeModal();
+    window.showToast('EOD summary saved to handover log!');
+};
+
+// =============================================================================
+// ANOMALY DETECTION ENGINE
+// =============================================================================
+window.runAnomalyDetection = async () => {
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    window.showLoadingOverlay('Scanning for anomalies...');
+
+    const now = new Date();
+    const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+
+    // Collect 14 days of sales
+    const salesHistory = [];
+    for (let i = 0; i < 14; i++) {
+        const d = new Date(now); d.setDate(d.getDate() - i);
+        const s = (window.salesData||[]).find(x => x.date === fmtDate(d));
+        salesHistory.push({
+            date: fmtDate(d),
+            day: d.toLocaleDateString('en-AU',{weekday:'short'}),
+            revenue: s ? Number(s.total||0) : null,
+            covers: s ? Number(s.covers||0) : null,
+            wages: s ? Number(s.wages||0) : null,
+            laborPct: s && Number(s.total||0) > 0 ? ((Number(s.wages||0)/Number(s.total||0))*100).toFixed(1)+'%' : null
+        });
+    }
+
+    // Wastage by day (last 14 days)
+    const wasteByDay = {};
+    (window.wastageLogs||[]).forEach(w => {
+        if (!w.time) return;
+        const d = new Date(w.time);
+        if ((now - d) > 86400000*14) return;
+        const key = d.toLocaleDateString('en-AU');
+        wasteByDay[key] = (wasteByDay[key]||0) + Number(w.value||0);
+    });
+
+    // Stock movement patterns
+    const bigMovements = (window.stockMovements||[]).slice(0,50).map(m => `${m.item||'?'}: ${m.source||'?'} (${Number(m.delta||0).toFixed(1)}) on ${m.date||'?'}`);
+
+    // Temperature anomalies
+    const tempData = (window.tempLogs||[]).slice(-50).map(t => `${t.unit||'Unit'}: ${t.value}°C at ${t.time||'?'}`);
+    const breachCount = (window.tempLogs||[]).filter(t => {
+        if (!t.time) return false;
+        const d = new Date(t.time); return (now - d) < 86400000*7 && parseFloat(t.value) > 5;
+    }).length;
+
+    // Depletion patterns
+    const recentDepletions = (window.depletionLogs||[]).slice(0,10).map(d => `${d.date||'?'}: ${(d.changes||[]).length} items depleted, source: ${d.source||'?'}`);
+
+    const prompt = `You are an operations analyst for ${venue}. Analyse the following 14 days of data and identify anomalies, unusual patterns, or concerns.
+
+SALES DATA (last 14 days, newest first):
+${salesHistory.map(s => `${s.date} (${s.day}): ${s.revenue !== null ? '$'+s.revenue : 'NO DATA'} rev, ${s.covers||'?'} covers, ${s.wages !== null ? '$'+s.wages : '?'} wages ${s.laborPct ? '('+s.laborPct+' labor)' : ''}`).join('\n')}
+
+WASTAGE BY DAY:
+${Object.entries(wasteByDay).map(([k,v]) => `${k}: $${v.toFixed(2)}`).join('\n') || 'No wastage data'}
+
+TEMPERATURE BREACHES (7 days): ${breachCount}
+
+RECENT STOCK MOVEMENTS:
+${bigMovements.slice(0,10).join('\n') || 'None'}
+
+INSTRUCTIONS:
+1. Identify 3-5 specific anomalies or patterns
+2. For each, explain what you found and why it matters
+3. Rate each as 🔴 Critical, 🟠 Warning, or 🔵 Info
+4. Suggest a specific action for each
+5. Look for: revenue drops, labor cost spikes, wastage patterns, missing data days, temperature issues, unusual stock movements
+6. Be specific with numbers and dates
+7. Keep under 300 words total`;
+
+    try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No anomalies detected.';
+        window.hideLoadingOverlay();
+
+        const htmlText = window.esc(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        window.openModal('🔍 Anomaly Detection Report', `
+            <div style="max-height:60vh;overflow-y:auto;margin-bottom:16px;">
+                <div style="font-size:13px;line-height:1.8;color:var(--text-main);">${htmlText}</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="navigator.clipboard.writeText(window._lastAnomalyText||'');window.showToast('Copied!')" class="btn btn-outline" style="flex:1;padding:10px;">📋 Copy</button>
+                <button onclick="window.closeModal()" class="btn btn-purple" style="flex:1;padding:10px;">Close</button>
+            </div>`);
+        window._lastAnomalyText = text;
+    } catch (err) {
+        window.hideLoadingOverlay();
+        window.showToast('Anomaly scan failed: ' + err.message, 'error');
+    }
+};
+
+// =============================================================================
+// ASK HUB — NATURAL LANGUAGE QUERY INTERFACE
+// =============================================================================
+window.renderAskHubView = () => {
+    const history = window._askHubHistory || [];
+    const historyHtml = history.length > 0 ? history.map(h => `
+        <div style="margin-bottom:16px;">
+            <div style="padding:10px 14px;background:rgba(139,92,246,0.08);border-radius:10px 10px 10px 2px;margin-bottom:6px;font-size:13px;color:var(--purple);font-weight:500;">💬 ${window.esc(h.q)}</div>
+            <div style="padding:12px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px 10px 2px 10px;font-size:13px;line-height:1.7;color:var(--text-main);">${window.esc(h.a).replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div>
+        </div>`).join('') : '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:48px;margin-bottom:12px;">🤖</div><h3 style="color:var(--text-main);margin:0 0 8px;">Ask Hub Anything</h3><p style="font-size:13px;max-width:400px;margin:0 auto;line-height:1.6;">Ask questions about your business in plain English. Hub will search your data and respond with specific answers.</p><div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">' +
+        ['What was our busiest day this week?','Which items have the lowest margin?','How much wastage this week?','Who is rostered tomorrow?','What stock needs ordering?','Any compliance issues?'].map(q =>
+            '<button onclick="document.getElementById(\'ask-hub-input\').value=\'' + window.escAttr(q) + '\';window.askHub();" class="btn btn-outline" style="font-size:11px;padding:6px 12px;">' + q + '</button>'
+        ).join('') + '</div></div>';
+
+    return `<div style="max-width:700px;margin:auto;">
+        <div style="margin-bottom:16px;">
+            <h2 style="margin:0;">🤖 Ask Hub</h2>
+            <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Ask questions about your venue data in plain English</div>
+        </div>
+        <div id="ask-hub-history" style="margin-bottom:16px;max-height:55vh;overflow-y:auto;">${historyHtml}</div>
+        <div style="display:flex;gap:8px;position:sticky;bottom:0;background:var(--bg-main);padding:10px 0;">
+            <input type="text" id="ask-hub-input" class="input-box" placeholder="Ask a question... e.g. What items are below par?" style="margin:0;flex:1;font-size:14px;padding:12px 16px;" onkeydown="if(event.key==='Enter')window.askHub()">
+            <button onclick="window.askHub()" class="btn btn-purple" style="padding:12px 20px;white-space:nowrap;">Ask ✨</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+            <button onclick="window.runAnomalyDetection()" class="btn btn-outline" style="font-size:11px;padding:6px 12px;">🔍 Run Anomaly Scan</button>
+            <button onclick="window._askHubHistory=[];window.showView('ask-hub');" class="btn btn-outline" style="font-size:11px;padding:6px 12px;">🗑️ Clear History</button>
+        </div>
+    </div>`;
+};
+
+window._askHubHistory = [];
+
+window.askHub = async () => {
+    const input = document.getElementById('ask-hub-input');
+    if (!input) return;
+    const question = input.value.trim();
+    if (!question) return;
+
+    const apiKey = window.getApiKey();
+    if (!apiKey) return;
+
+    input.value = '';
+    input.disabled = true;
+
+    // Add loading state to history
+    const historyDiv = document.getElementById('ask-hub-history');
+    if (historyDiv) {
+        historyDiv.innerHTML += `<div style="margin-bottom:16px;">
+            <div style="padding:10px 14px;background:rgba(139,92,246,0.08);border-radius:10px 10px 10px 2px;margin-bottom:6px;font-size:13px;color:var(--purple);font-weight:500;">💬 ${window.esc(question)}</div>
+            <div id="ask-hub-loading" style="padding:12px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:8px;"><div class="loading-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.8s linear infinite;"></div> Thinking...</div>
+        </div>`;
+        historyDiv.scrollTop = historyDiv.scrollHeight;
+    }
+
+    // Build data snapshot for context
+    const now = new Date();
+    const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const isWeekend = [0,5,6].includes(now.getDay());
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+
+    // Sales (last 7 days)
+    const salesSnap = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(now); d.setDate(d.getDate() - i);
+        const s = (window.salesData||[]).find(x => x.date === fmtDate(d));
+        if (s) salesSnap.push(`${fmtDate(d)} (${d.toLocaleDateString('en-AU',{weekday:'short'})}): $${Number(s.total||0)} rev, ${s.covers||0} covers, $${Number(s.wages||0)} wages`);
+    }
+
+    // Stock below PAR
+    const lowStock = (window.inventoryItems||[]).filter(i => {
+        if (i.archived) return false;
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return par > 0 && i.stock < par;
+    }).map(i => {
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return `${i.name}: stock ${Number(i.stock||0).toFixed(1)}/${par} (${i.supplier||'no supplier'})`;
+    });
+
+    // Recipe margins
+    const recipeSnap = (window.recipes||[]).filter(r => r.type==='Menu' && !r.archived && r.price > 0).map(r => `${r.name}: sell $${Number(r.price).toFixed(2)}, cost $${Number(r.cost||0).toFixed(2)}, GP ${r.gp||0}%, ${r.coversPerWeek||0}/wk`);
+
+    // Staff
+    const staffSnap = (window.staffDirectory||[]).filter(s => s.status !== 'Inactive').map(s => `${s.name} (${s.role||'Staff'})`);
+
+    // Wastage recent
+    const recentWaste = (window.wastageLogs||[]).filter(w => {
+        if (!w.time) return false; return (now - new Date(w.time)) < 86400000*7;
+    }).map(w => `${w.item||'?'}: $${Number(w.value||0).toFixed(2)} (${w.reason||'no reason'})`);
+
+    // Tasks
+    const overdueTasks = (window.rotationalTasks||[]).filter(t => {
+        if (t.dueDateMode === 'specific' && t.specificDueDate) return new Date(t.specificDueDate) <= now;
+        if (t.lastLogIso) { const days = (now - new Date(t.lastLogIso))/86400000; return days >= ({Weekly:7,Fortnightly:14,Monthly:30,Quarterly:90}[t.freq]||7); }
+        return false;
+    }).map(t => t.name);
+
+    // Tanda
+    const tandaSnap = window._tandaData ? `Rostered: ${window._tandaData.staffCount} staff, ${window._tandaData.rosteredHours}h, $${window._tandaData.estimatedWageCost} wages` : '';
+
+    const prompt = `You are an AI assistant for ${venue} hospitality venue. Answer the following question using ONLY the data provided below. Be specific with numbers and dates. If the data doesn't contain enough info to answer, say so.
+
+QUESTION: "${question}"
+
+VENUE DATA SNAPSHOT:
+Sales (last 7 days): ${salesSnap.join(' | ') || 'No sales data'}
+Stock below PAR (${lowStock.length}): ${lowStock.slice(0,15).join(' | ') || 'All OK'}
+Recipe margins: ${recipeSnap.slice(0,15).join(' | ') || 'No recipes'}
+Active staff: ${staffSnap.join(', ') || 'No staff data'}
+Recent wastage: ${recentWaste.slice(0,10).join(' | ') || 'None'}
+Overdue tasks: ${overdueTasks.join(', ') || 'None'}
+Open maintenance: ${(window.defectLogs||[]).filter(d=>d.status!=='Resolved').map(d=>d.item||d.description).join(', ') || 'None'}
+Roster: ${tandaSnap || 'No Tanda data'}
+Today: ${now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} (${isWeekend?'Weekend':'Weekday'})
+
+INSTRUCTIONS: Answer concisely in 2-5 sentences. Use specific numbers. Format key figures in bold with **.`;
+
+    try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const answer = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I couldn\'t process that question.';
+
+        window._askHubHistory.push({ q: question, a: answer });
+        if (window._askHubHistory.length > 20) window._askHubHistory = window._askHubHistory.slice(-20);
+
+        input.disabled = false;
+        window.showView('ask-hub');
+        // Scroll to bottom
+        setTimeout(() => {
+            const hd = document.getElementById('ask-hub-history');
+            if (hd) hd.scrollTop = hd.scrollHeight;
+            const inp = document.getElementById('ask-hub-input');
+            if (inp) inp.focus();
+        }, 100);
+    } catch (err) {
+        input.disabled = false;
+        const loadEl = document.getElementById('ask-hub-loading');
+        if (loadEl) loadEl.innerHTML = '<span style="color:var(--red);">Error: ' + window.esc(err.message) + '</span>';
+    }
 };
