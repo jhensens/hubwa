@@ -519,6 +519,7 @@ window.renderSalesView = () => {
             '<button onclick="window.showFoodBevSplit()" class="btn btn-outline" style="font-size:12px;">🍱🍶 Food vs Bev Split</button>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
                 '<button onclick="window.openAiDepletion()" class="btn btn-purple">✨ EOD Depletion</button>' +
+                '<button onclick="window.showView(\'depletion-history\')" class="btn btn-outline" style="font-size:12px;">📉 History</button>' +
                 '<button onclick="document.getElementById(\'csv-upload\').click()" class="btn btn-blue">📈 Upload CSV</button>' +
                 '<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="window.handleSalesCSV(event)">' +
                 '<button onclick="window.manualTakingsForm()" class="btn btn-green" style="font-size:12px;">+ Manual Entry</button>' +

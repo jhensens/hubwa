@@ -1262,6 +1262,7 @@ window.showView = (view) => {
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
         else if (view === 'noticeboard' && window.renderNoticeboardView) content.innerHTML = window.renderNoticeboardView();
         else if (view === 'audit-log' && window.renderAuditLogView) content.innerHTML = window.renderAuditLogView();
+        else if (view === 'depletion-history' && window.renderDepletionHistoryView) content.innerHTML = window.renderDepletionHistoryView();
         else if (view === 'ask-hub' && window.renderAskHubView) content.innerHTML = window.renderAskHubView();
         else if (view === 'my-hub' && window.renderMyHubView) content.innerHTML = window.renderMyHubView();
         else if (view === 'badge-management' && window.renderBadgeManagementView) content.innerHTML = window.renderBadgeManagementView();
@@ -1330,6 +1331,17 @@ window.globalSearch = (query) => {
         }
     });
     
+    // Quick-nav views
+    var viewLinks = [
+        { keywords: ['depletion', 'deplete', 'eod', 'stock depletion'], icon: '📉', label: 'Depletion History', sub: 'Stock depletion run history & undo', view: 'depletion-history' },
+        { keywords: ['audit', 'audit log', 'trail'], icon: '📋', label: 'Audit Log', sub: 'Full change audit trail', view: 'audit-log' }
+    ];
+    viewLinks.forEach(function(vl) {
+        if (vl.keywords.some(function(k) { return k.includes(q) || q.includes(k); })) {
+            results.push({ type: 'nav', icon: vl.icon, label: vl.label, sub: vl.sub, action: "window.showView('" + vl.view + "')" });
+        }
+    });
+
     return results.slice(0, 15);
 };
 

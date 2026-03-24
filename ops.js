@@ -43,6 +43,27 @@ window.logStockMovement = function(itemId, qtyChange, source, opts) {
     });
 };
 
+// --- RECURSIVE BATCH CASCADE HELPER ---
+// Expands batch/sub-recipe ingredients to leaf inventory items (multi-level)
+// visited Set prevents circular references (batch A -> batch B -> batch A)
+window._cascadeBatchIngredients = function(recipeId, multiplier, deductions, visited, recipes) {
+    if (visited.has(recipeId)) return; // circular reference guard
+    var recipe = recipes.find(function(rc) { return rc.id === recipeId; });
+    if (!recipe) return;
+    visited.add(recipeId);
+    (recipe.ingredients || []).forEach(function(ing) {
+        if (ing.type === 'inv') {
+            deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * multiplier);
+        } else if (ing.type === 'batch') {
+            var batch = recipes.find(function(rc) { return rc.id === ing.ref; });
+            if (batch) {
+                var batchMultiplier = (ing.qty * multiplier) / (batch.yieldQty || 1);
+                window._cascadeBatchIngredients(batch.id, batchMultiplier, deductions, new Set(visited), recipes);
+            }
+        }
+    });
+};
+
 // --- SHARED CASCADE DEPLETION ---
 // Unified recipe-cascade deduction used by both CSV and AI depletion paths
 window.cascadeSalesDeductions = function(salesItems, source) {
@@ -86,19 +107,8 @@ window.cascadeSalesDeductions = function(salesItems, source) {
             var recipe = recipes.find(function(rc) { return rc.id === recipeId; });
             if (recipe) {
                 matched.push({ rawName: rawName, matchType: 'recipe', matchName: recipe.name, qtySold: qtySold });
-                (recipe.ingredients || []).forEach(function(ing) {
-                    if (ing.type === 'inv') {
-                        deductions[ing.ref] = (deductions[ing.ref] || 0) + (ing.qty * qtySold);
-                    } else if (ing.type === 'batch') {
-                        var batch = recipes.find(function(rc) { return rc.id === ing.ref; });
-                        if (batch) {
-                            var batchRatio = (ing.qty * qtySold) / (batch.yieldQty || 1);
-                            (batch.ingredients || []).forEach(function(bIng) {
-                                if (bIng.type === 'inv') deductions[bIng.ref] = (deductions[bIng.ref] || 0) + (bIng.qty * batchRatio);
-                            });
-                        }
-                    }
-                });
+                // Multi-level cascade: recursively expand all batch sub-recipes
+                window._cascadeBatchIngredients(recipeId, qtySold, deductions, new Set(), recipes);
             } else { unmatched.push({ rawName: rawName, qtySold: qtySold }); }
         } else if (directInv) {
             // Direct inventory deduction
@@ -124,6 +134,76 @@ window.cascadeSalesDeductions = function(salesItems, source) {
     });
 
     return { deductions: deductions, matched: matched, unmatched: unmatched, deductedCount: deductedCount };
+};
+
+// --- READ-ONLY PREVIEW CASCADE (no stock changes) ---
+// Used by confirmation UI to show what WOULD happen before committing
+window.previewSalesDeductions = function(salesItems) {
+    var recipes = window.recipes || [];
+    var inventory = window.inventoryItems || [];
+    var mappings = window.posMappings || {};
+    var deductions = {};
+    var matched = [], unmatched = [];
+
+    salesItems.forEach(function(item) {
+        var rawName = item.rawName;
+        var qtySold = item.qtySold || 0;
+        var recipeId = null;
+        var directInv = null;
+
+        if (mappings[rawName]) recipeId = mappings[rawName];
+        if (!recipeId) {
+            var r = recipes.find(function(rc) { return rc.posAlias && rc.posAlias.toLowerCase() === rawName.toLowerCase(); });
+            if (r) recipeId = r.id;
+        }
+        if (!recipeId) {
+            var r2 = recipes.find(function(rc) { return rc.name && rc.name.toLowerCase() === rawName.toLowerCase(); });
+            if (r2) recipeId = r2.id;
+        }
+        if (!recipeId) {
+            directInv = inventory.find(function(i) {
+                return !i.archived && (
+                    i.name.toLowerCase() === rawName.toLowerCase() ||
+                    (i.posAlias && i.posAlias.toLowerCase() === rawName.toLowerCase()) ||
+                    rawName.toLowerCase().indexOf(i.name.toLowerCase().substring(0, 6)) !== -1
+                );
+            });
+        }
+
+        if (recipeId) {
+            var recipe = recipes.find(function(rc) { return rc.id === recipeId; });
+            if (recipe) {
+                matched.push({ rawName: rawName, matchType: 'recipe', matchName: recipe.name, qtySold: qtySold, recipeId: recipeId });
+                window._cascadeBatchIngredients(recipeId, qtySold, deductions, new Set(), recipes);
+            } else { unmatched.push({ rawName: rawName, qtySold: qtySold }); }
+        } else if (directInv) {
+            var depletion = qtySold * (directInv.yield ? (1 / directInv.yield) : (directInv.useToBy || 1));
+            deductions[directInv.id] = (deductions[directInv.id] || 0) + depletion;
+            matched.push({ rawName: rawName, matchType: 'inventory', matchName: directInv.name, qtySold: qtySold });
+        } else {
+            unmatched.push({ rawName: rawName, qtySold: qtySold });
+        }
+    });
+
+    // Build stock change preview WITHOUT modifying stock
+    var stockChanges = [];
+    Object.keys(deductions).forEach(function(invId) {
+        var inv = inventory.find(function(i) { return i.id === invId; });
+        if (inv) {
+            var useUnits = deductions[invId];
+            var buyUnits = useUnits / (inv.yield || 1);
+            stockChanges.push({
+                id: inv.id,
+                name: inv.name,
+                before: Math.round((inv.stock || 0) * 100) / 100,
+                after: Math.round(Math.max(0, (inv.stock || 0) - buyUnits) * 100) / 100,
+                unit: inv.buyUnit || 'unit',
+                delta: -Math.round(buyUnits * 100) / 100
+            });
+        }
+    });
+
+    return { deductions: deductions, matched: matched, unmatched: unmatched, stockChanges: stockChanges };
 };
 
 // --- SHARED TAB BARS ---
@@ -2654,7 +2734,10 @@ window.renderLightspeedImportView = () => {
                 '<h2 style="margin:0;">📥 Lightspeed Import</h2>' +
                 '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Drop your Lightspeed CSV exports here — Sales By, Guests, or Reconciliation. The Hub detects each type automatically.</p>' +
             '</div>' +
-            '<button onclick="window.showView(\'invoice\')" class="btn btn-outline" style="font-size:12px;">🧾 Invoice Ripper</button>' +
+            '<div style="display:flex;gap:8px;">' +
+                '<button onclick="window.showView(\'depletion-history\')" class="btn btn-outline" style="font-size:12px;">📉 Depletion History</button>' +
+                '<button onclick="window.showView(\'invoice\')" class="btn btn-outline" style="font-size:12px;">🧾 Invoice Ripper</button>' +
+            '</div>' +
         '</div>' +
 
         // Drop zone
@@ -2724,7 +2807,18 @@ window.handleLsFiles = (files) => {
             processed++;
             if (processed === fileArr.length) {
                 window.saveToDisk();
-                window.showLsResults(summaries);
+                // If any Sales By file was processed, route through depletion confirmation
+                var hasSalesBy = summaries.some(function(s) { return s.type === 'Sales By'; });
+                if (hasSalesBy && window._pendingCsvSalesItems && window._pendingCsvSalesItems.length > 0) {
+                    window.showLsResults(summaries);
+                    // Brief delay so user sees the import summary, then show confirmation
+                    setTimeout(function() {
+                        window.showDepletionConfirmation(window._pendingCsvSalesItems, 'csv-depletion');
+                        window._pendingCsvSalesItems = null;
+                    }, 800);
+                } else {
+                    window.showLsResults(summaries);
+                }
             }
         };
         reader.readAsText(file);
@@ -2781,11 +2875,14 @@ window.parseLsSalesBy = (lines) => {
         productSales.push({ name, qty, saleAmt, cost, gpPct });
     });
 
-    // Cascade depletion through recipes + inventory
+    // Defer depletion to unified confirmation UI — store salesItems for later
     const salesItems = productSales.map(p => ({ rawName: p.name, qtySold: p.qty }));
-    const cascadeResult = window.cascadeSalesDeductions(salesItems, 'csv-depletion');
-    matched = cascadeResult.matched.length;
-    depleted = cascadeResult.deductedCount;
+    window._pendingCsvSalesItems = salesItems;
+
+    // Preview-only for import log summary (no stock changes)
+    const previewResult = window.previewSalesDeductions(salesItems);
+    matched = previewResult.matched.length;
+    depleted = previewResult.stockChanges.length;
 
     // Calculate food vs bev split
     const foodKeywords = ['gyoza','chicken','edamame','rice','salad','pork','beef','wagyu','tofu','tempura','katsu','takoyaki','karaage','dumpling','noodle','ramen','curry','soup'];
@@ -2806,7 +2903,7 @@ window.parseLsSalesBy = (lines) => {
     window.lsSalesByData[today] = { products: productSales, totalSales, totalCost, foodSales, bevSales };
 
     if (!window.lsImportLog) window.lsImportLog = [];
-    window.lsImportLog.push({ type:'Sales By', icon:'📊', summary: productSales.length + ' products · $' + totalSales.toFixed(0) + ' revenue · ' + depleted + ' inventory items depleted', time: new Date().toLocaleTimeString() });
+    window.lsImportLog.push({ type:'Sales By', icon:'📊', summary: productSales.length + ' products · $' + totalSales.toFixed(0) + ' revenue · ' + matched + ' matched · ' + (salesItems.length - matched) + ' unmatched', time: new Date().toLocaleTimeString() });
 
     return {
         type: 'Sales By',
@@ -3366,65 +3463,317 @@ window.runAiDepletion = async () => {
             }
         });
         window.hideLoadingOverlay();
-        window.renderDepletionConfirmation();
+        // Build salesItems from AI results and route through unified confirmation
+        const aiSalesItems = window.pendingMap.known.map(k => ({ rawName: k.posName, qtySold: k.qtySold }));
+        window.pendingMap.unknown.forEach(u => aiSalesItems.push({ rawName: u.posName, qtySold: u.qtySold }));
+        window.showDepletionConfirmation(aiSalesItems, 'ai-depletion');
     } catch (e) { window.hideLoadingOverlay(); statusDiv.innerHTML = `<p style="color:var(--red);">API Error: ${e.message}</p>`; }
 };
 
-window.renderDepletionConfirmation = () => {
-    let recipeOpts = `<option value="">-- Select Hub Recipe --</option>` + (window.recipes || []).filter(r => r.type === 'Menu').map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
-    let html = `<div class="card" style="max-width:800px; margin:auto; border-top:5px solid var(--purple); padding-bottom:80px;">
-        <h2 style="margin-top:0;">Map & Deplete Stock</h2>`;
-    if (window.pendingMap.unknown.length > 0) {
-        html += `<div style="background:rgba(245, 158, 11, 0.1); border:1px solid var(--orange); padding:15px; border-radius:8px; margin-bottom:20px;">
-            <h4 style="color:var(--orange); margin-top:0; border-bottom:1px solid var(--orange); padding-bottom:5px;">⚠️ Map Unknown Items</h4>
-            <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Map these once. The Hub saves them forever.</p>`;
-        window.pendingMap.unknown.forEach((u, i) => {
-            html += `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--border);">
-                <div><strong style="color:var(--orange);">${esc(u.posName)}</strong><br><small>Sold: ${u.qtySold}</small></div>
-                <select id="map-unknown-${i}" class="input-box" style="width:250px; margin:0; border-color:var(--orange);">${recipeOpts}</select>
-            </div>`;
-        });
-        html += `</div>`;
+// =============================================================================
+// UNIFIED DEPLETION CONFIRMATION UI
+// Both CSV and AI paths route through this confirmation before stock changes
+// =============================================================================
+
+window._pendingDepletionData = null; // holds { salesItems, source, preview }
+
+window.showDepletionConfirmation = function(salesItems, source) {
+    var preview = window.previewSalesDeductions(salesItems);
+    window._pendingDepletionData = { salesItems: salesItems, source: source, preview: preview };
+
+    // Check for same-day duplicate
+    var today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    var existingRuns = (window.depletionLogs || []).filter(function(d) {
+        return d.date === today && d.source === source && !d.reversed;
+    });
+
+    var recipeOpts = '<option value="">-- Select Hub Recipe --</option>' +
+        (window.recipes || []).filter(function(r) { return r.type === 'Menu'; })
+        .sort(function(a, b) { return a.name.localeCompare(b.name); })
+        .map(function(r) { return '<option value="' + r.id + '">' + esc(r.name) + '</option>'; }).join('');
+
+    var sourceLabel = source === 'csv-depletion' ? 'Lightspeed CSV' : 'AI POS Depletion';
+    var sourceColor = source === 'csv-depletion' ? 'var(--blue)' : 'var(--purple)';
+
+    var html = '<div style="max-width:850px; margin:auto; padding-bottom:90px;">' +
+        '<h2 style="margin-top:0;">Confirm Stock Depletion</h2>' +
+        '<p style="color:var(--text-muted); font-size:13px; margin-top:-10px;">Source: <span style="color:' + sourceColor + '; font-weight:bold;">' + sourceLabel + '</span> · ' + salesItems.length + ' POS items · ' + preview.matched.length + ' matched · ' + preview.unmatched.length + ' unmatched</p>';
+
+    // Duplicate day warning
+    if (existingRuns.length > 0) {
+        var prevRun = existingRuns[existingRuns.length - 1];
+        html += '<div style="background:rgba(245,158,11,0.1); border:1px solid var(--orange); padding:15px; border-radius:8px; margin-bottom:20px;">' +
+            '<h4 style="color:var(--orange); margin:0 0 8px;">⚠️ Duplicate Run Detected</h4>' +
+            '<p style="font-size:13px; margin:0 0 12px;">A ' + sourceLabel + ' depletion was already run today at ' + esc(prevRun.time) + ' (' + prevRun.totalLines + ' stock lines). Choose how to proceed:</p>' +
+            '<div style="display:flex; gap:10px; flex-wrap:wrap;">' +
+                '<label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; padding:8px 12px; background:var(--bg-main); border-radius:6px; border:1px solid var(--border);">' +
+                    '<input type="radio" name="dup-action" value="add" checked> <strong>Add</strong> — run both (additive)</label>' +
+                '<label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; padding:8px 12px; background:var(--bg-main); border-radius:6px; border:1px solid var(--border);">' +
+                    '<input type="radio" name="dup-action" value="replace"> <strong>Replace</strong> — undo previous, apply this</label>' +
+            '</div></div>';
     }
-    if (window.pendingMap.known.length > 0) {
-        html += `<h4 style="color:var(--green); border-bottom:1px solid var(--border); padding-bottom:5px; margin-top:20px;">✓ Safely Matched Items</h4>
-        <div style="max-height:300px; overflow-y:auto; font-size:13px; background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border);">`;
-        window.pendingMap.known.forEach(k => {
-            let rName = window.recipes.find(r => r.id === k.recipeId).name;
-            html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border);">
-                <span><span style="color:var(--text-muted);">${esc(k.posName)}</span> ➔ <strong>${esc(rName)}</strong></span>
-                <span style="color:var(--green); font-weight:bold;">${k.qtySold} sold</span>
-            </div>`;
+
+    // Unmatched items section (mapping UI)
+    if (preview.unmatched.length > 0) {
+        html += '<div class="card" style="border-top:3px solid var(--orange); margin-bottom:20px;">' +
+            '<h4 style="color:var(--orange); margin-top:0;">⚠️ Unmatched Items (' + preview.unmatched.length + ')</h4>' +
+            '<p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Map these to a recipe — the Hub remembers for next time. Leave blank to skip.</p>';
+        preview.unmatched.forEach(function(u, i) {
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border); gap:10px;">' +
+                '<div style="min-width:0; flex:1;"><strong style="color:var(--orange);">' + esc(u.rawName) + '</strong><br><small style="color:var(--text-muted);">Sold: ' + u.qtySold + '</small></div>' +
+                '<select id="map-unknown-' + i + '" class="input-box" style="width:250px; margin:0; border-color:var(--orange); flex-shrink:0;">' + recipeOpts + '</select>' +
+            '</div>';
         });
-        html += `</div>`;
+        html += '</div>';
     }
-    html += `<div class="sticky-footer">
-        <button onclick="window.executeDepletion()" class="btn btn-red" style="flex:2; font-size:16px;">Confirm Math & Deduct Stock</button>
-        <button onclick="window.showView('sales')" class="btn btn-outline" style="flex:1;">Cancel</button>
-    </div></div>`;
+
+    // Matched items section
+    if (preview.matched.length > 0) {
+        html += '<div class="card" style="border-top:3px solid var(--green); margin-bottom:20px;">' +
+            '<h4 style="color:var(--green); margin-top:0;">Matched Items (' + preview.matched.length + ')</h4>' +
+            '<div style="max-height:250px; overflow-y:auto; -webkit-overflow-scrolling:touch; font-size:13px;">';
+        preview.matched.forEach(function(m, i) {
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--border);">' +
+                '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; min-width:0; flex:1;">' +
+                    '<input type="checkbox" id="match-check-' + i + '" checked style="flex-shrink:0; width:18px; height:18px;">' +
+                    '<span style="color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(m.rawName) + '</span>' +
+                    '<span style="color:var(--text-muted);"> ➔ </span>' +
+                    '<strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(m.matchName) + '</strong>' +
+                '</label>' +
+                '<span style="color:var(--green); font-weight:bold; flex-shrink:0; margin-left:10px;">' + m.qtySold + '</span>' +
+            '</div>';
+        });
+        html += '</div></div>';
+    }
+
+    // Stock impact preview
+    if (preview.stockChanges.length > 0) {
+        html += '<div class="card" style="border-top:3px solid var(--red); margin-bottom:20px;">' +
+            '<h4 style="color:var(--red); margin-top:0;">Stock Impact Preview (' + preview.stockChanges.length + ' items)</h4>' +
+            '<div style="max-height:250px; overflow-y:auto; -webkit-overflow-scrolling:touch; font-size:13px;">' +
+            '<div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:4px 12px; padding:6px 0; border-bottom:2px solid var(--border); font-weight:bold; font-size:11px; color:var(--text-muted); text-transform:uppercase;">' +
+                '<div>Item</div><div style="text-align:right;">Current</div><div style="text-align:right;">After</div><div style="text-align:right;">Change</div></div>';
+        preview.stockChanges.forEach(function(sc) {
+            var isZero = sc.after === 0;
+            html += '<div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:4px 12px; padding:6px 0; border-bottom:1px dashed var(--border);' + (isZero ? ' background:rgba(239,68,68,0.08);' : '') + '">' +
+                '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(sc.name) + (isZero ? ' <span style="color:var(--red); font-size:11px;">⚠️ ZERO</span>' : '') + '</div>' +
+                '<div style="text-align:right;">' + sc.before + ' <small style="color:var(--text-muted);">' + esc(sc.unit) + '</small></div>' +
+                '<div style="text-align:right; font-weight:bold;' + (isZero ? ' color:var(--red);' : '') + '">' + sc.after + '</div>' +
+                '<div style="text-align:right; color:var(--red);">' + sc.delta + '</div>' +
+            '</div>';
+        });
+        html += '</div></div>';
+    }
+
+    // Sticky footer
+    html += '<div class="sticky-footer">' +
+        '<button onclick="window.executeUnifiedDepletion()" class="btn btn-red" style="flex:2; font-size:16px; padding:14px;">Confirm & Deplete Stock</button>' +
+        '<button onclick="window.showView(\'sales\')" class="btn btn-outline" style="flex:1; padding:14px;">Cancel</button>' +
+    '</div></div>';
+
     document.getElementById('mainContent').innerHTML = html;
 };
 
-window.executeDepletion = () => {
-    // Resolve unknown mappings
-    window.pendingMap.unknown.forEach((u, i) => {
-        let selectedId = document.getElementById(`map-unknown-${i}`).value;
-        if (selectedId) {
+// Execute the confirmed depletion — reads DOM state from confirmation UI
+window.executeUnifiedDepletion = function() {
+    var data = window._pendingDepletionData;
+    if (!data) return window.showToast('No depletion data pending.', 'error');
+
+    var preview = data.preview;
+    var source = data.source;
+
+    // Handle duplicate replacement
+    var today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    var existingRuns = (window.depletionLogs || []).filter(function(d) {
+        return d.date === today && d.source === source && !d.reversed;
+    });
+    if (existingRuns.length > 0) {
+        var dupRadio = document.querySelector('input[name="dup-action"]:checked');
+        var dupAction = dupRadio ? dupRadio.value : 'add';
+        if (dupAction === 'replace') {
+            existingRuns.forEach(function(run) { window.reverseDepletionRun(run.id); });
+        }
+    }
+
+    // Resolve unmatched mappings from dropdowns
+    var newMappings = [];
+    preview.unmatched.forEach(function(u, i) {
+        var sel = document.getElementById('map-unknown-' + i);
+        if (sel && sel.value) {
             if (!window.posMappings) window.posMappings = {};
-            window.posMappings[u.posName] = selectedId;
-            window.pendingMap.known.push({ posName: u.posName, recipeId: selectedId, qtySold: u.qtySold });
+            window.posMappings[u.rawName] = sel.value;
+            newMappings.push({ rawName: u.rawName, recipeId: sel.value, qtySold: u.qtySold });
         }
     });
-    // Use shared cascade — build salesItems from known mappings
-    // Since these are already mapped to recipes, we temporarily inject them into posMappings
-    window.pendingMap.known.forEach(k => {
-        if (!window.posMappings[k.posName]) window.posMappings[k.posName] = k.recipeId;
+
+    // Build final salesItems: checked matched items + newly-mapped items
+    var finalSalesItems = [];
+    preview.matched.forEach(function(m, i) {
+        var cb = document.getElementById('match-check-' + i);
+        if (cb && cb.checked) {
+            finalSalesItems.push({ rawName: m.rawName, qtySold: m.qtySold });
+        }
     });
-    const salesItems = window.pendingMap.known.map(k => ({ rawName: k.posName, qtySold: k.qtySold }));
-    const result = window.cascadeSalesDeductions(salesItems, 'ai-depletion');
+    newMappings.forEach(function(nm) {
+        finalSalesItems.push({ rawName: nm.rawName, qtySold: nm.qtySold });
+    });
+
+    if (finalSalesItems.length === 0) {
+        return window.showToast('No items selected for depletion.', 'error');
+    }
+
+    // Execute the actual cascade (modifies stock)
+    var result = window.cascadeSalesDeductions(finalSalesItems, source);
+
+    // Build stock changes snapshot for the depletion log
+    var stockChanges = [];
+    var inventory = window.inventoryItems || [];
+    Object.keys(result.deductions).forEach(function(invId) {
+        var inv = inventory.find(function(i) { return i.id === invId; });
+        if (inv) {
+            // Stock has already been decremented, so current stock IS the "after"
+            var buyUnits = result.deductions[invId] / (inv.yield || 1);
+            stockChanges.push({
+                id: inv.id,
+                name: inv.name,
+                before: Math.round(((inv.stock || 0) + buyUnits) * 100) / 100,
+                after: Math.round((inv.stock || 0) * 100) / 100,
+                unit: inv.buyUnit || 'unit',
+                delta: -Math.round(buyUnits * 100) / 100
+            });
+        }
+    });
+
+    // Build itemsSold for display (recipe-level summary)
+    var itemsSold = result.matched.map(function(m) {
+        return { recipeName: m.matchName, qtySold: m.qtySold };
+    });
+
+    // Build and save depletion log entry
+    var now = new Date();
+    var depletionRun = {
+        id: window.generateId('dep'),
+        date: today,
+        time: now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        ts: now.toISOString(),
+        source: source,
+        salesItems: finalSalesItems,
+        matched: result.matched,
+        unmatched: result.unmatched,
+        deductions: result.deductions,
+        stockChanges: stockChanges,
+        itemsSold: itemsSold,
+        totalLines: result.deductedCount,
+        skippedUnmapped: preview.unmatched.length - newMappings.length,
+        reversed: false,
+        reversedAt: null
+    };
+
+    window.depletionLogs = window.depletionLogs || [];
+    window.depletionLogs.push(depletionRun);
+
+    // Audit log
+    var sourceLabel = source === 'csv-depletion' ? 'Lightspeed CSV' : 'AI POS Depletion';
+    window.logAudit('depletionLogs', 'depletion-run', depletionRun.id,
+        sourceLabel + ': ' + result.deductedCount + ' stock lines, ' + itemsSold.length + ' recipes, ' + depletionRun.skippedUnmapped + ' skipped');
+
+    window._pendingDepletionData = null;
     window.saveToDisk();
-    window.showToast(`Success! Deducted ${result.deductedCount} stock lines.`);
+    window.showToast('Depleted ' + result.deductedCount + ' stock lines from ' + itemsSold.length + ' recipes.');
     window.showView('inventory');
+};
+
+// Reverse a depletion run — restores stock to pre-depletion levels
+window.reverseDepletionRun = function(runId) {
+    var logs = window.depletionLogs || [];
+    var run = logs.find(function(d) { return d.id === runId; });
+    if (!run || run.reversed) return;
+
+    var inventory = window.inventoryItems || [];
+    (run.stockChanges || []).forEach(function(sc) {
+        var inv = inventory.find(function(i) { return i.id === sc.id; });
+        if (inv) {
+            var restoreQty = Math.abs(sc.delta);
+            window.logStockMovement(inv.id, restoreQty, 'depletion-reversal', {
+                sourceRef: 'Undo run ' + runId
+            });
+            inv.stock = Math.round(((inv.stock || 0) + restoreQty) * 100) / 100;
+        }
+    });
+
+    run.reversed = true;
+    run.reversedAt = new Date().toISOString();
+    window.logAudit('depletionLogs', 'reversal', runId, 'Reversed depletion: ' + (run.stockChanges || []).length + ' stock lines restored');
+    window.saveToDisk();
+};
+
+// =============================================================================
+// DEPLETION HISTORY VIEW
+// =============================================================================
+
+window.renderDepletionHistoryView = function() {
+    var logs = (window.depletionLogs || []).slice().reverse();
+
+    var html = '<div style="max-width:900px; margin:auto;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">' +
+            '<div><h2 style="margin:0;">Stock Depletion History</h2>' +
+            '<p style="margin:5px 0 0; color:var(--text-muted); font-size:13px;">' + logs.length + ' depletion runs recorded</p></div>' +
+            '<div style="display:flex; gap:8px;">' +
+                '<button onclick="window.showView(\'sales\')" class="btn btn-outline" style="font-size:12px;">Back to Takings</button>' +
+                '<button onclick="window.openAiDepletion()" class="btn btn-purple" style="font-size:12px;">New AI Depletion</button>' +
+                '<button onclick="window.showView(\'lightspeed-import\')" class="btn btn-blue" style="font-size:12px;">CSV Import</button>' +
+            '</div>' +
+        '</div>';
+
+    if (logs.length === 0) {
+        html += '<div class="card" style="text-align:center; padding:40px;">' +
+            '<div style="font-size:48px; margin-bottom:10px;">📉</div>' +
+            '<p style="color:var(--text-muted);">No depletion runs yet. Use AI Depletion or Lightspeed CSV import to run your first stock depletion.</p>' +
+        '</div>';
+    } else {
+        logs.forEach(function(d) {
+            var sourceColor = d.source === 'csv-depletion' ? 'var(--blue)' : 'var(--purple)';
+            var sourceLabel = d.source === 'csv-depletion' ? 'CSV' : 'AI';
+            var reversedBadge = d.reversed ? '<span style="background:var(--red); color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:8px;">REVERSED</span>' : '';
+
+            html += '<div class="card" style="margin-bottom:12px; border-left:4px solid ' + sourceColor + ';' + (d.reversed ? ' opacity:0.6;' : '') + '">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="var det=this.nextElementSibling; det.style.display=det.style.display===\'none\'?\'block\':\'none\';">' +
+                    '<div>' +
+                        '<strong>' + esc(d.date || '') + ' <span style="color:var(--text-muted); font-weight:normal; font-size:12px;">at ' + esc(d.time || '') + '</span></strong>' +
+                        '<span style="background:' + sourceColor + '; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:10px;">' + sourceLabel + '</span>' +
+                        reversedBadge +
+                        '<br><span style="font-size:12px; color:var(--text-muted);">' + (d.totalLines || 0) + ' stock lines · ' + (d.itemsSold || []).length + ' recipes' +
+                        ((d.skippedUnmapped || 0) > 0 ? ' · <span style="color:var(--orange);">' + d.skippedUnmapped + ' skipped</span>' : '') + '</span>' +
+                    '</div>' +
+                    '<span style="color:var(--text-muted); font-size:20px;">▾</span>' +
+                '</div>' +
+                '<div style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">' +
+                    '<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; font-size:12px;">' +
+                        '<div><strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Recipes Sold</strong>' +
+                        (d.itemsSold || []).map(function(l) {
+                            return '<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);"><span>' + esc(l.recipeName) + '</span><strong style="color:var(--green);">' + l.qtySold + '</strong></div>';
+                        }).join('') + '</div>' +
+                        '<div><strong style="color:var(--brand-accent); display:block; margin-bottom:6px;">Stock Deducted</strong>' +
+                        (d.stockChanges || []).map(function(s) {
+                            return '<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">' + esc(s.name) + '</span><span><span style="color:var(--red);">' + s.before + '</span> → <strong>' + s.after + '</strong> <small>' + esc(s.unit) + '</small></span></div>';
+                        }).join('') + '</div>' +
+                    '</div>';
+
+            // Undo button (only for non-reversed runs)
+            if (!d.reversed) {
+                html += '<div style="margin-top:15px; text-align:right;">' +
+                    '<button onclick="window.confirmAction({title:\'Undo Depletion\',message:\'This will restore stock levels to before this depletion run. Continue?\',tier:\'dangerous\',onConfirm:function(){window.reverseDepletionRun(\\\'' + d.id + '\\\');window.showView(\\\'depletion-history\\\');}})" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">Undo This Run</button>' +
+                '</div>';
+            } else {
+                html += '<div style="margin-top:15px; text-align:right; font-size:12px; color:var(--text-muted);">Reversed at ' + (d.reversedAt ? new Date(d.reversedAt).toLocaleString() : '?') + '</div>';
+            }
+
+            html += '</div></div>';
+        });
+    }
+
+    html += '</div>';
+    return html;
 };
 
 // =============================================================================
