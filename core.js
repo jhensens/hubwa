@@ -35,6 +35,20 @@ window.auditLog = [];
 window.announcements = [];
 window.kudos = [];
 window.dailyBriefings = [];
+window.badgeDefinitions = [];
+window.staffHubConfig = {
+    roles: {
+        'FOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
+        'BOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'] },
+        'Bar': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
+        'Manager': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
+        'Kitchen Hand': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'] }
+    },
+    defaultCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'],
+    defaultActions: ['log-temps','wastage','maintenance','incident','sops']
+};
+window.shiftFeedbackTags = ['Busy','Quiet','Short-staffed','Great team','Equipment issues','Good tips','Stressful'];
+window._activeStaffMember = null;
 window.qualificationTypes = [
     { id: 'rsa', name: 'RSA', expiryRequired: true },
     { id: 'food-handler', name: 'Food Handler Certificate', expiryRequired: true },
@@ -274,14 +288,47 @@ window._restrictedViews = [
 window.checkLockState = () => {
     const restrictedItems = document.querySelectorAll('.restricted');
     const lockBtn = document.getElementById('btn-lock');
+    const staffBtn = document.getElementById('btn-staff-hub');
     if (window.isLocked) {
         restrictedItems.forEach(el => el.style.display = 'none');
         if (lockBtn) { lockBtn.innerHTML = '🔓 Unlock Hub'; lockBtn.style.background = 'rgba(59,130,246,0.1)'; lockBtn.style.color = 'var(--blue)'; lockBtn.style.borderColor = 'rgba(59,130,246,0.2)'; }
+        if (staffBtn) staffBtn.style.display = 'flex';
         if (window._restrictedViews.includes(window.currentView)) window.showView('dashboard');
     } else {
         restrictedItems.forEach(el => el.style.display = 'flex');
         if (lockBtn) { lockBtn.innerHTML = '🔒 Lock Hub'; lockBtn.style.background = 'rgba(239,68,68,0.1)'; lockBtn.style.color = 'var(--red)'; lockBtn.style.borderColor = 'rgba(239,68,68,0.2)'; }
+        if (staffBtn) staffBtn.style.display = 'none';
+        window._activeStaffMember = null;
     }
+};
+
+// --- STAFF HUB PIN ENTRY ---
+window.showStaffPinEntry = () => {
+    window._showPinModal('👤 Staff Hub', 'Enter your personal PIN to access My Hub', async (attempt) => {
+        const hashed = await window._hashPin(attempt);
+        const match = (window.staffDirectory || []).find(s => s.pin && s.pin === hashed && s.status !== 'Inactive');
+        if (match) {
+            window._activeStaffMember = match;
+            sessionStorage.setItem('activeStaffName', match.name);
+            window._lastActivity = Date.now();
+            window.closeModal();
+            window.showView('my-hub');
+            window.showToast('Welcome, ' + match.name + '!');
+        } else {
+            window._pinBuffer = '';
+            const dots = document.querySelectorAll('.pin-dot');
+            dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+            const errEl = document.getElementById('pin-error');
+            if (errEl) errEl.textContent = 'PIN not recognised. Ask your manager to set your PIN.';
+        }
+    });
+};
+
+window.lockStaffHub = () => {
+    window._activeStaffMember = null;
+    sessionStorage.removeItem('activeStaffName');
+    window.showView('dashboard');
+    window.showToast('Staff Hub locked.');
 };
 
 window._showPinModal = (title, subtitle, onSuccess) => {
@@ -375,7 +422,7 @@ window.toggleLock = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings'];
+window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags'];
 
 
 // =============================================================================
@@ -1212,6 +1259,9 @@ window.showView = (view) => {
         else if (view === 'noticeboard' && window.renderNoticeboardView) content.innerHTML = window.renderNoticeboardView();
         else if (view === 'audit-log' && window.renderAuditLogView) content.innerHTML = window.renderAuditLogView();
         else if (view === 'ask-hub' && window.renderAskHubView) content.innerHTML = window.renderAskHubView();
+        else if (view === 'my-hub' && window.renderMyHubView) content.innerHTML = window.renderMyHubView();
+        else if (view === 'badge-management' && window.renderBadgeManagementView) content.innerHTML = window.renderBadgeManagementView();
+        else if (view === 'staff-hub-config' && window.renderStaffHubConfigView) content.innerHTML = window.renderStaffHubConfigView();
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);

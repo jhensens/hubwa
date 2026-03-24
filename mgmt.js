@@ -2059,8 +2059,53 @@ window.editStaffForm = (idx) => {
                 '</div>';
         }).join('') +
         '</div>' +
+        // Staff PIN section
+        '<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:15px;">' +
+        '<label style="font-size:12px;font-weight:600;color:var(--text-main);margin-bottom:8px;display:block;">🔑 Staff PIN</label>' +
+        '<div style="display:flex;gap:10px;align-items:center;">' +
+        (s.pin ? '<span style="font-size:12px;color:var(--green);">✅ PIN set</span>' : '<span style="font-size:12px;color:var(--text-muted);">No PIN set</span>') +
+        '<button onclick="window.setStaffPin(' + (isEdit?idx:'undefined') + ')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">' + (s.pin ? '🔄 Reset PIN' : '🔑 Set PIN') + '</button>' +
+        '</div></div>' +
+        // Birthday + custom fields
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Birthday</label><input type="date" id="sd-birthday" class="input-box" value="' + (s.birthday||'') + '" style="margin:0;"></div>' +
+        '<div><label style="font-size:11px;color:var(--text-muted);">Custom (key=value, one per line)</label><textarea id="sd-custom" class="input-box" style="margin:0;height:40px;" placeholder="e.g. tshirt=Medium">' + Object.entries(s.customFields||{}).map(([k,v])=>k+'='+v).join('\n') + '</textarea></div>' +
+        '</div>' +
         '<button onclick="window.saveStaff(' + (isEdit?idx:'undefined') + ')" class="btn btn-green" style="width:100%;">' + (isEdit?'Save Changes':'Add Staff Member') + '</button>';
     window.openModal(isEdit ? '✏️ Edit — ' + esc(s.name) : '+ New Staff Member', html);
+};
+
+window.setStaffPin = (idx) => {
+    window._showPinModal('🔑 Set Staff PIN', 'Choose a 4-digit PIN for this staff member', async (newPin) => {
+        if (newPin.length >= 4) {
+            const hashed = await window._hashPin(newPin);
+            // Check for collision with manager PIN
+            const mgrPin = localStorage.getItem('venuePin');
+            if (mgrPin && hashed === mgrPin) {
+                window.showToast('This PIN matches the manager PIN. Choose a different one.', 'error');
+                window._pinBuffer = '';
+                const dots = document.querySelectorAll('.pin-dot');
+                dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+                return;
+            }
+            // Check for collision with other staff PINs
+            const collision = (window.staffDirectory||[]).find((s, i) => i !== idx && s.pin === hashed);
+            if (collision) {
+                window.showToast('This PIN is already used by ' + collision.name + '. Choose a different one.', 'error');
+                window._pinBuffer = '';
+                const dots = document.querySelectorAll('.pin-dot');
+                dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+                return;
+            }
+            if (idx !== undefined && (window.staffDirectory||[])[idx]) {
+                window.staffDirectory[idx].pin = hashed;
+                window.saveToDisk();
+                window.closeModal();
+                window.showToast('PIN set for ' + window.staffDirectory[idx].name + '!');
+                window.editStaffForm(idx); // Re-open form to show updated state
+            }
+        }
+    });
 };
 
 window.saveStaff = (idx) => {
@@ -2077,6 +2122,14 @@ window.saveStaff = (idx) => {
         }
     });
     const existing = (idx !== undefined && idx !== 'undefined') ? (window.staffDirectory||[])[idx] : {};
+    // Parse custom fields
+    const customEl = document.getElementById('sd-custom');
+    const customFields = {};
+    if (customEl && customEl.value.trim()) {
+        customEl.value.trim().split('\n').forEach(line => {
+            const parts = line.split('='); if (parts.length >= 2) customFields[parts[0].trim()] = parts.slice(1).join('=').trim();
+        });
+    }
     const obj = {
         name: document.getElementById('sd-name').value.trim(),
         role: document.getElementById('sd-role').value,
@@ -2086,12 +2139,20 @@ window.saveStaff = (idx) => {
         startDate: document.getElementById('sd-start').value,
         status: document.getElementById('sd-status').value,
         notes: document.getElementById('sd-notes').value.trim(),
-        qualifications: quals
+        qualifications: quals,
+        birthday: document.getElementById('sd-birthday') ? document.getElementById('sd-birthday').value : (existing.birthday || ''),
+        customFields: customFields,
+        // Preserve existing fields that aren't in this form
+        pin: existing.pin || undefined,
+        achievements: existing.achievements || [],
+        shiftFeedback: existing.shiftFeedback || [],
+        profileConfig: existing.profileConfig || {}
     };
     if (!obj.name) return window.showToast('Name required.','error');
     if (!window.staffDirectory) window.staffDirectory = [];
     if (idx !== undefined && idx !== 'undefined') window.staffDirectory[idx] = obj;
     else window.staffDirectory.push(obj);
+    window.logAudit('staffDirectory', idx !== undefined ? 'edit' : 'create', obj.name, obj.role);
     window.saveToDisk(); window.closeModal(); window.showView('staff-directory');
     window.showToast('Staff member saved!');
 };
@@ -3072,6 +3133,12 @@ window.renderManagerHub = () => {
         });
         html += '</div>';
     }
+
+    // --- SHIFT FEEDBACK TRENDS (on dashboard) ---
+    if (window._renderFeedbackTrendsCard) html += window._renderFeedbackTrendsCard();
+
+    // --- TEAM LEADERBOARD (on dashboard) ---
+    if (window._renderLeaderboardCard) html += window._renderLeaderboardCard();
 
     // --- KUDOS BOARD (on dashboard) ---
     if (window.renderKudosCard) html += window.renderKudosCard();
@@ -4547,4 +4614,659 @@ INSTRUCTIONS: Answer concisely in 2-5 sentences. Use specific numbers. Format ke
         const loadEl = document.getElementById('ask-hub-loading');
         if (loadEl) loadEl.innerHTML = '<span style="color:var(--red);">Error: ' + window.esc(err.message) + '</span>';
     }
+};
+
+// =============================================================================
+// MY HUB — STAFF SELF-SERVICE PORTAL
+// =============================================================================
+window.renderMyHubView = () => {
+    const E = window.esc;
+    const staff = window._activeStaffMember;
+    if (!staff) return '<div class="card" style="text-align:center;padding:48px;"><h3>👤 Staff Hub</h3><p style="color:var(--text-muted);">No active staff session. <button onclick="window.showStaffPinEntry()" class="btn btn-purple" style="padding:8px 16px;">Enter PIN</button></p></div>';
+
+    // Run achievement calculation
+    window._calculateAchievements(staff);
+
+    // Determine visible cards
+    const role = staff.role || 'FOH';
+    const config = (window.staffHubConfig||{}).roles || {};
+    const roleConfig = config[role] || {};
+    const visibleCards = (staff.profileConfig||{}).visibleCards || roleConfig.visibleCards || (window.staffHubConfig||{}).defaultCards || ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'];
+    const quickActions = roleConfig.quickActions || (window.staffHubConfig||{}).defaultActions || ['log-temps','wastage','maintenance','incident','sops'];
+
+    // Birthday check
+    const today = new Date();
+    const bdayMsg = staff.birthday ? (() => {
+        const bd = new Date(staff.birthday); const isBday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth();
+        return isBday ? '<div style="text-align:center;padding:12px;background:rgba(139,92,246,0.1);border-radius:10px;margin-bottom:14px;font-size:14px;">🎂 Happy Birthday, ' + E(staff.name.split(' ')[0]) + '! 🎉</div>' : '';
+    })() : '';
+
+    let html = '<div style="max-width:800px;margin:auto;">';
+    // Header
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">';
+    html += '<div>';
+    html += '<h2 style="margin:0;">👤 ' + E(staff.name) + '</h2>';
+    html += '<div style="font-size:13px;color:var(--text-muted);margin-top:2px;">' + E(role) + ' · ' + E(staff.status||'Active') + '</div>';
+    html += '</div>';
+    html += '<button onclick="window.lockStaffHub()" class="btn btn-outline" style="padding:8px 16px;font-size:12px;">🔒 Lock</button>';
+    html += '</div>';
+    html += bdayMsg;
+
+    // Custom fields display
+    const cf = staff.customFields || {};
+    if (Object.keys(cf).length > 0) {
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+        Object.entries(cf).forEach(([k,v]) => { html += '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(139,92,246,0.1);color:var(--purple);border:1px solid rgba(139,92,246,0.2);">' + E(k) + ': ' + E(v) + '</span>'; });
+        html += '</div>';
+    }
+
+    // Render each visible card
+    if (visibleCards.includes('shifts')) html += window._renderMyShiftsCard(staff);
+    if (visibleCards.includes('actions')) html += window._renderStaffActionsCard(quickActions);
+    if (visibleCards.includes('announcements')) html += window._renderStaffAnnouncementsCard(staff);
+    if (visibleCards.includes('qualifications')) html += window._renderMyQualificationsCard(staff);
+    if (visibleCards.includes('achievements')) html += window._renderMyAchievementsCard(staff);
+    if (visibleCards.includes('kudos')) html += window._renderMyKudosCard(staff);
+    if (visibleCards.includes('feedback')) html += window._renderShiftFeedbackCard(staff);
+    if (visibleCards.includes('leaderboard')) html += window._renderLeaderboardCard();
+
+    html += '</div>';
+    return html;
+};
+
+// --- MY SHIFTS CARD ---
+window._renderMyShiftsCard = (staff) => {
+    const E = window.esc;
+    const td = window._tandaData;
+    if (!td || !td.weeklyRoster) {
+        return '<div class="card" style="padding:16px;border-top:3px solid var(--blue);margin-bottom:14px;"><div style="font-size:13px;font-weight:700;">🗓️ My Shifts</div><p style="font-size:13px;color:var(--text-muted);margin:8px 0 0;">No roster data available. Connect Tanda in Settings.</p></div>';
+    }
+    const staffName = (staff.name || '').toLowerCase().trim();
+    const todayStr = new Date().toISOString().split('T')[0];
+    let shiftsHtml = '';
+    const weekDays = Object.keys(td.weeklyRoster || {}).sort();
+    let foundShifts = 0;
+    weekDays.forEach(date => {
+        const dayShifts = (td.weeklyRoster[date] || []).filter(s => (s.name || '').toLowerCase().trim() === staffName);
+        dayShifts.forEach(s => {
+            foundShifts++;
+            const isToday = date === todayStr;
+            const d = new Date(date);
+            const dayLabel = d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+            shiftsHtml += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;' + (isToday?'background:rgba(139,92,246,0.08);border-left:3px solid var(--purple);':'') + '">';
+            shiftsHtml += '<div><strong style="font-size:13px;">' + (isToday?'⭐ TODAY':'') + ' ' + dayLabel + '</strong>';
+            shiftsHtml += '<div style="font-size:12px;color:var(--text-muted);">' + E(s.department || '') + '</div></div>';
+            shiftsHtml += '<div style="text-align:right;font-size:13px;">' + E(s.start || '') + ' — ' + E(s.finish || '') + '<div style="font-size:11px;color:var(--text-muted);">' + (s.hours || '?') + 'h</div></div>';
+            shiftsHtml += '</div>';
+        });
+    });
+    // Clocked in status
+    let clockedInHtml = '';
+    if (td.clockedIn) {
+        const ci = td.clockedIn.find(c => (c.name||'').toLowerCase().trim() === staffName);
+        if (ci) clockedInHtml = '<div style="padding:8px 12px;background:rgba(16,185,129,0.1);border-radius:6px;font-size:12px;color:var(--green);font-weight:600;margin-top:8px;">✅ Clocked in since ' + E(ci.since || '?') + '</div>';
+    }
+    return '<div class="card" style="padding:0;overflow:hidden;border-top:3px solid var(--blue);margin-bottom:14px;"><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div style="font-size:13px;font-weight:700;">🗓️ My Shifts This Week</div></div>' +
+        (foundShifts > 0 ? shiftsHtml : '<div style="padding:16px;color:var(--text-muted);font-size:13px;">No shifts rostered this week.</div>') +
+        clockedInHtml + '</div>';
+};
+
+// --- STAFF QUICK ACTIONS ---
+window._renderStaffActionsCard = (actions) => {
+    const actionMap = {
+        'log-temps': {label:'Log Temps', icon:'🌡️', view:'compliance', color:'var(--blue)'},
+        'wastage': {label:'Log Wastage', icon:'🗑️', view:'wastage', color:'var(--orange)'},
+        'maintenance': {label:'Report Issue', icon:'🛠️', view:'maintenance', color:'var(--red)'},
+        'incident': {label:'Incident', icon:'⚠️', view:'incidents', color:'var(--red)'},
+        'sops': {label:'View SOPs', icon:'📚', view:'knowledge', color:'var(--purple)'}
+    };
+    let html = '<div class="card" style="padding:16px;margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">⚡ Quick Actions</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;">';
+    (actions || []).forEach(key => {
+        const a = actionMap[key]; if (!a) return;
+        html += '<button onclick="window.showView(\'' + a.view + '\')" style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:' + a.color + ';cursor:pointer;font-size:12px;font-weight:600;min-height:48px;" onmouseover="this.style.borderColor=\'' + a.color + '\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+        html += '<span style="font-size:18px;">' + a.icon + '</span>' + a.label + '</button>';
+    });
+    html += '</div></div>';
+    return html;
+};
+
+// --- STAFF ANNOUNCEMENTS CARD ---
+window._renderStaffAnnouncementsCard = (staff) => {
+    const E = window.esc;
+    const now = new Date();
+    const active = (window.announcements || []).filter(a => !a.expiry || new Date(a.expiry) >= now).slice(0, 5);
+    if (active.length === 0) return '';
+    const prioColors = {urgent:'var(--red)',warning:'var(--orange)',info:'var(--blue)'};
+    let html = '<div class="card" style="padding:16px;border-top:3px solid var(--blue);margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">📢 Announcements</div>';
+    active.forEach(a => {
+        const isAcked = (a.acknowledged||[]).includes(staff.name);
+        html += '<div style="padding:8px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;">';
+        html += '<div style="display:flex;gap:8px;align-items:center;flex:1;"><span style="width:8px;height:8px;border-radius:50%;background:' + (prioColors[a.priority]||'var(--blue)') + ';flex-shrink:0;"></span>';
+        html += '<div><div style="font-size:13px;font-weight:500;">' + E(a.title) + '</div>';
+        if (a.body) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + E(a.body.substring(0,80)) + '</div>';
+        html += '</div></div>';
+        html += isAcked ? '<span style="font-size:11px;color:var(--green);">✅</span>' : '<button onclick="window._staffAckAnnouncement(\'' + window.escAttr(a.id) + '\')" class="btn btn-outline" style="font-size:10px;padding:3px 8px;flex-shrink:0;">Ack</button>';
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+};
+
+window._staffAckAnnouncement = (id) => {
+    const a = (window.announcements || []).find(x => x.id === id);
+    const staff = window._activeStaffMember;
+    if (!a || !staff) return;
+    if (!a.acknowledged) a.acknowledged = [];
+    if (!a.acknowledged.includes(staff.name)) { a.acknowledged.push(staff.name); window.saveToDisk(); window.showView('my-hub'); window.showToast('Acknowledged!'); }
+};
+
+// --- MY QUALIFICATIONS CARD ---
+window._renderMyQualificationsCard = (staff) => {
+    const E = window.esc;
+    const now = new Date();
+    const quals = staff.qualifications || {};
+    const types = window.qualificationTypes || [];
+    if (types.length === 0) return '';
+    let html = '<div class="card" style="padding:16px;border-top:3px solid var(--green);margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">🎓 My Qualifications</div>';
+    types.forEach(qt => {
+        const q = quals[qt.id];
+        let status = 'missing', statusColor = 'var(--text-muted)', statusText = 'Not provided', icon = '⬜';
+        if (q) {
+            if (qt.expiryRequired && q.expiry) {
+                const daysLeft = (new Date(q.expiry) - now) / 86400000;
+                if (daysLeft < 0) { status='expired'; statusColor='var(--red)'; statusText='EXPIRED'; icon='🔴'; }
+                else if (daysLeft <= 30) { status='expiring'; statusColor='var(--orange)'; statusText='Expires in '+Math.ceil(daysLeft)+'d'; icon='🟠'; }
+                else if (daysLeft <= 90) { status='soon'; statusColor='var(--orange)'; statusText='Expires in '+Math.ceil(daysLeft)+'d'; icon='🟡'; }
+                else { status='current'; statusColor='var(--green)'; statusText='Valid until '+q.expiry; icon='🟢'; }
+            } else if (q.verified) { status='verified'; statusColor='var(--green)'; statusText='Verified'; icon='🟢'; }
+            else { status='pending'; statusColor='var(--orange)'; statusText='Pending'; icon='🟡'; }
+        }
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);">';
+        html += '<span style="font-size:13px;">' + icon + ' ' + E(qt.name) + '</span>';
+        html += '<span style="font-size:12px;color:' + statusColor + ';font-weight:600;">' + statusText + '</span>';
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+};
+
+// --- MY KUDOS CARD ---
+window._renderMyKudosCard = (staff) => {
+    const E = window.esc;
+    const received = (window.kudos || []).filter(k => (k.to||'').toLowerCase().trim() === (staff.name||'').toLowerCase().trim()).slice(0, 5);
+    let html = '<div class="card" style="padding:16px;border-top:3px solid var(--purple);margin-bottom:14px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html += '<div style="font-size:13px;font-weight:700;">⭐ My Kudos (' + received.length + ')</div>';
+    html += '<button onclick="window.giveKudosForm()" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">+ Give Kudos</button>';
+    html += '</div>';
+    if (received.length === 0) { html += '<p style="font-size:13px;color:var(--text-muted);">No kudos received yet. Keep up the great work!</p>'; }
+    else { received.forEach(k => {
+        html += '<div style="padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;">"' + E(k.message) + '" <span style="color:var(--text-muted);">— from ' + E(k.from) + ' · ' + E(k.date||'') + '</span></div>';
+    }); }
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
+// ACHIEVEMENT / AWARDS ENGINE
+// =============================================================================
+window._seedDefaultBadges = () => {
+    if ((window.badgeDefinitions||[]).length > 0) return;
+    window.badgeDefinitions = [
+        { id:'temp-champion', name:'Temp Champion', icon:'🌡️', description:'Logging temperatures consistently', type:'auto', category:'Compliance', metric:'tempLogs', tiers:{bronze:{threshold:10},silver:{threshold:50},gold:{threshold:100}}, active:true },
+        { id:'waste-warrior', name:'Waste Warrior', icon:'♻️', description:'Tracking wastage diligently', type:'auto', category:'Compliance', metric:'wastageLogs', tiers:{bronze:{threshold:5},silver:{threshold:25},gold:{threshold:50}}, active:true },
+        { id:'kudos-collector', name:'Kudos Collector', icon:'⭐', description:'Recognised by peers', type:'auto', category:'Culture', metric:'kudosReceived', tiers:{bronze:{threshold:5},silver:{threshold:15},gold:{threshold:30}}, active:true },
+        { id:'handover-hero', name:'Handover Hero', icon:'📝', description:'Consistent shift handovers', type:'auto', category:'Operations', metric:'handoverLogs', tiers:{bronze:{threshold:5},silver:{threshold:15},gold:{threshold:30}}, active:true },
+        { id:'eagle-eye', name:'Eagle Eye', icon:'🛠️', description:'Spotting maintenance issues', type:'auto', category:'Venue', metric:'defectLogs', tiers:{bronze:{threshold:3},silver:{threshold:10},gold:{threshold:25}}, active:true },
+        { id:'safety-first', name:'Safety First', icon:'⚠️', description:'Reporting incidents promptly', type:'auto', category:'Safety', metric:'incidentLogs', tiers:{bronze:{threshold:3},silver:{threshold:10},gold:{threshold:20}}, active:true },
+        { id:'checklist-pro', name:'Checklist Pro', icon:'✅', description:'Completing compliance checks', type:'auto', category:'Compliance', metric:'complianceLogs', tiers:{bronze:{threshold:10},silver:{threshold:30},gold:{threshold:60}}, active:true }
+    ];
+    window.saveToDisk();
+};
+
+window._countMetricForStaff = (metric, staffName) => {
+    const name = (staffName||'').toLowerCase().trim();
+    const matchName = (field) => (field||'').toLowerCase().trim() === name;
+    switch(metric) {
+        case 'tempLogs': return (window.tempLogs||[]).filter(t => matchName(t.staff)).length;
+        case 'wastageLogs': return (window.wastageLogs||[]).filter(w => matchName(w.staff)).length;
+        case 'kudosReceived': return (window.kudos||[]).filter(k => matchName(k.to)).length;
+        case 'handoverLogs': return (window.handoverLogs||[]).filter(h => matchName(h.manager)).length;
+        case 'defectLogs': return (window.defectLogs||[]).filter(d => matchName(d.reportedBy || d.staff)).length;
+        case 'incidentLogs': return (window.incidentLogs||[]).filter(i => matchName(i.staff || i.reportedBy)).length;
+        case 'complianceLogs': return (window.complianceLogs||[]).filter(c => matchName(c.staff)).length;
+        default: return 0;
+    }
+};
+
+window._calculateAchievements = (staff) => {
+    window._seedDefaultBadges();
+    if (!staff.achievements) staff.achievements = [];
+    const badges = (window.badgeDefinitions||[]).filter(b => b.active && b.type === 'auto');
+    let newlyEarned = [];
+    badges.forEach(badge => {
+        const count = window._countMetricForStaff(badge.metric, staff.name);
+        const tiers = badge.tiers || {};
+        let earnedTier = null;
+        if (tiers.gold && count >= tiers.gold.threshold) earnedTier = 'gold';
+        else if (tiers.silver && count >= tiers.silver.threshold) earnedTier = 'silver';
+        else if (tiers.bronze && count >= tiers.bronze.threshold) earnedTier = 'bronze';
+        if (earnedTier) {
+            const existing = staff.achievements.find(a => a.badgeId === badge.id);
+            if (!existing) {
+                staff.achievements.push({ badgeId: badge.id, tier: earnedTier, earnedDate: new Date().toISOString().split('T')[0] });
+                newlyEarned.push(badge.icon + ' ' + badge.name + ' (' + earnedTier + ')');
+            } else if (['bronze','silver','gold'].indexOf(earnedTier) > ['bronze','silver','gold'].indexOf(existing.tier)) {
+                existing.tier = earnedTier; existing.earnedDate = new Date().toISOString().split('T')[0];
+                newlyEarned.push(badge.icon + ' ' + badge.name + ' upgraded to ' + earnedTier + '!');
+            }
+        }
+    });
+    if (newlyEarned.length > 0) {
+        // Update the staff record in directory
+        const idx = (window.staffDirectory||[]).findIndex(s => s.name === staff.name);
+        if (idx >= 0) { window.staffDirectory[idx].achievements = staff.achievements; window.saveToDisk(); }
+        newlyEarned.forEach(msg => window.showToast('🏆 Badge earned: ' + msg));
+    }
+};
+
+// --- MY ACHIEVEMENTS CARD ---
+window._renderMyAchievementsCard = (staff) => {
+    const E = window.esc;
+    const achievements = staff.achievements || [];
+    const allBadges = window.badgeDefinitions || [];
+    const tierColors = {bronze:'#CD7F32',silver:'#C0C0C0',gold:'#FFD700',awarded:'var(--purple)'};
+    let html = '<div class="card" style="padding:16px;border-top:3px solid #FFD700;margin-bottom:14px;">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:12px;">🏆 Achievements (' + achievements.length + ')</div>';
+    if (achievements.length === 0) {
+        html += '<p style="font-size:13px;color:var(--text-muted);">No badges earned yet. Complete tasks to unlock achievements!</p>';
+    } else {
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;">';
+        achievements.forEach(a => {
+            const badge = allBadges.find(b => b.id === a.badgeId) || {name:a.badgeId, icon:'🏅', description:''};
+            const tierColor = tierColors[a.tier] || tierColors.bronze;
+            html += '<div style="text-align:center;padding:12px 8px;background:var(--bg-main);border-radius:10px;border:2px solid ' + tierColor + ';">';
+            html += '<div style="font-size:28px;">' + badge.icon + '</div>';
+            html += '<div style="font-size:11px;font-weight:600;margin-top:4px;">' + E(badge.name) + '</div>';
+            html += '<div style="font-size:10px;color:' + tierColor + ';text-transform:uppercase;font-weight:700;">' + E(a.tier) + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+    // Show progress on unearned badges
+    const unearnedBadges = allBadges.filter(b => b.active && b.type === 'auto' && !achievements.find(a => a.badgeId === b.id));
+    if (unearnedBadges.length > 0) {
+        html += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;"><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Next to earn:</div>';
+        unearnedBadges.slice(0, 3).forEach(badge => {
+            const count = window._countMetricForStaff(badge.metric, staff.name);
+            const target = badge.tiers.bronze ? badge.tiers.bronze.threshold : 10;
+            const pct = Math.min(100, Math.round((count / target) * 100));
+            html += '<div style="margin-bottom:6px;"><div style="font-size:12px;display:flex;justify-content:space-between;">';
+            html += '<span>' + badge.icon + ' ' + E(badge.name) + '</span>';
+            html += '<span style="color:var(--text-muted);">' + count + '/' + target + '</span></div>';
+            html += '<div style="background:var(--bg-main);border-radius:4px;height:4px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--purple);border-radius:4px;"></div></div></div>';
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
+// SHIFT FEEDBACK
+// =============================================================================
+window._renderShiftFeedbackCard = (staff) => {
+    const E = window.esc;
+    const today = new Date().toISOString().split('T')[0];
+    const todayFeedback = (staff.shiftFeedback || []).find(f => f.date === today);
+    let html = '<div class="card" style="padding:16px;border-top:3px solid var(--orange);margin-bottom:14px;">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">😊 Shift Feedback</div>';
+    if (todayFeedback) {
+        const emojis = ['😣','😕','😐','🙂','😄'];
+        html += '<div style="text-align:center;padding:12px;"><div style="font-size:36px;">' + (emojis[todayFeedback.rating-1]||'😐') + '</div>';
+        html += '<div style="font-size:13px;color:var(--text-muted);margin-top:6px;">You rated today\'s shift ' + todayFeedback.rating + '/5</div>';
+        if (todayFeedback.tags && todayFeedback.tags.length > 0) html += '<div style="margin-top:6px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">' + todayFeedback.tags.map(t => '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:rgba(139,92,246,0.1);color:var(--purple);">' + E(t) + '</span>').join('') + '</div>';
+        html += '<div style="font-size:11px;color:var(--green);margin-top:8px;">✅ Feedback submitted — thanks!</div></div>';
+    } else {
+        html += '<div style="text-align:center;"><p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">How was your shift today?</p>';
+        html += '<div id="mood-btns" style="display:flex;justify-content:center;gap:12px;margin-bottom:12px;">';
+        ['😣','😕','😐','🙂','😄'].forEach((emoji, i) => {
+            html += '<button onclick="window._selectMood(' + (i+1) + ')" style="font-size:32px;padding:8px;background:var(--bg-main);border:2px solid var(--border);border-radius:12px;cursor:pointer;min-width:52px;min-height:52px;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--purple)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' + emoji + '</button>';
+        });
+        html += '</div>';
+        html += '<div id="mood-tags" style="display:none;margin-bottom:12px;">';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">What describes your shift? (optional)</div>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">';
+        (window.shiftFeedbackTags || []).forEach(tag => {
+            html += '<button onclick="this.classList.toggle(\'tag-selected\');this.style.background=this.classList.contains(\'tag-selected\')?\'var(--purple)\':\'var(--bg-main)\';this.style.color=this.classList.contains(\'tag-selected\')?\'#fff\':\'var(--text-muted)\';" class="mood-tag" data-tag="' + window.escAttr(tag) + '" style="font-size:11px;padding:5px 12px;border-radius:20px;background:var(--bg-main);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;">' + E(tag) + '</button>';
+        });
+        html += '</div></div>';
+        html += '<div id="mood-note" style="display:none;margin-bottom:12px;"><input type="text" id="mood-note-input" class="input-box" placeholder="Any notes? (optional)" style="margin:0;font-size:13px;"></div>';
+        html += '<button id="mood-submit" onclick="window._submitShiftFeedback()" style="display:none;" class="btn btn-purple" style="padding:10px 20px;">Submit Feedback</button>';
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
+};
+
+window._selectedMood = 0;
+window._selectMood = (rating) => {
+    window._selectedMood = rating;
+    const tagsEl = document.getElementById('mood-tags');
+    const noteEl = document.getElementById('mood-note');
+    const submitBtn = document.getElementById('mood-submit');
+    if (tagsEl) tagsEl.style.display = 'block';
+    if (noteEl) noteEl.style.display = 'block';
+    if (submitBtn) { submitBtn.style.display = 'inline-block'; }
+    // Highlight selected mood
+    const btns = document.querySelectorAll('#mood-btns button');
+    btns.forEach((btn, i) => {
+        btn.style.borderColor = (i + 1) === rating ? 'var(--purple)' : 'var(--border)';
+        btn.style.background = (i + 1) === rating ? 'rgba(139,92,246,0.15)' : 'var(--bg-main)';
+    });
+};
+
+window._submitShiftFeedback = () => {
+    const staff = window._activeStaffMember;
+    if (!staff || !window._selectedMood) return;
+    const today = new Date().toISOString().split('T')[0];
+    const selectedTags = Array.from(document.querySelectorAll('.mood-tag.tag-selected')).map(el => el.dataset.tag);
+    const noteInput = document.getElementById('mood-note-input');
+    const note = noteInput ? noteInput.value.trim() : '';
+    if (!staff.shiftFeedback) staff.shiftFeedback = [];
+    staff.shiftFeedback.push({ date: today, rating: window._selectedMood, tags: selectedTags, note: note });
+    if (staff.shiftFeedback.length > 90) staff.shiftFeedback = staff.shiftFeedback.slice(-90);
+    // Update in staffDirectory
+    const idx = (window.staffDirectory||[]).findIndex(s => s.name === staff.name);
+    if (idx >= 0) { window.staffDirectory[idx].shiftFeedback = staff.shiftFeedback; window.saveToDisk(); }
+    window._selectedMood = 0;
+    window.showView('my-hub');
+    window.showToast('Thanks for the feedback!');
+};
+
+// =============================================================================
+// TEAM LEADERBOARD
+// =============================================================================
+window._renderLeaderboardCard = () => {
+    const E = window.esc;
+    const activeStaff = (window.staffDirectory || []).filter(s => s.status !== 'Inactive');
+    const scores = activeStaff.map(s => ({
+        name: s.name, role: s.role || 'Staff',
+        badges: (s.achievements || []).length,
+        kudos: (window.kudos||[]).filter(k => (k.to||'').toLowerCase().trim() === (s.name||'').toLowerCase().trim()).length
+    })).filter(s => s.badges > 0 || s.kudos > 0).sort((a, b) => (b.badges + b.kudos) - (a.badges + a.kudos));
+    if (scores.length === 0) return '';
+    const medals = ['🥇','🥈','🥉'];
+    let html = '<div class="card" style="padding:16px;border-top:3px solid #FFD700;margin-bottom:14px;">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">🏅 Team Leaderboard</div>';
+    scores.slice(0, 8).forEach((s, i) => {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);">';
+        html += '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;width:24px;text-align:center;">' + (medals[i]||'') + '</span>';
+        html += '<div><span style="font-size:13px;font-weight:600;">' + E(s.name) + '</span>';
+        html += '<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">' + E(s.role) + '</span></div></div>';
+        html += '<div style="display:flex;gap:10px;font-size:12px;"><span>🏆 ' + s.badges + '</span><span>⭐ ' + s.kudos + '</span></div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
+// BADGE MANAGEMENT (Manager View)
+// =============================================================================
+window.renderBadgeManagementView = () => {
+    window._seedDefaultBadges();
+    const E = window.esc;
+    const badges = window.badgeDefinitions || [];
+    let html = '<div style="max-width:900px;margin:auto;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+    html += '<div><h2 style="margin:0;">🏆 Badge Management</h2><div style="font-size:13px;color:var(--text-muted);margin-top:2px;">Create, edit and award badges to your team</div></div>';
+    html += '<div style="display:flex;gap:8px;"><button onclick="window._newBadgeForm(\'auto\')" class="btn btn-purple" style="padding:8px 16px;">+ Auto Badge</button>';
+    html += '<button onclick="window._newBadgeForm(\'manual\')" class="btn btn-blue" style="padding:8px 16px;">+ Manual Badge</button></div>';
+    html += '</div>';
+
+    badges.forEach((b, i) => {
+        const tierColors = {bronze:'#CD7F32',silver:'#C0C0C0',gold:'#FFD700'};
+        html += '<div class="card" style="padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;opacity:' + (b.active?'1':'0.5') + ';">';
+        html += '<div style="display:flex;gap:12px;align-items:center;flex:1;">';
+        html += '<div style="font-size:32px;">' + b.icon + '</div>';
+        html += '<div><div style="font-size:14px;font-weight:600;">' + E(b.name) + ' <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:' + (b.type==='auto'?'rgba(16,185,129,0.1)':'rgba(59,130,246,0.1)') + ';color:' + (b.type==='auto'?'var(--green)':'var(--blue)') + ';">' + b.type + '</span></div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);">' + E(b.description) + '</div>';
+        if (b.type === 'auto' && b.tiers) {
+            html += '<div style="display:flex;gap:8px;margin-top:4px;">';
+            ['bronze','silver','gold'].forEach(t => {
+                if (b.tiers[t]) html += '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg-main);border:1px solid ' + tierColors[t] + ';color:' + tierColors[t] + ';">' + t + ': ' + b.tiers[t].threshold + '</span>';
+            });
+            html += '</div>';
+        }
+        html += '</div></div>';
+        html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+        if (b.type === 'manual') html += '<button onclick="window._awardBadgeForm(\'' + window.escAttr(b.id) + '\')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">🎁 Award</button>';
+        html += '<button onclick="window._editBadgeForm(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">✏️</button>';
+        html += '<button onclick="window._toggleBadge(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">' + (b.active?'⏸️':'▶️') + '</button>';
+        html += '<button onclick="window._deleteBadge(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:var(--red);">✕</button>';
+        html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+};
+
+window._newBadgeForm = (type) => {
+    const html = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:10px;margin-bottom:12px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Icon</label><input type="text" id="badge-icon" class="input-box" value="🏅" style="margin:0;width:60px;font-size:24px;text-align:center;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Name</label><input type="text" id="badge-name" class="input-box" placeholder="e.g. Cocktail Master" style="margin:0;"></div>
+        </div>
+        <div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text-muted);">Description</label><input type="text" id="badge-desc" class="input-box" placeholder="What this badge represents" style="margin:0;"></div>
+        <div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text-muted);">Category</label><input type="text" id="badge-cat" class="input-box" placeholder="e.g. Service, Compliance, Culture" style="margin:0;"></div>
+        ${type === 'auto' ? `
+        <div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text-muted);">Metric</label>
+        <select id="badge-metric" class="input-box" style="margin:0;">
+            <option value="tempLogs">Temp Logs</option><option value="wastageLogs">Wastage Logs</option>
+            <option value="kudosReceived">Kudos Received</option><option value="handoverLogs">Handover Logs</option>
+            <option value="defectLogs">Maintenance Reports</option><option value="incidentLogs">Incident Reports</option>
+            <option value="complianceLogs">Compliance Logs</option>
+        </select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Bronze</label><input type="number" id="badge-bronze" class="input-box" value="5" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Silver</label><input type="number" id="badge-silver" class="input-box" value="15" style="margin:0;"></div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Gold</label><input type="number" id="badge-gold" class="input-box" value="30" style="margin:0;"></div>
+        </div>` : ''}
+        <button onclick="window._saveBadge('${type}')" class="btn btn-green" style="width:100%;padding:12px;">Save Badge</button>`;
+    window.openModal('🏆 New ' + (type==='auto'?'Auto':'Manual') + ' Badge', html);
+};
+
+window._saveBadge = (type, editIdx) => {
+    const name = document.getElementById('badge-name').value.trim();
+    const icon = document.getElementById('badge-icon').value.trim() || '🏅';
+    const desc = document.getElementById('badge-desc').value.trim();
+    const cat = document.getElementById('badge-cat').value.trim();
+    if (!name) return window.showToast('Name required.', 'error');
+    const badge = {
+        id: editIdx !== undefined ? (window.badgeDefinitions[editIdx]||{}).id : window.generateId('badge'),
+        name, icon, description: desc, category: cat, type, active: true
+    };
+    if (type === 'auto') {
+        badge.metric = document.getElementById('badge-metric').value;
+        badge.tiers = {
+            bronze: { threshold: parseInt(document.getElementById('badge-bronze').value) || 5 },
+            silver: { threshold: parseInt(document.getElementById('badge-silver').value) || 15 },
+            gold: { threshold: parseInt(document.getElementById('badge-gold').value) || 30 }
+        };
+    }
+    if (!window.badgeDefinitions) window.badgeDefinitions = [];
+    if (editIdx !== undefined) window.badgeDefinitions[editIdx] = badge;
+    else window.badgeDefinitions.push(badge);
+    window.logAudit('badges', editIdx !== undefined ? 'edit' : 'create', badge.id, name);
+    window.saveToDisk(); window.closeModal(); window.showView('badge-management');
+    window.showToast('Badge saved!');
+};
+
+window._editBadgeForm = (idx) => {
+    const b = (window.badgeDefinitions||[])[idx]; if (!b) return;
+    window._newBadgeForm(b.type);
+    setTimeout(() => {
+        document.getElementById('badge-icon').value = b.icon || '🏅';
+        document.getElementById('badge-name').value = b.name || '';
+        document.getElementById('badge-desc').value = b.description || '';
+        document.getElementById('badge-cat').value = b.category || '';
+        if (b.type === 'auto' && b.tiers) {
+            const metricEl = document.getElementById('badge-metric'); if (metricEl) metricEl.value = b.metric || 'tempLogs';
+            const bronzeEl = document.getElementById('badge-bronze'); if (bronzeEl) bronzeEl.value = (b.tiers.bronze||{}).threshold || 5;
+            const silverEl = document.getElementById('badge-silver'); if (silverEl) silverEl.value = (b.tiers.silver||{}).threshold || 15;
+            const goldEl = document.getElementById('badge-gold'); if (goldEl) goldEl.value = (b.tiers.gold||{}).threshold || 30;
+        }
+        const btn = document.querySelector('#global-modal-content button.btn-green');
+        if (btn) { btn.textContent = 'Update Badge'; btn.setAttribute('onclick', "window._saveBadge('" + b.type + "'," + idx + ")"); }
+    }, 50);
+};
+
+window._toggleBadge = (idx) => { if (window.badgeDefinitions[idx]) { window.badgeDefinitions[idx].active = !window.badgeDefinitions[idx].active; window.saveToDisk(); window.showView('badge-management'); } };
+window._deleteBadge = (idx) => { window.confirmAction({ title:'🏆 Delete Badge', message:'Remove this badge definition?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.badgeDefinitions.splice(idx,1); window.saveToDisk(); window.showView('badge-management'); }}); };
+
+window._awardBadgeForm = (badgeId) => {
+    const badge = (window.badgeDefinitions||[]).find(b => b.id === badgeId); if (!badge) return;
+    const staffOpts = (window.staffDirectory||[]).filter(s => s.status !== 'Inactive').map(s => '<option value="' + window.escAttr(s.name) + '">' + window.esc(s.name) + '</option>').join('');
+    const html = `<div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text-muted);">Award ${window.esc(badge.icon)} ${window.esc(badge.name)} to:</label>
+        <select id="award-to" class="input-box" style="margin:0;"><option value="">Select staff...</option>${staffOpts}</select></div>
+        <div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text-muted);">Citation (optional)</label>
+        <input type="text" id="award-citation" class="input-box" placeholder="Why they earned this badge" style="margin:0;"></div>
+        <button onclick="window._submitAward('${window.escAttr(badgeId)}')" class="btn btn-purple" style="width:100%;padding:12px;">🎁 Award Badge</button>`;
+    window.openModal('🎁 Award Badge', html);
+};
+
+window._submitAward = (badgeId) => {
+    const to = document.getElementById('award-to').value;
+    const citation = document.getElementById('award-citation').value.trim();
+    if (!to) return window.showToast('Select a staff member.', 'error');
+    const staff = (window.staffDirectory||[]).find(s => s.name === to);
+    if (!staff) return;
+    if (!staff.achievements) staff.achievements = [];
+    staff.achievements.push({ badgeId, tier: 'awarded', earnedDate: new Date().toISOString().split('T')[0], citation });
+    window.logAudit('badges', 'award', badgeId, 'Awarded to ' + to);
+    window.saveToDisk(); window.closeModal(); window.showView('badge-management');
+    window.showToast('Badge awarded to ' + to + '!');
+};
+
+// =============================================================================
+// STAFF HUB CONFIG VIEW (Manager)
+// =============================================================================
+window.renderStaffHubConfigView = () => {
+    const E = window.esc;
+    const config = window.staffHubConfig || {};
+    const roles = Object.keys(config.roles || {});
+    const allCards = ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'];
+    const allActions = ['log-temps','wastage','maintenance','incident','sops'];
+    const cardLabels = {shifts:'My Shifts',qualifications:'Qualifications',announcements:'Announcements',kudos:'Kudos',achievements:'Achievements',feedback:'Shift Feedback',actions:'Quick Actions',leaderboard:'Leaderboard'};
+    const actionLabels = {'log-temps':'Log Temps',wastage:'Log Wastage',maintenance:'Report Issue',incident:'Incidents',sops:'View SOPs'};
+
+    let html = '<div style="max-width:900px;margin:auto;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+    html += '<div><h2 style="margin:0;">⚙️ Staff Hub Configuration</h2><div style="font-size:13px;color:var(--text-muted);margin-top:2px;">Configure what each role sees in My Hub</div></div>';
+    html += '<div style="display:flex;gap:8px;">';
+    html += '<button onclick="window.showView(\'badge-management\')" class="btn btn-outline" style="padding:8px 16px;">🏆 Badges</button>';
+    html += '<button onclick="window._editFeedbackTags()" class="btn btn-outline" style="padding:8px 16px;">😊 Feedback Tags</button>';
+    html += '</div></div>';
+
+    roles.forEach(role => {
+        const rc = (config.roles||{})[role] || {};
+        const vc = rc.visibleCards || [];
+        const qa = rc.quickActions || [];
+        html += '<div class="card" style="padding:16px;margin-bottom:12px;">';
+        html += '<h3 style="margin:0 0 10px;font-size:15px;">' + E(role) + '</h3>';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Visible Cards:</div>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">';
+        allCards.forEach(card => {
+            const isOn = vc.includes(card);
+            html += '<button onclick="window._toggleRoleCard(\'' + window.escAttr(role) + '\',\'' + card + '\')" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid ' + (isOn?'var(--purple)':'var(--border)') + ';background:' + (isOn?'rgba(139,92,246,0.15)':'var(--bg-main)') + ';color:' + (isOn?'var(--purple)':'var(--text-muted)') + ';cursor:pointer;">' + (cardLabels[card]||card) + '</button>';
+        });
+        html += '</div>';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Quick Actions:</div>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+        allActions.forEach(action => {
+            const isOn = qa.includes(action);
+            html += '<button onclick="window._toggleRoleAction(\'' + window.escAttr(role) + '\',\'' + action + '\')" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid ' + (isOn?'var(--blue)':'var(--border)') + ';background:' + (isOn?'rgba(59,130,246,0.15)':'var(--bg-main)') + ';color:' + (isOn?'var(--blue)':'var(--text-muted)') + ';cursor:pointer;">' + (actionLabels[action]||action) + '</button>';
+        });
+        html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+};
+
+window._toggleRoleCard = (role, card) => {
+    const config = window.staffHubConfig || {};
+    if (!config.roles) config.roles = {};
+    if (!config.roles[role]) config.roles[role] = { visibleCards: [...(window.staffHubConfig.defaultCards||[])], quickActions: [...(window.staffHubConfig.defaultActions||[])] };
+    const vc = config.roles[role].visibleCards;
+    const idx = vc.indexOf(card);
+    if (idx >= 0) vc.splice(idx, 1); else vc.push(card);
+    window.staffHubConfig = config;
+    window.saveToDisk(); window.showView('staff-hub-config');
+};
+
+window._toggleRoleAction = (role, action) => {
+    const config = window.staffHubConfig || {};
+    if (!config.roles) config.roles = {};
+    if (!config.roles[role]) config.roles[role] = { visibleCards: [...(window.staffHubConfig.defaultCards||[])], quickActions: [...(window.staffHubConfig.defaultActions||[])] };
+    const qa = config.roles[role].quickActions;
+    const idx = qa.indexOf(action);
+    if (idx >= 0) qa.splice(idx, 1); else qa.push(action);
+    window.staffHubConfig = config;
+    window.saveToDisk(); window.showView('staff-hub-config');
+};
+
+window._editFeedbackTags = () => {
+    const tags = (window.shiftFeedbackTags || []).join('\n');
+    const html = `<div style="margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--text-muted);">One tag per line</label>
+        <textarea id="fb-tags" class="input-box" style="height:150px;margin:0;">${window.esc(tags)}</textarea>
+    </div>
+    <button onclick="window._saveFeedbackTags()" class="btn btn-green" style="width:100%;padding:12px;">Save Tags</button>`;
+    window.openModal('😊 Edit Feedback Tags', html);
+};
+
+window._saveFeedbackTags = () => {
+    const text = document.getElementById('fb-tags').value;
+    window.shiftFeedbackTags = text.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+    window.saveToDisk(); window.closeModal(); window.showView('staff-hub-config');
+    window.showToast('Feedback tags updated!');
+};
+
+// =============================================================================
+// SHIFT FEEDBACK TRENDS (Manager Dashboard Card)
+// =============================================================================
+window._renderFeedbackTrendsCard = () => {
+    const now = new Date();
+    const allFeedback = [];
+    (window.staffDirectory || []).forEach(s => {
+        (s.shiftFeedback || []).forEach(f => { allFeedback.push({ ...f, staff: s.name }); });
+    });
+    if (allFeedback.length === 0) return '';
+
+    const last7 = allFeedback.filter(f => { const d = new Date(f.date); return (now - d) < 86400000*7; });
+    const last30 = allFeedback.filter(f => { const d = new Date(f.date); return (now - d) < 86400000*30; });
+    const avg7 = last7.length > 0 ? (last7.reduce((s,f)=>s+f.rating,0)/last7.length).toFixed(1) : '—';
+    const avg30 = last30.length > 0 ? (last30.reduce((s,f)=>s+f.rating,0)/last30.length).toFixed(1) : '—';
+    const trend = last7.length > 0 && last30.length > 0 ? (parseFloat(avg7) >= parseFloat(avg30) ? '📈' : '📉') : '';
+
+    // Most common tags
+    const tagCounts = {};
+    last7.forEach(f => (f.tags||[]).forEach(t => { tagCounts[t] = (tagCounts[t]||0)+1; }));
+    const topTags = Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+    let html = '<div class="card" style="padding:16px;margin-bottom:14px;border-top:3px solid var(--orange);">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">😊 Team Mood ' + trend + '</div>';
+    html += '<div style="display:flex;gap:20px;margin-bottom:8px;">';
+    html += '<div><span style="font-size:22px;font-weight:800;">' + avg7 + '</span><span style="font-size:11px;color:var(--text-muted);"> /5 (7d)</span></div>';
+    html += '<div><span style="font-size:22px;font-weight:800;">' + avg30 + '</span><span style="font-size:11px;color:var(--text-muted);"> /5 (30d)</span></div>';
+    html += '<div><span style="font-size:22px;font-weight:800;">' + last7.length + '</span><span style="font-size:11px;color:var(--text-muted);"> responses</span></div>';
+    html += '</div>';
+    if (topTags.length > 0) {
+        html += '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+        topTags.forEach(([tag,count]) => { html += '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:rgba(245,158,11,0.1);color:var(--orange);">' + window.esc(tag) + ' (' + count + ')</span>'; });
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
 };
