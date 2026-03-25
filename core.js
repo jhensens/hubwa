@@ -38,14 +38,15 @@ window.dailyBriefings = [];
 window.badgeDefinitions = [];
 window.staffHubConfig = {
     roles: {
-        'FOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
-        'BOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'] },
-        'Bar': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
-        'Manager': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'], quickActions: ['log-temps','wastage','maintenance','incident','sops'] },
-        'Kitchen Hand': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'] }
+        'FOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'] },
+        'BOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'], allowedViews: ['dashboard','inventory','compliance','wastage','noticeboard','tasks','maintenance','incidents','knowledge','zones','my-hub'] },
+        'Bar': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'] },
+        'Manager': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['*'] },
+        'Kitchen Hand': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'], allowedViews: ['dashboard','inventory','compliance','wastage','noticeboard','tasks','maintenance','incidents','knowledge','zones','my-hub'] }
     },
     defaultCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'],
-    defaultActions: ['log-temps','wastage','maintenance','incident','sops']
+    defaultActions: ['log-temps','wastage','maintenance','incident','sops'],
+    defaultViews: ['dashboard','compliance','wastage','tasks','maintenance','incidents','knowledge','noticeboard','rosters','my-hub','zones']
 };
 window.shiftFeedbackTags = ['Busy','Quiet','Short-staffed','Great team','Equipment issues','Good tips','Stressful'];
 window._activeStaffMember = null;
@@ -272,6 +273,8 @@ setInterval(() => {
         const idleMinutes = (Date.now() - window._lastActivity) / 60000;
         if (idleMinutes >= window._autoLockMinutes) {
             window.isLocked = true;
+            window._activeStaffMember = null;
+            sessionStorage.removeItem('activeStaffName');
             window.checkLockState();
             window.showToast('Hub auto-locked after inactivity.');
         }
@@ -287,6 +290,11 @@ window._restrictedViews = [
 ];
 
 window.checkLockState = () => {
+    // If a staff member is logged in, apply role-based filtering instead
+    if (window._activeStaffMember) {
+        window.applyRoleAccess();
+        return;
+    }
     const restrictedItems = document.querySelectorAll('.restricted');
     const lockBtn = document.getElementById('btn-lock');
     const staffBtn = document.getElementById('btn-staff-hub');
@@ -297,13 +305,48 @@ window.checkLockState = () => {
         if (window._restrictedViews.includes(window.currentView)) window.showView('dashboard');
     } else {
         restrictedItems.forEach(el => {
-            // Restore correct display type — nav-section uses block, nav-item uses flex
             el.style.display = el.classList.contains('nav-section') ? 'block' : 'flex';
         });
         if (lockBtn) { lockBtn.innerHTML = '🔒 Lock Hub'; lockBtn.style.background = 'rgba(239,68,68,0.1)'; lockBtn.style.color = 'var(--red)'; lockBtn.style.borderColor = 'rgba(239,68,68,0.2)'; }
         if (staffBtn) staffBtn.style.display = 'none';
         window._activeStaffMember = null;
     }
+};
+
+// --- ROLE-BASED SIDEBAR FILTERING ---
+// When a staff member is logged in, show only their role's allowed views
+window.applyRoleAccess = () => {
+    var staff = window._activeStaffMember;
+    if (!staff) return;
+    var role = staff.role || 'FOH';
+    var config = ((window.staffHubConfig || {}).roles || {})[role] || {};
+    var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || [];
+    var isFullAccess = allowed.includes('*');
+
+    // Filter sidebar nav items by data-view attribute
+    document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
+        var view = el.getAttribute('data-view');
+        el.style.display = (isFullAccess || allowed.includes(view)) ? 'flex' : 'none';
+    });
+
+    // Hide/show entire nav sections if all their items are hidden
+    document.querySelectorAll('.nav-section').forEach(function(sec) {
+        var items = sec.querySelectorAll('.nav-item[data-view]');
+        var anyVisible = Array.from(items).some(function(el) { return el.style.display !== 'none'; });
+        var header = sec.querySelector('.nav-section-header');
+        if (header) header.style.display = anyVisible ? 'flex' : 'none';
+        if (!anyVisible) sec.style.display = 'none';
+        else sec.style.display = 'block';
+    });
+
+    // Show lock button as "Lock" (staff can lock themselves out)
+    var lockBtn = document.getElementById('btn-lock');
+    if (lockBtn) { lockBtn.innerHTML = '🔒 Lock'; lockBtn.style.background = 'rgba(239,68,68,0.1)'; lockBtn.style.color = 'var(--red)'; lockBtn.style.borderColor = 'rgba(239,68,68,0.2)'; lockBtn.onclick = function() { window.lockStaffHub(); }; }
+
+    // Hide staff hub button (already logged in), hide backup/restore
+    var staffBtn = document.getElementById('btn-staff-hub');
+    if (staffBtn) staffBtn.style.display = 'none';
+    document.querySelectorAll('.btn-backup, .btn-restore').forEach(function(el) { el.style.display = 'none'; });
 };
 
 // --- STAFF HUB PIN ENTRY ---
@@ -316,6 +359,7 @@ window.showStaffPinEntry = () => {
             sessionStorage.setItem('activeStaffName', match.name);
             window._lastActivity = Date.now();
             window.closeModal();
+            window.applyRoleAccess();
             window.showView('my-hub');
             window.showToast('Welcome, ' + match.name + '!');
         } else {
@@ -331,6 +375,10 @@ window.showStaffPinEntry = () => {
 window.lockStaffHub = () => {
     window._activeStaffMember = null;
     sessionStorage.removeItem('activeStaffName');
+    // Restore lock button to normal toggleLock behaviour
+    var lockBtn = document.getElementById('btn-lock');
+    if (lockBtn) lockBtn.onclick = function() { window.toggleLock(); };
+    window.checkLockState();
     window.showView('dashboard');
     window.showToast('Staff Hub locked.');
 };
@@ -1194,9 +1242,19 @@ window.toggleTheme = () => {
 window.currentView = 'dashboard';
 window.showView = (view) => {
     window.closeModal(); // Clean up any open modals to prevent glitching
-    if (window.isLocked && (window._restrictedViews||[]).includes(view)) {
+    if (window.isLocked && !window._activeStaffMember && (window._restrictedViews||[]).includes(view)) {
         window.requirePin(() => window.showView(view));
         return;
+    }
+    // Role-based access enforcement for staff sessions
+    if (window._activeStaffMember && view !== 'my-hub' && view !== 'dashboard') {
+        var _role = window._activeStaffMember.role || 'FOH';
+        var _rc = ((window.staffHubConfig||{}).roles||{})[_role] || {};
+        var _allowed = _rc.allowedViews || (window.staffHubConfig||{}).defaultViews || [];
+        if (!_allowed.includes('*') && !_allowed.includes(view)) {
+            window.showToast('Access restricted for ' + _role + ' role.', 'error');
+            return;
+        }
     }
     
     window.currentView = view;
@@ -1399,10 +1457,42 @@ window.logAudit = function(collection, action, itemId, details) {
         action: action,
         itemId: itemId || '',
         details: details || '',
-        venue: window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'
+        venue: window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi',
+        user: window._activeStaffMember ? window._activeStaffMember.name : (window.isLocked ? 'System' : 'Manager')
     });
     // Keep last 500 entries
     if (window.auditLog.length > 500) window.auditLog = window.auditLog.slice(0, 500);
+};
+
+// --- PRINT REPORT UTILITY ---
+// Reusable print template: opens new window with venue branding + auto-triggers print
+window.printReport = function(title, contentHtml, options) {
+    options = options || {};
+    var venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    var dateStr = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+    var win = window.open('', '_blank');
+    if (!win) return window.showToast('Pop-up blocked. Allow pop-ups for printing.', 'error');
+    win.document.write('<!DOCTYPE html><html><head><title>' + title + ' — ' + venue + '</title>' +
+    '<style>' +
+        'body{font-family:Inter,-apple-system,sans-serif;font-size:13px;color:#222;max-width:900px;margin:30px auto;line-height:1.6;}' +
+        '.print-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #333;padding-bottom:10px;margin-bottom:20px;}' +
+        '.print-header h1{font-size:20px;margin:0;}.print-header .venue{font-size:12px;color:#888;}' +
+        '.print-footer{margin-top:30px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#aaa;display:flex;justify-content:space-between;}' +
+        'table{width:100%;border-collapse:collapse;}' +
+        'th{padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#666;border-bottom:2px solid #333;background:#f9fafb;}' +
+        'td{padding:6px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;}' +
+        'tr:nth-child(even){background:#f9fafb;}' +
+        '.section-title{font-size:14px;font-weight:700;margin:20px 0 8px;padding:6px 0;border-bottom:1px solid #ddd;}' +
+        '.flag-red{color:#dc2626;font-weight:bold;} .flag-green{color:#16a34a;}' +
+        '@media print{body{margin:10mm;max-width:none;}@page{margin:10mm;size:' + (options.landscape ? 'A4 landscape' : 'A4') + ';}}' +
+        (options.extraCss || '') +
+    '</style></head><body>' +
+    '<div class="print-header"><div><h1>' + title + '</h1><div class="venue">' + venue + '</div></div>' +
+    '<div style="text-align:right;font-size:12px;color:#888;">' + dateStr + (options.subtitle ? '<br>' + options.subtitle : '') + '</div></div>' +
+    contentHtml +
+    '<div class="print-footer"><span>' + venue + ' &middot; Hobart Hub</span><span>Printed ' + dateStr + '</span></div>' +
+    '<script>window.onload=function(){window.print();}<\/script></body></html>');
+    win.document.close();
 };
 
 // --- 8. NOTIFICATION CENTER ---

@@ -1266,6 +1266,25 @@ window.exportTempLogCSV = () => {
     window.showToast(logs.length + ' temp logs exported.');
 };
 
+window.printTempLog = function() {
+    var logs = (window.tempLogs || []).slice(-30).reverse();
+    if (!logs.length) return window.showToast('No temperature logs to print.', 'error');
+    var html = '<table><thead><tr><th>Date/Time</th><th>Staff</th><th>Unit</th><th>Temp (°C)</th><th>Status</th><th>Corrective Action</th></tr></thead><tbody>';
+    logs.forEach(function(t) {
+        var temp = Number(t.value || 0);
+        var fail = temp > 5 || temp < -25;
+        html += '<tr>' +
+            '<td>' + esc(t.time || '') + '</td>' +
+            '<td>' + esc(t.staff || '') + '</td>' +
+            '<td>' + esc(t.unit || '') + '</td>' +
+            '<td class="' + (fail ? 'flag-red' : 'flag-green') + '">' + temp + '°C</td>' +
+            '<td class="' + (fail ? 'flag-red' : 'flag-green') + '">' + (fail ? 'FAIL' : 'PASS') + '</td>' +
+            '<td>' + esc(t.action || '—') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    window.printReport('Temperature Log', html, { landscape: true, subtitle: 'Last 30 entries' });
+};
+
 window.renderComplianceView = function() {
     const E = window.esc;
     const tab = window._complianceTab || 'temps';
@@ -1283,7 +1302,7 @@ window.renderComplianceView = function() {
                 <h3 style="margin:0;">Fridge/Freezer Temp Log</h3>
                 <div style="display:flex;gap:6px;">
                     <button onclick="window.exportTempLogCSV()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">📥 Export CSV</button>
-                    <button onclick="window.print()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">🖨️ Print</button>
+                    <button onclick="window.printTempLog()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">🖨️ Print</button>
                     <button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">⚙️ Setup Units</button>
                 </div>
             </div>
@@ -5175,8 +5194,13 @@ window.renderStaffHubConfigView = () => {
     const roles = Object.keys(config.roles || {});
     const allCards = ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'];
     const allActions = ['log-temps','wastage','maintenance','incident','sops'];
+    const allViews = ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','handover','orientation','safe','recipes','sales','suppliers'];
     const cardLabels = {shifts:'My Shifts',qualifications:'Qualifications',announcements:'Announcements',kudos:'Kudos',achievements:'Achievements',feedback:'Shift Feedback',actions:'Quick Actions',leaderboard:'Leaderboard'};
     const actionLabels = {'log-temps':'Log Temps',wastage:'Log Wastage',maintenance:'Report Issue',incident:'Incidents',sops:'View SOPs'};
+    const viewLabels = {dashboard:'Dashboard',inventory:'Inventory',compliance:'Compliance',wastage:'Wastage',
+        'prep-list':'Order Hub',noticeboard:'Noticeboard',rosters:'Roster',tasks:'Tasks',maintenance:'Maintenance',
+        incidents:'Incidents',knowledge:'Knowledge Base',zones:'Zones',handover:'Handover',orientation:'Staff Mgmt',
+        safe:'Digital Safe',recipes:'Recipes',sales:'Financials',suppliers:'Suppliers'};
 
     let html = '<div style="max-width:900px;margin:auto;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
@@ -5205,10 +5229,37 @@ window.renderStaffHubConfigView = () => {
             const isOn = qa.includes(action);
             html += '<button onclick="window._toggleRoleAction(\'' + window.escAttr(role) + '\',\'' + action + '\')" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid ' + (isOn?'var(--blue)':'var(--border)') + ';background:' + (isOn?'rgba(59,130,246,0.15)':'var(--bg-main)') + ';color:' + (isOn?'var(--blue)':'var(--text-muted)') + ';cursor:pointer;">' + (actionLabels[action]||action) + '</button>';
         });
-        html += '</div></div>';
+        html += '</div>';
+        // Allowed Views section
+        const av = rc.allowedViews || [];
+        const isFullAccess = av.includes('*');
+        html += '<div style="font-size:11px;color:var(--text-muted);margin:12px 0 8px;border-top:1px solid var(--border);padding-top:12px;">Allowed Views' + (isFullAccess ? ' <span style="color:var(--green);">(Full Access)</span>' : '') + ':</div>';
+        if (role === 'Manager') {
+            html += '<div style="font-size:12px;color:var(--green);padding:6px 0;">Manager has full access to all views.</div>';
+        } else {
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            allViews.forEach(view => {
+                const isOn = av.includes(view);
+                html += '<button onclick="window._toggleRoleView(\'' + window.escAttr(role) + '\',\'' + view + '\')" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid ' + (isOn?'var(--green)':'var(--border)') + ';background:' + (isOn?'rgba(16,185,129,0.15)':'var(--bg-main)') + ';color:' + (isOn?'var(--green)':'var(--text-muted)') + ';cursor:pointer;">' + (viewLabels[view]||view) + '</button>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
     });
     html += '</div>';
     return html;
+};
+
+window._toggleRoleView = (role, view) => {
+    const config = window.staffHubConfig || {};
+    if (!config.roles) config.roles = {};
+    if (!config.roles[role]) config.roles[role] = { visibleCards: [...(config.defaultCards||[])], quickActions: [...(config.defaultActions||[])], allowedViews: [...(config.defaultViews||[])] };
+    if (!config.roles[role].allowedViews) config.roles[role].allowedViews = [...(config.defaultViews||[])];
+    const av = config.roles[role].allowedViews;
+    const idx = av.indexOf(view);
+    if (idx >= 0) av.splice(idx, 1); else av.push(view);
+    window.staffHubConfig = config;
+    window.saveToDisk(); window.showView('staff-hub-config');
 };
 
 window._toggleRoleCard = (role, card) => {

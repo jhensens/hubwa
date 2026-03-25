@@ -173,6 +173,10 @@ th { padding: 10px 12px; text-align: left; font-size: 12px; text-transform: uppe
 td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
 tr:hover td { background: rgba(255,255,255,0.02); }
 
+/* Update Banner Animation */
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+#update-banner { animation: slideDown 0.3s ease-out; }
+
 /* Print Mode */
 @media print {
     body * { visibility: hidden; }
@@ -180,6 +184,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     #print-section { position: absolute; left: 0; top: 0; width: 100%; border: none; background: white; }
     .no-print { display: none !important; }
     .sidebar { display: none !important; }
+    .main-header { display: none !important; }
+    #update-banner { display: none !important; }
 }
 
 /* Mobile & Tablet Optimizations */

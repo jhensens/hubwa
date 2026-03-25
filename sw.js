@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-v1';
+const CACHE_NAME = 'hobart-hub-20260325';
 const APP_SHELL = [
     './',
     './index.html',
@@ -29,6 +29,13 @@ self.addEventListener('activate', (event) => {
             );
         }).then(() => self.clients.claim())
     );
+});
+
+// Version query from main app
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'GET_VERSION') {
+        event.ports[0].postMessage({ version: CACHE_NAME });
+    }
 });
 
 // Fetch: cache-first for app shell, network-first for API calls

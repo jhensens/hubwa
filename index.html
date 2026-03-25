@@ -42,11 +42,11 @@
                     <span>⚡ Operations</span><span class="nav-section-arrow" id="arr-sec-ops">▾</span>
                 </div>
                 <div class="nav-section-items" id="sec-ops">
-                    <div class="nav-item" onclick="window._invHubTab='levels';window.showView('inventory')">📦 Inventory Hub</div>
-                    <div class="nav-item" onclick="window.showView('compliance')">🌡️ Compliance</div>
-                    <div class="nav-item" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
-                    <div class="nav-item" onclick="window.showView('prep-list')">📝 Order Hub</div>
-                    <div class="nav-item restricted" onclick="window.showView('handover')">📋 Handover</div>
+                    <div class="nav-item" data-view="inventory" onclick="window._invHubTab='levels';window.showView('inventory')">📦 Inventory Hub</div>
+                    <div class="nav-item" data-view="compliance" onclick="window.showView('compliance')">🌡️ Compliance</div>
+                    <div class="nav-item" data-view="wastage" onclick="window.showView('wastage')">🗑️ Wastage Tracker</div>
+                    <div class="nav-item" data-view="prep-list" onclick="window.showView('prep-list')">📝 Order Hub</div>
+                    <div class="nav-item restricted" data-view="handover" onclick="window.showView('handover')">📋 Handover</div>
                 </div>
             </div>
 
@@ -56,14 +56,14 @@
                     <span>👥 Team & Venue</span><span class="nav-section-arrow" id="arr-sec-team">▾</span>
                 </div>
                 <div class="nav-section-items" id="sec-team">
-                    <div class="nav-item" onclick="window.showView('noticeboard')">📢 Noticeboard</div>
-                    <div class="nav-item" onclick="window.showView('rosters')">🗓️ Roster</div>
-                    <div class="nav-item restricted" onclick="window.showView('orientation')">👥 Staff Management</div>
-                    <div class="nav-item" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
-                    <div class="nav-item" onclick="window.showView('maintenance')">🛠️ Maintenance</div>
-                    <div class="nav-item" onclick="window.showView('incidents')">⚠️ Incidents</div>
-                    <div class="nav-item" onclick="window.showView('knowledge')">📚 Knowledge Base</div>
-                    <div class="nav-item restricted" onclick="window.showView('safe')">🔒 Digital Safe</div>
+                    <div class="nav-item" data-view="noticeboard" onclick="window.showView('noticeboard')">📢 Noticeboard</div>
+                    <div class="nav-item" data-view="rosters" onclick="window.showView('rosters')">🗓️ Roster</div>
+                    <div class="nav-item restricted" data-view="orientation" onclick="window.showView('orientation')">👥 Staff Management</div>
+                    <div class="nav-item" data-view="tasks" onclick="window.showView('tasks')">🔄 Rotational Tasks</div>
+                    <div class="nav-item" data-view="maintenance" onclick="window.showView('maintenance')">🛠️ Maintenance</div>
+                    <div class="nav-item" data-view="incidents" onclick="window.showView('incidents')">⚠️ Incidents</div>
+                    <div class="nav-item" data-view="knowledge" onclick="window.showView('knowledge')">📚 Knowledge Base</div>
+                    <div class="nav-item restricted" data-view="safe" onclick="window.showView('safe')">🔒 Digital Safe</div>
                 </div>
             </div>
 
@@ -73,8 +73,8 @@
                     <span>💰 Recipes & Financials</span><span class="nav-section-arrow" id="arr-sec-financials">▾</span>
                 </div>
                 <div class="nav-section-items" id="sec-financials">
-                    <div class="nav-item" onclick="window._recHubTab='recipes';window.showView('recipes')">⚖️ Recipe & Costing</div>
-                    <div class="nav-item" onclick="window._analyticsTab='takings';window.showView('sales')">📊 Financials</div>
+                    <div class="nav-item" data-view="recipes" onclick="window._recHubTab='recipes';window.showView('recipes')">⚖️ Recipe & Costing</div>
+                    <div class="nav-item" data-view="sales" onclick="window._analyticsTab='takings';window.showView('sales')">📊 Financials</div>
                 </div>
             </div>
 
@@ -84,11 +84,11 @@
                     <span>⚙️ Settings</span><span class="nav-section-arrow" id="arr-sec-settings">▾</span>
                 </div>
                 <div class="nav-section-items" id="sec-settings">
-                    <div class="nav-item restricted" onclick="window.showView('suppliers')">🚚 Suppliers</div>
-                    <div class="nav-item" onclick="window.showView('zones')">🗄️ Storage Zones</div>
-                    <div class="nav-item restricted" onclick="window.openTandaSettings()">⏱️ Tanda Settings</div>
-                    <div class="nav-item restricted" onclick="window.showView('badge-management')">🏆 Badge Management</div>
-                    <div class="nav-item restricted" onclick="window.showView('staff-hub-config')">👤 Staff Hub Config</div>
+                    <div class="nav-item restricted" data-view="suppliers" onclick="window.showView('suppliers')">🚚 Suppliers</div>
+                    <div class="nav-item" data-view="zones" onclick="window.showView('zones')">🗄️ Storage Zones</div>
+                    <div class="nav-item restricted" data-view="tanda-settings" onclick="window.openTandaSettings()">⏱️ Tanda Settings</div>
+                    <div class="nav-item restricted" data-view="badge-management" onclick="window.showView('badge-management')">🏆 Badge Management</div>
+                    <div class="nav-item restricted" data-view="staff-hub-config" onclick="window.showView('staff-hub-config')">👤 Staff Hub Config</div>
                 </div>
             </div>
 
@@ -115,6 +115,7 @@
                 <label for="importFile" style="cursor:pointer; display: block; width: 100%;">📂 Restore Data</label>
                 <input type="file" id="importFile" onchange="window.importData(event)" style="display:none;">
             </div>
+            <div id="hub-version" style="font-size:10px;color:rgba(255,255,255,0.25);text-align:center;padding:4px 0;"></div>
         </div>
     </div>
 
@@ -210,9 +211,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Register Service Worker for offline support
+// Register Service Worker with update detection
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then(function(reg) {
+        setInterval(function() { reg.update(); }, 30 * 60 * 1000);
+        var showUpdateBanner = function() {
+            if (document.getElementById('update-banner')) return;
+            var banner = document.createElement('div');
+            banner.id = 'update-banner';
+            banner.innerHTML = '\u{1f504} Update available \u2014 <b>tap to reload</b> <span onclick="this.parentElement.remove();event.stopPropagation();" style="margin-left:12px;cursor:pointer;font-size:16px;">\u2715</span>';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#3b82f6;color:white;text-align:center;padding:12px 16px;font-size:14px;font-family:Inter,sans-serif;cursor:pointer;animation:slideDown 0.3s ease-out;';
+            banner.onclick = function() { window.location.reload(); };
+            document.body.prepend(banner);
+        };
+        if (reg.waiting) showUpdateBanner();
+        reg.addEventListener('updatefound', function() {
+            var nw = reg.installing;
+            nw.addEventListener('statechange', function() {
+                if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+            });
+        });
+    }).catch(function() {});
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (!refreshing) { refreshing = true; window.location.reload(); }
+    });
+    if (navigator.serviceWorker.controller) {
+        var mc = new MessageChannel();
+        mc.port1.onmessage = function(e) {
+            var el = document.getElementById('hub-version');
+            if (el && e.data.version) el.textContent = e.data.version;
+        };
+        navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+    }
 }
 </script>
 

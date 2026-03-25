@@ -521,6 +521,43 @@ window.exportInventoryCSV = () => {
     window.showToast(items.length + ' items exported.');
 };
 
+window.printStockLevels = function() {
+    var items = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
+    if (!items.length) return window.showToast('No inventory items to print.', 'error');
+    var isWeekend = [0, 5, 6].includes(new Date().getDay());
+    // Group by category
+    var groups = {};
+    items.forEach(function(i) {
+        var cat = i.category || 'Other';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(i);
+    });
+    var html = '';
+    Object.keys(groups).sort().forEach(function(cat) {
+        html += '<div class="section-title">' + esc(cat) + ' (' + groups[cat].length + ')</div>';
+        html += '<table><thead><tr><th>Product</th><th>Supplier</th><th>Stock</th><th>PAR</th><th>Unit</th><th>Status</th></tr></thead><tbody>';
+        groups[cat].forEach(function(i) {
+            var stock = Math.round((i.stock || 0) * 100) / 100;
+            var par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+            var below = stock < par && par > 0;
+            html += '<tr><td><strong>' + esc(i.name) + '</strong></td>' +
+                '<td>' + esc(i.supplier || '—') + '</td>' +
+                '<td class="' + (below ? 'flag-red' : '') + '">' + stock + '</td>' +
+                '<td>' + par + '</td>' +
+                '<td>' + esc(i.buyUnit || 'unit') + '</td>' +
+                '<td class="' + (below ? 'flag-red' : 'flag-green') + '">' + (below ? 'BELOW PAR' : 'OK') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    });
+    var belowCount = items.filter(function(i) {
+        var par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+        return i.stock < par && par > 0;
+    }).length;
+    window.printReport('Inventory Stock Levels', html, {
+        subtitle: items.length + ' items · ' + belowCount + ' below PAR'
+    });
+};
+
 window.invFilters = window.invFilters || { search: '', filter: 'Active', groupBy: 'Category' };
 window._invSelected = window._invSelected || new Set();
 window._invHubTab = window._invHubTab || 'levels';
@@ -675,6 +712,7 @@ window.renderInventoryView = () => {
                 <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
                 <button onclick="window.exportInventoryCSV()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">📥 Export CSV</button>
+                <button onclick="window.printStockLevels()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">🖨️ Print Stock</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
@@ -5057,7 +5095,7 @@ window._renderStocktakeHistory = function() {
         html += '<td style="padding:8px;">' + (st.staff || '') + '</td>';
         html += '<td style="padding:8px;text-align:right;">' + (sum.countedItems || 0) + '/' + (sum.totalItems || 0) + '</td>';
         html += '<td style="padding:8px;text-align:right;font-weight:600;color:' + varColor + ';">$' + totalVar.toFixed(2) + '</td>';
-        html += '<td style="padding:8px;text-align:right;"><button class="btn" onclick="window._viewHistoricStocktake(\'' + st.id + '\')" style="padding:5px 12px;font-size:12px;">View</button></td>';
+        html += '<td style="padding:8px;text-align:right;"><button class="btn" onclick="window._viewHistoricStocktake(\'' + st.id + '\')" style="padding:5px 12px;font-size:12px;">View</button> <button class="btn btn-outline" onclick="window.printStocktakeReport(\'' + st.id + '\')" style="padding:5px 12px;font-size:12px;">Print</button></td>';
         html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -5068,4 +5106,35 @@ window._viewHistoricStocktake = function(stId) {
     var st = (window.stocktakes || []).find(function(s) { return s.id === stId; });
     if (!st) return;
     window.openModal('📊 Stocktake — ' + new Date(st.completedAt).toLocaleDateString('en-AU'), window._buildVarianceHtml(st).replace('window._applyStocktakeCounts()', '').replace('>Apply Counts<', ' style="display:none"><'));
+};
+
+window.printStocktakeReport = function(stId) {
+    var st = (window.stocktakes || []).find(function(s) { return s.id === stId; });
+    if (!st) return window.showToast('Stocktake not found.', 'error');
+    var variances = st.variances || {};
+    var summary = st.summary || {};
+    var ids = Object.keys(variances);
+    ids.sort(function(a, b) { return Math.abs(variances[b].dollarVariance) - Math.abs(variances[a].dollarVariance); });
+
+    var html = '<div style="display:flex;gap:30px;margin-bottom:20px;font-size:13px;">' +
+        '<div><strong>Total Variance:</strong> $' + (summary.totalDollarVariance || 0).toFixed(2) + '</div>' +
+        '<div><strong>Items:</strong> ' + (summary.countedItems || 0) + '/' + (summary.totalItems || 0) + ' counted</div>' +
+        '<div><strong>Over:</strong> ' + (summary.positiveVarianceItems || 0) + '</div>' +
+        '<div><strong>Under:</strong> ' + (summary.negativeVarianceItems || 0) + '</div>' +
+    '</div>';
+    html += '<table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th><th>$ Impact</th></tr></thead><tbody>';
+    ids.forEach(function(id) {
+        var v = variances[id];
+        var dollarVar = (v.dollarVariance || 0).toFixed(2);
+        var isNeg = v.delta < -0.01;
+        html += '<tr>' +
+            '<td>' + esc(v.name || id) + '</td>' +
+            '<td>' + (v.expected || 0) + ' ' + esc(v.unit || '') + '</td>' +
+            '<td>' + (v.counted || 0) + '</td>' +
+            '<td class="' + (isNeg ? 'flag-red' : v.delta > 0.01 ? 'flag-green' : '') + '">' + (v.delta > 0 ? '+' : '') + (v.delta || 0).toFixed(2) + '</td>' +
+            '<td class="' + (v.dollarVariance < 0 ? 'flag-red' : '') + '">$' + dollarVar + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    var dateStr = new Date(st.completedAt).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+    window.printReport('Stocktake Report', html, { subtitle: dateStr + ' · ' + (st.staff || 'Unknown') });
 };
