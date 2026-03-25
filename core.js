@@ -336,11 +336,17 @@ window.applyRoleAccess = () => {
     var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || [];
     var isFullAccess = allowed.includes('*');
 
-    // Step 1: Reset ALL sections and items to visible first (undo lock state hiding)
+    // Step 1: Reset ALL sections, section-items containers, and nav items to visible
     document.querySelectorAll('.nav-section').forEach(function(sec) {
         sec.style.display = 'block';
         var header = sec.querySelector('.nav-section-header');
         if (header) header.style.display = 'flex';
+        var items = sec.querySelector('.nav-section-items');
+        if (items) items.style.display = 'block';
+    });
+    // Also reset .restricted items that were hidden by lock state
+    document.querySelectorAll('.restricted').forEach(function(el) {
+        el.style.display = el.classList.contains('nav-section') ? 'block' : 'flex';
     });
     document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
         el.style.display = 'flex';
