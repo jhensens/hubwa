@@ -295,6 +295,19 @@ window.checkLockState = () => {
         window.applyRoleAccess();
         return;
     }
+    // First restore ALL nav sections and items that applyRoleAccess may have hidden
+    document.querySelectorAll('.nav-section').forEach(function(sec) {
+        sec.style.display = 'block';
+        var header = sec.querySelector('.nav-section-header');
+        if (header) header.style.display = 'flex';
+    });
+    document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
+        el.style.display = 'flex';
+    });
+    document.querySelectorAll('.btn-backup, .btn-restore').forEach(function(el) {
+        el.style.display = 'flex';
+    });
+
     const restrictedItems = document.querySelectorAll('.restricted');
     const lockBtn = document.getElementById('btn-lock');
     const staffBtn = document.getElementById('btn-staff-hub');
