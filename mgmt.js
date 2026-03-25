@@ -2747,6 +2747,9 @@ window.renderManagerHub = () => {
     const isWeekend = [0, 5, 6].includes(today.getDay());
     const hour = today.getHours();
     const E = window.esc;
+    const _isStaffSession = !!window._activeStaffMember;
+    const _isManagerRole = _isStaffSession && (window._activeStaffMember.role === 'Manager');
+    const _showFinancials = !_isStaffSession || _isManagerRole; // hide financials for non-manager staff
 
     // --- DATE HELPERS ---
     const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -2907,6 +2910,7 @@ window.renderManagerHub = () => {
     // --- AI MORNING BRIEFING (loaded async) ---
     const todayKey = today.toISOString().split('T')[0];
     const existingBriefing = (window.dailyBriefings || []).find(b => b.date === todayKey);
+    if (_showFinancials) {
     html += '<div id="ai-briefing-container">';
     if (existingBriefing) {
         html += window._renderBriefingCard(existingBriefing);
@@ -2919,6 +2923,7 @@ window.renderManagerHub = () => {
         html += '</div></div>';
     }
     html += '</div>';
+    } // end _showFinancials (briefing)
 
     // --- HERO BANNER ---
     const gradBg = healthScore >= 80 ? 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.05))' :
@@ -2943,7 +2948,8 @@ window.renderManagerHub = () => {
     html += '</div></div>';
     html += '</div>';
 
-    // --- FINANCIAL ROW (3 cards) ---
+    // --- FINANCIAL ROW (3 cards) --- Manager only
+    if (_showFinancials) {
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:14px;">';
 
     // Card 1: Today's Revenue
@@ -3018,6 +3024,8 @@ window.renderManagerHub = () => {
     html += '</div>';
     html += '</div>';
 
+    } // end _showFinancials (financial row)
+
     // --- OPERATIONAL PULSE (4 compact metric cards) ---
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">';
 
@@ -3070,7 +3078,8 @@ window.renderManagerHub = () => {
     html += '</div>';
     html += '</div>';
 
-    // --- 7-DAY REVENUE CHART ---
+    // --- 7-DAY REVENUE CHART --- Manager only
+    if (_showFinancials) {
     html += '<div class="card" style="padding:20px;margin-bottom:14px;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
     html += '<div><div style="font-size:14px;font-weight:700;">7-Day Revenue</div><div style="font-size:11px;color:var(--text-muted);">Avg $'+Math.round(avg7Rev).toLocaleString('en-AU')+'/day</div></div>';
@@ -3100,6 +3109,8 @@ window.renderManagerHub = () => {
         html += '</div>';
     }
     html += '</div>';
+
+    } // end _showFinancials (7-day revenue)
 
     // --- TODAY'S FOCUS + QUICK ACTIONS (2-column) ---
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px;">';
