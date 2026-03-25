@@ -1284,11 +1284,14 @@ window.showView = (view) => {
     // Role-based access enforcement for staff sessions
     if (window._activeStaffMember && view !== 'my-hub' && view !== 'dashboard') {
         var _role = window._activeStaffMember.role || 'FOH';
+        if (_role === 'Manager') { /* full access */ } else {
         var _rc = ((window.staffHubConfig||{}).roles||{})[_role] || {};
-        var _allowed = _rc.allowedViews || (window.staffHubConfig||{}).defaultViews || [];
+        var _defaultSV = ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'];
+        var _allowed = _rc.allowedViews || (window.staffHubConfig||{}).defaultViews || _defaultSV;
         if (!_allowed.includes('*') && !_allowed.includes(view)) {
             window.showToast('Access restricted for ' + _role + ' role.', 'error');
             return;
+        }
         }
     }
     
