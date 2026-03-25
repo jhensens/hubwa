@@ -46,8 +46,9 @@ window.staffHubConfig = {
     },
     defaultCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'],
     defaultActions: ['log-temps','wastage','maintenance','incident','sops'],
-    defaultViews: ['dashboard','compliance','wastage','tasks','maintenance','incidents','knowledge','noticeboard','rosters','my-hub','zones']
+    defaultViews: ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub']
 };
+window._defaultStaffViews = window.staffHubConfig.defaultViews; // shared fallback for role access
 window.shiftFeedbackTags = ['Busy','Quiet','Short-staffed','Great team','Equipment issues','Good tips','Stressful'];
 window._activeStaffMember = null;
 window.qualificationTypes = [
@@ -333,23 +334,15 @@ window.applyRoleAccess = () => {
     if (!staff) return;
     var role = staff.role || 'FOH';
     var config = ((window.staffHubConfig || {}).roles || {})[role] || {};
-    var _defaultStaffViews = ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'];
-    var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || _defaultStaffViews;
+    var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || window._defaultStaffViews || [];
     var isFullAccess = allowed.includes('*') || role === 'Manager';
 
-    // Step 1: Force-open ALL section containers (override localStorage collapse state)
-    ['sec-ops','sec-team','sec-financials','sec-settings','sec-external'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.style.display = 'block';
-        var arr = document.getElementById('arr-' + id);
-        if (arr) arr.textContent = '▾';
-    });
+    // Step 1: Ensure sections and restricted items are visible (for filtering)
     document.querySelectorAll('.nav-section').forEach(function(sec) {
         sec.style.display = 'block';
         var header = sec.querySelector('.nav-section-header');
         if (header) header.style.display = 'flex';
     });
-    // Reset .restricted items that were hidden by lock state
     document.querySelectorAll('.restricted').forEach(function(el) {
         el.style.display = el.classList.contains('nav-section') ? 'block' : 'flex';
     });
@@ -394,6 +387,13 @@ window.showStaffPinEntry = () => {
             sessionStorage.setItem('activeStaffName', match.name);
             window._lastActivity = Date.now();
             window.closeModal();
+            // Force-open all sidebar sections for staff session (one-time on login)
+            ['sec-ops','sec-team','sec-financials','sec-settings','sec-external'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) el.style.display = 'block';
+                var arr = document.getElementById('arr-' + id);
+                if (arr) arr.textContent = '▾';
+            });
             window.applyRoleAccess();
             window.showView('my-hub');
             window.showToast('Welcome, ' + match.name + '!');
@@ -414,6 +414,14 @@ window.lockStaffHub = () => {
     var lockBtn = document.getElementById('btn-lock');
     if (lockBtn) lockBtn.onclick = function() { window.toggleLock(); };
     window.checkLockState();
+    // Restore saved section collapse state from localStorage
+    var _saved = JSON.parse(localStorage.getItem('hubSections') || '{}');
+    Object.keys(_saved).forEach(function(id) {
+        var el = document.getElementById(id);
+        var arr = document.getElementById('arr-' + id);
+        if (el) el.style.display = _saved[id] ? 'block' : 'none';
+        if (arr) arr.textContent = _saved[id] ? '▾' : '▸';
+    });
     window.showView('dashboard');
     window.showToast('Staff Hub locked.');
 };
@@ -1286,8 +1294,7 @@ window.showView = (view) => {
         var _role = window._activeStaffMember.role || 'FOH';
         if (_role === 'Manager') { /* full access */ } else {
         var _rc = ((window.staffHubConfig||{}).roles||{})[_role] || {};
-        var _defaultSV = ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'];
-        var _allowed = _rc.allowedViews || (window.staffHubConfig||{}).defaultViews || _defaultSV;
+        var _allowed = _rc.allowedViews || (window.staffHubConfig||{}).defaultViews || window._defaultStaffViews || [];
         if (!_allowed.includes('*') && !_allowed.includes(view)) {
             window.showToast('Access restricted for ' + _role + ' role.', 'error');
             return;

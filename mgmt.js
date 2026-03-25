@@ -3139,14 +3139,18 @@ window.renderManagerHub = () => {
         {label:'Stock Count', icon:'✅', view:'stock-count', color:'var(--green)'},
         {label:'Log Temps', icon:'🌡️', view:'compliance', color:'var(--blue)'},
         {label:'Wastage', icon:'🗑️', view:'wastage', color:'var(--orange)'},
-        {label:'Handover', icon:'📝', onclick:'window.newHandoverForm()', color:'var(--purple)'},
-        {label:'Incident', icon:'⚠️', view:'incidents', color:'var(--red)'},
-        {label:'Covers', icon:'👥', onclick:'window.logCoversForm()', color:'var(--blue)'},
-        {label:'EOD Summary', icon:'📊', onclick:'window.generateEodSummary()', color:'var(--purple)'},
-        {label:'Ask Hub', icon:'🤖', onclick:"window.showView('ask-hub')", color:'var(--blue)'},
-        {label:'EOD Run', icon:'✨', onclick:'window.openAiDepletion()', color:'var(--purple)'},
-        {label:'All Venues', icon:'🏢', onclick:'window.renderCrossVenueDashboard()', color:'var(--green)'}
+        {label:'Incident', icon:'⚠️', view:'incidents', color:'var(--red)'}
     ];
+    if (_showFinancials) {
+        actions.push(
+            {label:'Handover', icon:'📝', onclick:'window.newHandoverForm()', color:'var(--purple)'},
+            {label:'Covers', icon:'👥', onclick:'window.logCoversForm()', color:'var(--blue)'},
+            {label:'EOD Summary', icon:'📊', onclick:'window.generateEodSummary()', color:'var(--purple)'},
+            {label:'Ask Hub', icon:'🤖', onclick:"window.showView('ask-hub')", color:'var(--blue)'},
+            {label:'EOD Run', icon:'✨', onclick:'window.openAiDepletion()', color:'var(--purple)'},
+            {label:'All Venues', icon:'🏢', onclick:"window.showView('cross-venue')", color:'var(--green)'}
+        );
+    }
     actions.forEach(a => {
         const click = a.onclick || "window.showView('"+a.view+"')";
         html += '<button onclick="'+click+'" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:'+a.color+';cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;" onmouseover="this.style.borderColor=\''+a.color+'\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
@@ -3155,8 +3159,8 @@ window.renderManagerHub = () => {
     html += '</div></div>';
     html += '</div>';
 
-    // --- RECENT HANDOVER ---
-    if (recentHandover) {
+    // --- RECENT HANDOVER --- Manager only
+    if (_showFinancials && recentHandover) {
         html += '<div class="card" style="padding:16px;margin-bottom:14px;border-left:3px solid var(--purple);">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
         html += '<div style="font-size:13px;font-weight:700;">📝 Latest Handover</div>';
@@ -3170,7 +3174,7 @@ window.renderManagerHub = () => {
     }
 
     // --- MARGIN ALERTS ---
-    if (marginAlerts.length > 0) {
+    if (_showFinancials && marginAlerts.length > 0) {
         html += '<div class="card" style="padding:16px;margin-bottom:14px;border-left:3px solid var(--purple);">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
         html += '<div style="font-size:13px;font-weight:700;">📉 Margin Alerts <span style="font-size:11px;background:var(--purple);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;">'+marginAlerts.length+'</span></div>';
