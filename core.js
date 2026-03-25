@@ -336,15 +336,26 @@ window.applyRoleAccess = () => {
     var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || [];
     var isFullAccess = allowed.includes('*');
 
-    // Filter sidebar nav items by data-view attribute
+    // Step 1: Reset ALL sections and items to visible first (undo lock state hiding)
+    document.querySelectorAll('.nav-section').forEach(function(sec) {
+        sec.style.display = 'block';
+        var header = sec.querySelector('.nav-section-header');
+        if (header) header.style.display = 'flex';
+    });
+    document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
+        el.style.display = 'flex';
+    });
+
+    // Step 2: Now filter items by role's allowed views
     document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
         var view = el.getAttribute('data-view');
         el.style.display = (isFullAccess || allowed.includes(view)) ? 'flex' : 'none';
     });
 
-    // Hide/show entire nav sections if all their items are hidden
+    // Step 3: Hide entire nav sections if none of their items are visible
     document.querySelectorAll('.nav-section').forEach(function(sec) {
         var items = sec.querySelectorAll('.nav-item[data-view]');
+        if (items.length === 0) { sec.style.display = 'none'; return; }
         var anyVisible = Array.from(items).some(function(el) { return el.style.display !== 'none'; });
         var header = sec.querySelector('.nav-section-header');
         if (header) header.style.display = anyVisible ? 'flex' : 'none';
