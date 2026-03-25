@@ -1354,6 +1354,8 @@ window.showView = (view) => {
         console.error("Error rendering view:", err);
         content.innerHTML = `<div class="card" style="border-left:5px solid var(--red);"><h3>⚠️ Page Error</h3><p>${err.message}</p></div>`;
     }
+    // Re-apply role-based sidebar filtering after every view render
+    if (window._activeStaffMember) window.applyRoleAccess();
 };
 
 window.generateId = (prefix) => { return prefix + '_' + Math.random().toString(36).substr(2, 9); };
