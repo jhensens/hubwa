@@ -333,8 +333,9 @@ window.applyRoleAccess = () => {
     if (!staff) return;
     var role = staff.role || 'FOH';
     var config = ((window.staffHubConfig || {}).roles || {})[role] || {};
-    var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || [];
-    var isFullAccess = allowed.includes('*');
+    var _defaultStaffViews = ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'];
+    var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || _defaultStaffViews;
+    var isFullAccess = allowed.includes('*') || role === 'Manager';
 
     // Step 1: Force-open ALL section containers (override localStorage collapse state)
     ['sec-ops','sec-team','sec-financials','sec-settings','sec-external'].forEach(function(id) {
