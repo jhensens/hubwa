@@ -336,15 +336,19 @@ window.applyRoleAccess = () => {
     var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || [];
     var isFullAccess = allowed.includes('*');
 
-    // Step 1: Reset ALL sections, section-items containers, and nav items to visible
+    // Step 1: Force-open ALL section containers (override localStorage collapse state)
+    ['sec-ops','sec-team','sec-financials','sec-settings','sec-external'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'block';
+        var arr = document.getElementById('arr-' + id);
+        if (arr) arr.textContent = '▾';
+    });
     document.querySelectorAll('.nav-section').forEach(function(sec) {
         sec.style.display = 'block';
         var header = sec.querySelector('.nav-section-header');
         if (header) header.style.display = 'flex';
-        var items = sec.querySelector('.nav-section-items');
-        if (items) items.style.display = 'block';
     });
-    // Also reset .restricted items that were hidden by lock state
+    // Reset .restricted items that were hidden by lock state
     document.querySelectorAll('.restricted').forEach(function(el) {
         el.style.display = el.classList.contains('nav-section') ? 'block' : 'flex';
     });
