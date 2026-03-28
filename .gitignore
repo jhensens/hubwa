@@ -1,0 +1,22 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.local
+
+# Build artifacts
+*.pyc
+__pycache__/
+
+# Claude Code
+.claude/plans/

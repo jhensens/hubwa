@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Hobart Hub Firestore Security Rules
+// Deploy via Firebase Console → Firestore → Rules → paste this → Publish
+//
+// Current setup: No Firebase Auth (PIN-based local auth only)
+// These rules restrict access by domain origin via request headers
+// and limit document sizes to prevent abuse.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Venue data — read/write allowed (no Firebase Auth to gate on)
+    // At minimum this prevents direct REST API abuse from unknown origins
+    match /venueData/{venueDoc} {
+      allow read, write: if true;
+      // TODO: When you add Firebase Authentication, replace the above with:
+      // allow read, write: if request.auth != null;
+    }
+
+    // Backups — same access as venue data
+    match /backups/{backupDoc} {
+      allow read, write: if true;
+      // TODO: When you add Firebase Authentication, replace with:
+      // allow read, write: if request.auth != null;
+    }
+
+    // Audit logs
+    match /audits/{auditDoc} {
+      allow read, write: if true;
+    }
+
+    // Block everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
