@@ -1,14 +1,34 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260325';
+const CACHE_NAME = 'hobart-hub-20260329';
 const APP_SHELL = [
     './',
     './index.html',
-    './core.js',
-    './ops.js',
-    './mgmt.js',
     './style.css',
     './bwi-logo.png',
-    './manifest.json'
+    './manifest.json',
+    // Tier 1: Core
+    './core.js',
+    './auth.js',
+    './venues.js',
+    './tanda.js',
+    './storage.js',
+    './nav.js',
+    './notifications.js',
+    // Tier 2: Operations
+    './inventory.js',
+    './recipes.js',
+    './menu-engineering.js',
+    './ordering.js',
+    './depletion.js',
+    './invoices.js',
+    './stocktake.js',
+    // Tier 3: Management
+    './analytics.js',
+    './staff.js',
+    './compliance.js',
+    './documents.js',
+    './dashboard.js',
+    './engagement.js'
 ];
 
 // Install: cache app shell
