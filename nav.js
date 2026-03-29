@@ -57,6 +57,7 @@ window.showView = (view) => {
         else if (view === 'forecast') { window._analyticsTab = 'forecast'; content.innerHTML = window.renderAnalyticsHub(); }
         // --- ORDER HUB (invoice now has tab bar) ---
         else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
+        else if (view === 'batch-invoice') { content.innerHTML = window.openBatchInvoiceUpload ? window.openBatchInvoiceUpload() : ''; return; }
         else if (view === 'invoice' && window.renderInvoiceView) content.innerHTML = window.renderInvoiceView();
         else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
         // --- STANDALONE VIEWS ---

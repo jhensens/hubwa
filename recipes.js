@@ -64,15 +64,22 @@ window.tempRecipeId = null;
 
 window._courseToType = (course) => {
     if (!course) return 'Menu';
-    const c = course.toLowerCase();
-    if (c.includes('prep') || c.includes('batch')) return 'Batch';
+    const c = course.toLowerCase().trim();
+    // Batched cocktails and cocktail prep are Batch type
+    if (c === 'batched cocktails' || c === 'cocktail prep') return 'Batch';
+    // Preperation (sic) is Batch type
+    if (c === 'preperation' || c === 'preparation') return 'Batch';
+    // All other cocktail/bar/mocktail courses are Menu
     return 'Menu';
 };
 window._courseToStation = (course) => {
     if (!course) return 'Kitchen';
-    const c = course.toLowerCase();
-    if (c.includes('cocktail') || c.includes('mocktail') || c.includes('bar') || c.includes('batched')) return 'Bar';
-    if (c.includes('prep') || c.includes('preparation')) return 'Prep';
+    const c = course.toLowerCase().trim();
+    // All cocktail-related courses go to Bar
+    if (/cocktail|mocktail|batched/.test(c) || c.startsWith('new cocktails') || c === 'old cocktails') return 'Bar';
+    // Prep station
+    if (c === 'preperation' || c === 'preparation') return 'Prep';
+    // Kitchen: Kitchen, Dessert, Main Dish, Snack, Breakfast, and anything else
     return 'Kitchen';
 };
 

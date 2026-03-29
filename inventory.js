@@ -6,6 +6,45 @@
 // Phase 1: Editable Zones + Invoice Ripper Pro (PDF + Vision) + Inventory
 // =============================================================================
 
+// --- INGREDIENT LINE PARSER ---
+// Parses raw ingredient text like "45ml Rien Nashi pear liqueur" into {qty, unit, name}
+window._parseIngredientLine = (line) => {
+    if (!line || typeof line !== 'string') return { qty: 0, unit: '', name: line || '' };
+    line = line.trim();
+    const knownUnits = /^(ml|g|kg|l|oz|lb|cup|cups|tsp|tbsp|tablespoon|tablespoons|teaspoon|teaspoons|dash|dashes|pinch|bunch|cloves|medium|large|small|slice|slices|piece|pieces|can|cans|bottle|bottles|sprig|sprigs|sheet|sheets|handful)$/i;
+    // Try to match: optional qty (number, fraction, or range) + optional unit + rest is name
+    // Pattern: (qty_part)? (unit_part)? (name)
+    const m = line.match(/^(\d+\/\d+|\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(.*)/);
+    if (!m) return { qty: 0, unit: '', name: line };
+    let qtyStr = m[1];
+    let rest = (m[2] || '').trim();
+    // Parse qty: fraction, range, or plain number
+    let qty = 0;
+    if (qtyStr.includes('/')) {
+        const parts = qtyStr.split('/');
+        qty = parseFloat(parts[0]) / parseFloat(parts[1]);
+    } else if (/\d\s*-\s*\d/.test(qtyStr)) {
+        const rangeParts = qtyStr.split(/\s*-\s*/);
+        qty = (parseFloat(rangeParts[0]) + parseFloat(rangeParts[1])) / 2;
+    } else {
+        qty = parseFloat(qtyStr);
+    }
+    if (isNaN(qty)) qty = 0;
+    // Check if rest starts with a unit (with or without space after qty)
+    // Also handle unit attached to number like "45ml"
+    let unit = '';
+    let name = rest;
+    // Try splitting first word as unit
+    const unitMatch = rest.match(/^([a-zA-Z]+)\b\s*(.*)/);
+    if (unitMatch && knownUnits.test(unitMatch[1])) {
+        unit = unitMatch[1];
+        name = (unitMatch[2] || '').trim();
+    }
+    // Round qty to avoid floating point noise
+    qty = Math.round(qty * 10000) / 10000;
+    return { qty, unit, name: name || line };
+};
+
 // --- SECURE API KEY MANAGER ---
 window.getApiKey = () => {
     let key = localStorage.getItem('geminiApiKey');

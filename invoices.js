@@ -588,3 +588,212 @@ window._doCommitInvoice = (ai, state, isHistorical) => {
     window.showToast('Invoice processed — ' + updatedCount + ' items updated!');
 };
 
+// =============================================================================
+// BATCH INVOICE UPLOADER
+// Queue multiple PDF/image invoices, process one at a time with review UI
+// =============================================================================
+window._batchInvoiceQueue = [];
+window._batchInvoiceIdx = 0;
+window._batchInvoiceTotals = { processed: 0, items: 0, newItems: 0 };
+
+window.openBatchInvoiceUpload = () => {
+    window._batchInvoiceQueue = [];
+    window._batchInvoiceIdx = 0;
+    window._batchInvoiceTotals = { processed: 0, items: 0, newItems: 0 };
+    return `
+    <div style="max-width:1300px;margin:auto;">
+        <h2 style="margin-top:0;">📄 Batch Invoice Uploader</h2>
+        <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Upload multiple invoices at once. Each will be processed one at a time with review.</p>
+
+        <div class="card" id="batch-inv-drop-zone" style="border:2px dashed var(--border);text-align:center;padding:40px;margin-bottom:20px;cursor:pointer;transition:border-color 0.2s;"
+            ondragover="event.preventDefault();this.style.borderColor='var(--blue)';"
+            ondragleave="this.style.borderColor='var(--border)';"
+            ondrop="event.preventDefault();this.style.borderColor='var(--border)';window._batchInvoiceAddFiles(event.dataTransfer.files);"
+            onclick="document.getElementById('batch-inv-file-input').click();">
+            <div style="font-size:48px;margin-bottom:10px;">📂</div>
+            <p style="color:var(--text-muted);margin:0 0 10px;">Drag & drop invoices here, or click to browse</p>
+            <p style="color:var(--text-muted);font-size:12px;margin:0;">Accepts PDF, JPG, PNG — multiple files allowed</p>
+            <input type="file" id="batch-inv-file-input" accept="application/pdf,image/*" multiple style="display:none;" onchange="window._batchInvoiceAddFiles(this.files);">
+        </div>
+
+        <div id="batch-inv-queue" style="margin-bottom:20px;"></div>
+
+        <div id="batch-inv-controls" style="display:none;margin-bottom:20px;">
+            <button id="batch-inv-start-btn" onclick="window._batchInvoiceStart()" class="btn btn-blue" style="font-size:15px;padding:12px 24px;width:100%;">🚀 Start Processing</button>
+        </div>
+
+        <div id="batch-inv-progress" style="display:none;margin-bottom:20px;text-align:center;">
+            <p id="batch-inv-progress-text" style="font-size:15px;font-weight:bold;color:var(--blue);"></p>
+        </div>
+
+        <div id="batch-inv-workspace" style="display:none;">
+            <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+                <div style="flex:1;min-width:350px;">
+                    <div class="card" style="border-top:5px solid var(--blue);text-align:center;padding:30px;margin-bottom:20px;">
+                        <div style="font-size:40px;margin-bottom:10px;">📄</div>
+                        <p id="batch-inv-current-file" style="color:var(--text-muted);margin:0 0 15px 0;font-size:13px;"></p>
+                        <p id="invoice-status" style="margin-top:15px;color:var(--brand-accent);font-size:13px;font-weight:bold;"></p>
+                    </div>
+                    <div id="invoice-results"></div>
+                    <button id="batch-inv-next-btn" onclick="window._batchInvoiceNext()" class="btn btn-green" style="width:100%;font-size:15px;padding:12px;margin-top:15px;display:none;">Next Invoice ➜</button>
+                </div>
+                <div class="card" id="invoice-preview-container" style="flex:1.5;min-width:400px;display:none;padding:15px;min-height:600px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <strong style="font-size:13px;color:var(--text-muted);">Invoice Preview</strong>
+                        <button onclick="document.getElementById('invoice-preview-container').style.display='none'" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;">&times;</button>
+                    </div>
+                    <div id="invoice-preview-inner" style="width:100%;min-height:550px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="batch-inv-summary" style="display:none;"></div>
+    </div>`;
+};
+
+window._batchInvoiceAddFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    for (let i = 0; i < fileList.length; i++) {
+        const f = fileList[i];
+        if (f.type === 'application/pdf' || f.type.startsWith('image/')) {
+            window._batchInvoiceQueue.push({ file: f, status: 'pending', itemCount: 0, newCount: 0 });
+        }
+    }
+    window._batchInvoiceRenderQueue();
+    const ctrl = document.getElementById('batch-inv-controls');
+    if (ctrl && window._batchInvoiceQueue.length > 0) ctrl.style.display = 'block';
+};
+
+window._batchInvoiceRenderQueue = () => {
+    const container = document.getElementById('batch-inv-queue');
+    if (!container) return;
+    if (window._batchInvoiceQueue.length === 0) { container.innerHTML = ''; return; }
+    const statusIcons = { pending: '⏳', processing: '🔄', done: '✅', error: '❌' };
+    const statusColors = { pending: 'var(--text-muted)', processing: 'var(--blue)', done: 'var(--green)', error: 'var(--red)' };
+    let html = '<div class="card" style="padding:12px;"><strong style="font-size:13px;color:var(--text-muted);margin-bottom:8px;display:block;">Queue (' + window._batchInvoiceQueue.length + ' files)</strong>';
+    window._batchInvoiceQueue.forEach((item, idx) => {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
+            '<span>' + statusIcons[item.status] + '</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + item.file.name + '</span>' +
+            '<span style="color:' + statusColors[item.status] + ';font-size:12px;font-weight:bold;">' + item.status.toUpperCase() + '</span>' +
+            (item.status === 'pending' ? '<button onclick="window._batchInvoiceQueue.splice(' + idx + ',1);window._batchInvoiceRenderQueue();" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;" title="Remove">&times;</button>' : '') +
+        '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+};
+
+window._batchInvoiceStart = () => {
+    if (window._batchInvoiceQueue.length === 0) return;
+    window._batchInvoiceIdx = 0;
+    window._batchInvoiceTotals = { processed: 0, items: 0, newItems: 0 };
+    document.getElementById('batch-inv-controls').style.display = 'none';
+    document.getElementById('batch-inv-drop-zone').style.display = 'none';
+    document.getElementById('batch-inv-workspace').style.display = 'block';
+    document.getElementById('batch-inv-progress').style.display = 'block';
+    window._batchInvoiceProcessCurrent();
+};
+
+window._batchInvoiceProcessCurrent = () => {
+    const idx = window._batchInvoiceIdx;
+    const queue = window._batchInvoiceQueue;
+    if (idx >= queue.length) {
+        window._batchInvoiceShowSummary();
+        return;
+    }
+    const entry = queue[idx];
+    entry.status = 'processing';
+    window._batchInvoiceRenderQueue();
+
+    document.getElementById('batch-inv-progress-text').textContent = 'Processing ' + (idx + 1) + ' of ' + queue.length + '...';
+    document.getElementById('batch-inv-current-file').textContent = entry.file.name;
+    document.getElementById('batch-inv-next-btn').style.display = 'none';
+    document.getElementById('invoice-results').innerHTML = '';
+
+    // Reuse the existing handleInvoiceUpload by simulating its event
+    const file = entry.file;
+    const statusEl = document.getElementById('invoice-status');
+    const previewContainer = document.getElementById('invoice-preview-container');
+    const previewInner = document.getElementById('invoice-preview-inner');
+    statusEl.innerHTML = 'Reading file...';
+
+    const objectUrl = URL.createObjectURL(file);
+    previewContainer.style.display = 'block';
+    if (file.type === 'application/pdf') {
+        previewInner.innerHTML = '<iframe src="' + objectUrl + '" style="width:100%;height:600px;border:none;border-radius:6px;"></iframe>';
+    } else {
+        previewInner.innerHTML = '<img src="' + objectUrl + '" style="max-width:100%;border-radius:6px;border:1px solid var(--border);">';
+    }
+
+    // Hook into commitInvoice to detect when user commits — intercept the results
+    const origCommit = window.commitInvoice;
+    window.commitInvoice = function(isHistorical) {
+        // Call original
+        origCommit(isHistorical);
+        // Restore original
+        window.commitInvoice = origCommit;
+        // Mark entry as done
+        entry.status = 'done';
+        // Count items from the pending data
+        const pending = window.pendingInvoiceData;
+        if (pending && pending.items) {
+            entry.itemCount = pending.items.length;
+            window._batchInvoiceTotals.items += pending.items.length;
+        }
+        window._batchInvoiceTotals.processed++;
+        window._batchInvoiceRenderQueue();
+        // Show next button
+        if (window._batchInvoiceIdx < window._batchInvoiceQueue.length - 1) {
+            document.getElementById('batch-inv-next-btn').style.display = 'block';
+        } else {
+            // Last one — show summary after short delay
+            setTimeout(() => window._batchInvoiceShowSummary(), 500);
+        }
+    };
+
+    // Trigger the extraction
+    if (file.type === 'application/pdf') {
+        statusEl.innerHTML = 'Extracting text from PDF...';
+        window._extractPdfAndParse(file).catch(err => {
+            entry.status = 'error';
+            window._batchInvoiceRenderQueue();
+            statusEl.innerHTML = '<span style="color:var(--red);">Error: ' + err.message + '</span>';
+            window.commitInvoice = origCommit;
+            document.getElementById('batch-inv-next-btn').style.display = 'block';
+        });
+    } else {
+        statusEl.innerHTML = 'Sending image to AI Vision...';
+        window._parseImageInvoice(file).catch(err => {
+            entry.status = 'error';
+            window._batchInvoiceRenderQueue();
+            statusEl.innerHTML = '<span style="color:var(--red);">Error: ' + err.message + '</span>';
+            window.commitInvoice = origCommit;
+            document.getElementById('batch-inv-next-btn').style.display = 'block';
+        });
+    }
+};
+
+window._batchInvoiceNext = () => {
+    window._batchInvoiceIdx++;
+    document.getElementById('batch-inv-next-btn').style.display = 'none';
+    window._batchInvoiceProcessCurrent();
+};
+
+window._batchInvoiceShowSummary = () => {
+    document.getElementById('batch-inv-workspace').style.display = 'none';
+    document.getElementById('batch-inv-progress').style.display = 'none';
+    const totals = window._batchInvoiceTotals;
+    const errorCount = window._batchInvoiceQueue.filter(q => q.status === 'error').length;
+    document.getElementById('batch-inv-summary').style.display = 'block';
+    document.getElementById('batch-inv-summary').innerHTML = '<div class="card" style="border-top:4px solid var(--green);text-align:center;padding:30px;">' +
+        '<div style="font-size:48px;margin-bottom:10px;">✅</div>' +
+        '<h3 style="color:var(--green);margin:0 0 10px;">Batch Import Complete!</h3>' +
+        '<div style="font-size:15px;color:var(--text-muted);margin-bottom:6px;"><strong style="color:var(--green);">' + totals.processed + '</strong> invoices processed, <strong style="color:var(--blue);">' + totals.items + '</strong> items found</div>' +
+        (errorCount > 0 ? '<div style="font-size:13px;color:var(--red);margin-bottom:10px;">' + errorCount + ' invoice(s) had errors</div>' : '') +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:15px;">' +
+            '<button onclick="window.showView(\'inventory\')" class="btn btn-blue">📦 Inventory</button>' +
+            '<button onclick="window.showView(\'invoice\')" class="btn btn-outline">📄 Single Invoice</button>' +
+            '<button onclick="window.showView(\'batch-invoice\')" class="btn btn-outline">🔄 New Batch</button>' +
+        '</div>' +
+    '</div>';
+};

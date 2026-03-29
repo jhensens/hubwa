@@ -180,6 +180,7 @@ window.runBulkHtmlImport = (event) => {
             if (recipeNodes.length===0) { statusDiv.innerHTML=`<p style="color:var(--red);">No recipes found. Make sure this is a Recipe Keeper HTML export.</p>`; return; }
             const existing = new Set((window.recipes||[]).map(r=>r.name.toLowerCase().trim()));
             let imported=0, duplicates=0;
+            const stationCounts = {};
             recipeNodes.forEach(node => {
                 const nameEl = node.querySelector('[itemprop="name"]');
                 if (!nameEl) return;
@@ -194,7 +195,7 @@ window.runBulkHtmlImport = (event) => {
                 const directions = directionsEl ? Array.from(directionsEl.querySelectorAll('p')).map(p=>p.textContent.trim()).filter(t=>t.length>0).join('\n') : '';
                 const notes = notesEl ? notesEl.textContent.trim() : '';
                 const method = [directions,notes].filter(Boolean).join('\n\n');
-                const ingredients = rawIngredients.map(line=>({type:'raw',name:line,qty:0,unit:''}));
+                const ingredients = rawIngredients.map(line=>{const p=window._parseIngredientLine(line);return{type:'raw',name:p.name||line,qty:p.qty,unit:p.unit};});
                 window.recipes.push({
                     id: window.generateId('rec'), name, posAlias:'',
                     type: window._courseToType(course), station: window._courseToStation(course),
@@ -202,6 +203,8 @@ window.runBulkHtmlImport = (event) => {
                     yieldQty:1, yieldUnit:'Portion', method, allergens:[], photo:'', videoUrl:'', archived:false
                 });
                 existing.add(name.toLowerCase());
+                const _st = window._courseToStation(course);
+                stationCounts[_st] = (stationCounts[_st] || 0) + 1;
                 imported++;
             });
             window.saveToDisk();
@@ -209,6 +212,7 @@ window.runBulkHtmlImport = (event) => {
                 <div style="font-size:40px;margin-bottom:10px;">✅</div>
                 <h3 style="color:var(--green);margin:0 0 10px 0;">Import Complete!</h3>
                 <div style="font-size:14px;color:var(--text-muted);"><strong style="color:var(--green);">${imported}</strong> recipes imported · <strong style="color:var(--orange);">${duplicates}</strong> duplicates skipped</div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:6px;">${Object.entries(stationCounts).map(([k,v])=>k+': '+v).join(', ')}</div>
                 <div style="margin-top:15px;display:flex;gap:10px;justify-content:center;">
                     <button onclick="window.showView(\'recipes\')" class="btn btn-blue">View Recipes</button>
                     <button onclick="window.showView(\'margins\')" class="btn btn-purple">Check Margins</button>
