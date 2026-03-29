@@ -8,10 +8,31 @@ window.wastageLogs = [];
 window.posMappings = {};
 window.storageZones = [];
 
-// UPDATED: Commercial Supplier data (Min spend & Delivery Days)
+// Commercial Supplier data (Min spend & Delivery Days)
 window.suppliers = [
-    {name: "Moco Food Services", cutoff: "15:00", contact: "orders@moco.com.au", minSpend: 150, deliveryDays: ["Mon", "Wed", "Fri"]},
-    {name: "Freshline Tasmania", cutoff: "17:00", contact: "admin@freshline.net.au", minSpend: 100, deliveryDays: ["Mon", "Tue", "Thu", "Sat"]}
+    {name: "JFT Tasmania", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Tue", "Thu"]},
+    {name: "SHV Wholesalers", cutoff: "14:00", contact: "", minSpend: 0, deliveryDays: ["Mon", "Wed", "Fri"]},
+    {name: "Best Fresh Wholesale", cutoff: "14:00", contact: "", minSpend: 0, deliveryDays: ["Mon", "Tue", "Wed", "Thu", "Fri"]},
+    {name: "Freshline Tasmania", cutoff: "17:00", contact: "", minSpend: 100, deliveryDays: ["Mon", "Tue", "Thu", "Sat"]},
+    {name: "Scottsdale Pork", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Tue", "Fri"]},
+    {name: "Ashmores", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Mon", "Wed", "Fri"]},
+    {name: "Doppio Foods", cutoff: "15:00", contact: "", minSpend: 0, deliveryDays: ["Tue", "Thu"]},
+    {name: "Bidfood", cutoff: "15:00", contact: "", minSpend: 150, deliveryDays: ["Mon", "Wed", "Fri"]},
+    {name: "ALM", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Mon", "Tue", "Wed", "Thu", "Fri"]},
+    {name: "JFC Australia", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Wed"]},
+    {name: "Jun Pacific", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Wed"]},
+    {name: "S&J International", cutoff: "12:00", contact: "", minSpend: 0, deliveryDays: ["Wed"]},
+    {name: "Woolworths", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Mon", "Tue", "Wed", "Thu", "Fri"]},
+    {name: "Valley Fresh Farm", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Tue", "Fri"]},
+    {name: "Ziggys Supreme Smallgoods", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Mon", "Thu"]},
+    {name: "Lenah Game Meats", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Thu"]},
+    {name: "Bruny Island Game Meats", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Thu"]},
+    {name: "Barilla Bay Seafoods", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Tue", "Thu"]},
+    {name: "Brands on Parade", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Wed"]},
+    {name: "Superior Food Group", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Mon", "Wed", "Fri"]},
+    {name: "Officeworks", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Mon", "Tue", "Wed", "Thu", "Fri"]},
+    {name: "Exquisite Flavours", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Wed"]},
+    {name: "Fresh Cut (TAS)", cutoff: "", contact: "", minSpend: 0, deliveryDays: ["Mon", "Wed", "Fri"]}
 ];
 window.salesData = [];
 window.salesTargets = { wageTarget: 30 };
