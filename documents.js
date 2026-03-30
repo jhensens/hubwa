@@ -520,7 +520,7 @@ window.renderKnowledgeView = () => {
     })).join('');
 
     const cardsHtml = filtered.length === 0
-        ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No SOPs added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create standard operating procedures so everyone knows the playbook</div></div>'
+        ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No SOPs added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create standard operating procedures so everyone knows the playbook</div><button onclick="window.seedKnowledgeBase()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>'
         : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filtered.map(k =>
             `<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(${k.idx})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
@@ -702,4 +702,104 @@ window.deleteSOP = (i) => {
     window.confirmAction({ title:'📚 Delete SOP', message:'Permanently delete this SOP?', confirmLabel:'Delete', tier:'standard',
         onConfirm:() => { window.knowledgeBase.splice(i, 1); window.saveToDisk(); window.showView('knowledge'); window.showToast('SOP Deleted.'); }
     });
+};
+
+// =============================================================================
+// BWI DATA SEEDERS — Knowledge Base & Categories
+// =============================================================================
+
+window.seedKBCategories = () => {
+    window.kbCategories = [
+        'Opening & Closing',
+        'Food Safety & HACCP',
+        'Bar Procedures',
+        'FOH Procedures',
+        'BOH Procedures',
+        'Emergency & Safety',
+        'Equipment Guides',
+        'HR & Policies'
+    ];
+    window.saveToDisk();
+};
+
+window.seedKnowledgeBase = () => {
+    if ((window.knowledgeBase||[]).length > 0) {
+        return window.confirmAction({ title:'📚 Seed SOPs', message:'You already have ' + window.knowledgeBase.length + ' SOPs. <strong>Add</strong> BWI defaults alongside them?', confirmLabel:'Add Defaults', tier:'standard',
+            onConfirm:() => { window._doSeedKB(); }
+        });
+    }
+    window._doSeedKB();
+};
+
+window._doSeedKB = () => {
+    // Seed categories first
+    window.seedKBCategories();
+    const today = new Date().toLocaleDateString('en-AU');
+
+    const sops = [
+        {
+            title: 'Temperature Logging Procedure',
+            category: 'Food Safety & HACCP',
+            content: `PURPOSE: Ensure all fridges and freezers are within safe temperature ranges at all times.\n\nWHEN TO LOG:\n• Opening shift — before service begins\n• Closing shift — before leaving\n• Any time a unit alarm sounds or door is left open\n\nACCEPTABLE RANGES:\n• Fridges / Coolrooms: 0°C to 5°C\n• Freezers: -18°C or below\n• If a unit reads ABOVE 5°C or ABOVE -15°C (freezer), it is a FAIL\n\nFAIL PROCEDURE:\n1. Do NOT store new food in the unit\n2. Check door seals, check if door was left ajar\n3. If temp is 5-8°C — monitor for 30 mins, re-check\n4. If temp is above 8°C — move perishables to working unit immediately\n5. Log the corrective action in the Hub temp log\n6. Notify manager\n\nHOW TO LOG IN HUB:\n• Go to Compliance → Temperatures\n• Enter temp for each unit\n• If any unit fails, the Hub will prompt for a corrective action\n• Click "Log All Temps" when done\n• Sign off with your initials`
+        },
+        {
+            title: 'Opening Procedure — Full Guide',
+            category: 'Opening & Closing',
+            content: `ARRIVAL & SETUP (30 mins before service):\n1. Disarm alarm, turn on lights\n2. Walk-through — check nothing out of place, no overnight issues\n3. Turn on all equipment: POS, EFTPOS, coffee machine, fryers, ovens\n4. Log fridge/freezer temps in Hub (Compliance → Temps)\n5. Count float and set up tills\n6. Check reservations on booking system — note any large groups or special requests\n7. Review prep list and confirm specials with kitchen\n8. Check emails and voicemail for supplier changes or cancellations\n\nFOH SETUP:\n9. Set tables — chopsticks, napkins, water jugs, candles\n10. Check menus are clean and current\n11. Restock toilets — paper, soap, hand towel\n12. Turn on music to correct level, adjust lighting\n13. Sweep entry, check outdoor area (if applicable)\n\nBAR SETUP:\n14. Stock check bar against PAR — spirits, beer, wine, mixers\n15. Fill ice wells\n16. Prep garnishes — citrus, herbs, specialty items\n17. Test all POS and EFTPOS terminals\n\nTEAM BRIEF:\n18. Brief team on: covers, specials, 86'd items, allergen alerts, VIPs\n19. Confirm roles and sections for the shift\n20. Open doors — service begins!`
+        },
+        {
+            title: 'Closing Procedure — Full Guide',
+            category: 'Opening & Closing',
+            content: `KITCHEN CLOSE-DOWN:\n1. All food wrapped, labelled with date, and stored FIFO\n2. Wipe down all benches and surfaces with sanitiser\n3. Clean grill, fryers, and flat-top\n4. Empty and clean bain-maries\n5. Turn off ovens, fryers, and gas (check all knobs!)\n6. Sweep and mop kitchen floors\n7. Clean and clear drains\n8. Empty kitchen bins, replace liners\n\nBAR CLOSE-DOWN:\n9. Wipe down bar top, speed rail, back bar\n10. Empty and clean ice wells\n11. Restock fridges to opening PAR levels\n12. Run glasswasher final cycle, clean filters\n13. Empty bar bins\n\nFOH CLOSE-DOWN:\n14. Clear and wipe all tables\n15. Sweep and mop dining floor\n16. Stack/arrange chairs\n17. Check and lock toilets\n\nADMIN:\n18. Count all tills — reconcile with POS takings\n19. Log wastage in Hub (Wastage Tracker)\n20. Log closing fridge/freezer temps in Hub\n21. Write handover notes in Hub (any issues, 86s, follow-ups)\n22. Lock all doors and windows\n23. Set alarm\n24. Final walk-through — lights off, everything secure`
+        },
+        {
+            title: 'Allergen Management Protocol',
+            category: 'Food Safety & HACCP',
+            content: `OVERVIEW: Allergen mismanagement can be life-threatening. Every team member must know this protocol.\n\nCOMMON ALLERGENS IN OUR MENU:\n• Gluten (soy sauce, tempura, noodles)\n• Soy (soy sauce, tofu, edamame, miso)\n• Shellfish / Crustaceans (prawns, crab)\n• Fish\n• Sesame (sesame oil, seeds, tahini)\n• Peanuts / Tree Nuts\n• Egg (tempura batter, some sauces)\n• Dairy (some desserts, butter)\n\nWHEN A GUEST DECLARES AN ALLERGY:\n1. Take it seriously — never dismiss or downplay\n2. Write the allergy clearly on the order docket\n3. Inform the kitchen VERBALLY as well as on the docket\n4. Kitchen must use clean equipment — separate tongs, cutting board, pan\n5. If unsure whether a dish is safe, CHECK with head chef. Never guess.\n6. When delivering food, confirm: "This is your [dish] prepared without [allergen]"\n\nCROSS-CONTAMINATION PREVENTION:\n• Separate storage for common allergens where possible\n• Clean and sanitise bench before allergen-free prep\n• Use dedicated utensils when preparing allergen-free meals\n• Wash hands between handling different ingredients\n\nSEVERE REACTION (ANAPHYLAXIS):\n1. Call 000 immediately\n2. Help guest use their EpiPen if they have one\n3. Keep guest calm and seated\n4. Do NOT give food or water\n5. Log incident in Hub (Incidents)`
+        },
+        {
+            title: 'Incident & Injury Reporting',
+            category: 'Emergency & Safety',
+            content: `ALL incidents must be reported — no matter how minor.\n\nWHAT COUNTS AS AN INCIDENT:\n• Staff injury (cuts, burns, slips, falls)\n• Guest injury or illness\n• Property damage\n• Aggressive behaviour or security issue\n• Food safety breach\n• Near-miss (something that ALMOST caused injury)\n\nIMMEDIATE STEPS:\n1. Ensure the injured person is safe and receiving first aid\n2. If serious — call 000\n3. If a guest is involved — manager must attend immediately\n4. Secure the area if needed (wet floor sign, close off area)\n\nREPORTING:\n1. Go to Hub → Incidents → Report Incident\n2. Fill in: date, time, who was involved, what happened, what action was taken\n3. Take photos if relevant\n4. Manager to review and follow up within 24 hours\n\nFOLLOW-UP:\n• Serious injuries must be reported to WorkSafe Tasmania\n• Review incident in next team meeting\n• Implement changes to prevent recurrence\n• Update SOPs if a process gap caused the incident`
+        },
+        {
+            title: 'Cash Handling & Till Reconciliation',
+            category: 'FOH Procedures',
+            content: `OPENING FLOAT:\n• Standard float: $300 (confirm with manager)\n• Count float at start of shift — must match expected amount\n• If short, report to manager BEFORE trading\n\nDURING SERVICE:\n• All cash transactions through POS — no manual sales\n• Give correct change, count back to customer\n• $50 and $100 notes: check under UV light\n• Never leave till drawer open unattended\n• Tips go in tip jar — do not put in till\n\nCLOSING RECONCILIATION:\n1. Run Z-report on POS\n2. Count all cash in till — separate notes and coins\n3. Subtract opening float from total cash\n4. Cash takings should match POS cash total\n5. If variance > $5 — note in handover log with explanation\n6. Place takings in safe envelope, write amount and date\n7. Drop envelope in safe\n\nSAFE DROPS:\n• During busy service, if till exceeds $500 cash, do a safe drop\n• Two staff members present for any safe access\n• Log safe drop amount and time`
+        },
+        {
+            title: 'Responsible Service of Alcohol (RSA)',
+            category: 'Bar Procedures',
+            content: `LEGAL REQUIREMENT: All staff serving alcohol must hold a current RSA. It is illegal to serve intoxicated persons.\n\nSIGNS OF INTOXICATION:\n• Slurred or loud speech\n• Unsteady on feet, swaying, stumbling\n• Aggressive or overly emotional behaviour\n• Spilling drinks, difficulty handling money\n• Bloodshot or glassy eyes\n• Loss of coordination\n\nREFUSAL PROCEDURE:\n1. Approach calmly and privately — do not embarrass the guest\n2. Say: "I'm sorry, I'm unable to serve you any more alcohol tonight."\n3. Offer water or non-alcoholic alternatives\n4. If they become aggressive — get manager involved immediately\n5. Offer to call a taxi or rideshare\n6. Do NOT let them drive — if they insist, note the registration and call police\n\nPREVENTION STRATEGIES:\n• Pace service — don't rush drinks to tables\n• Offer food with alcohol\n• Keep track of drinks served to each table/guest\n• Water on every table\n• Avoid heavy pours — use jiggers for spirits\n\nID CHECKING:\n• If a person looks under 25, ask for ID\n• Acceptable: Driver's licence, passport, proof of age card\n• If no valid ID — do not serve. No exceptions.`
+        },
+        {
+            title: 'Receiving & Checking Deliveries',
+            category: 'BOH Procedures',
+            content: `WHEN A DELIVERY ARRIVES:\n1. Stop what you're doing — deliveries are time-sensitive (cold chain)\n2. Check delivery against purchase order or invoice\n3. Count all items — match quantities\n4. Check quality: no damaged packaging, no dented cans, no broken seals\n\nTEMPERATURE CHECKS:\n• Chilled goods must arrive at 5°C or below\n• Frozen goods must arrive at -15°C or below\n• Use probe thermometer on random items\n• If temp is outside range — REJECT the item and note on invoice\n\nREJECTION CRITERIA:\n• Temperature out of range\n• Past use-by date or too close to expiry\n• Damaged, dirty, or pest-contaminated packaging\n• Wrong item or wrong quantity\n• Note ALL rejections on the delivery docket and get driver to sign\n\nSTORAGE:\n1. Put frozen items away FIRST\n2. Then chilled items\n3. Then dry goods\n4. FIFO — new stock goes BEHIND existing stock\n5. Label anything that isn't pre-labelled with item name and date received\n\nINVOICE:\n• Sign invoice only after checking\n• Note any shorts or rejections on the invoice\n• Give invoice to manager for processing in Hub (Batch Invoices)`
+        },
+        {
+            title: 'Waste Management & Logging',
+            category: 'BOH Procedures',
+            content: `WHY WE TRACK WASTE:\nFood waste directly impacts profitability. Every item wasted is money lost. Tracking helps us identify patterns and reduce waste.\n\nTYPES OF WASTE:\n• Prep waste — trim, peel, offcuts (expected — built into yield)\n• Spoilage — food expired or quality declined before use\n• Plate waste — food returned uneaten\n• Overproduction — too much prep, not enough sales\n• Spillage / Accidents — drops, spills, burns\n\nHOW TO LOG IN HUB:\n1. Go to Wastage Tracker\n2. Select the item from inventory\n3. Enter quantity wasted\n4. Select reason (Spoilage, Overproduction, Dropped, Quality, Staff Meal, Void)\n5. Add notes if helpful\n6. Save — this deducts from inventory automatically\n\nREDUCING WASTE:\n• Follow prep sheets — don't over-prep\n• FIFO — First In, First Out, always\n• Check use-by dates during opening walk-through\n• Portion control — use scales and measuring tools\n• Repurpose where safe (e.g. vegetable trim → stock)\n• Talk to manager if you notice a pattern (e.g. same item wasted repeatedly)\n\nWASTE TARGETS:\n• Food waste should be under 3% of food cost\n• Review waste reports weekly in team meeting`
+        },
+        {
+            title: 'Emergency Evacuation Plan',
+            category: 'Emergency & Safety',
+            content: `KNOW YOUR EXITS:\n• Front entrance (main door)\n• Kitchen rear exit\n• [Update with your specific venue exits]\n\nASSEMBLY POINT: [Update with your specific location — e.g. "Car park across the street"]\n\nWHEN TO EVACUATE:\n• Fire alarm sounds\n• Smoke or fire detected\n• Gas leak suspected\n• Structural damage\n• Direction from emergency services\n• Manager calls evacuation\n\nEVACUATION PROCEDURE:\n1. STAY CALM — do not run or shout\n2. Turn off gas and equipment if safe to do so (kitchen — 5 seconds max)\n3. FOH: Guide guests to nearest exit. Check toilets.\n4. BOH: Exit via kitchen rear door\n5. Bar: Secure till if time allows (10 seconds max), exit via nearest route\n6. Manager: Grab sign-in sheet, do headcount at assembly point\n7. Call 000 if not already called\n8. Do NOT re-enter the building until cleared by fire brigade\n\nFIRE — R.A.C.E.:\n• R — RESCUE anyone in immediate danger\n• A — ALARM — activate fire alarm, call 000\n• C — CONTAIN — close doors behind you to slow fire spread\n• E — EVACUATE — follow evacuation procedure\n\nFIRE EXTINGUISHER — P.A.S.S.:\n• P — PULL the pin\n• A — AIM at the base of the fire\n• S — SQUEEZE the handle\n• S — SWEEP side to side\n\nIMPORTANT: Only attempt to fight a fire if it is SMALL, you are TRAINED, and you have a CLEAR ESCAPE ROUTE. Otherwise, evacuate immediately.`
+        }
+    ];
+
+    sops.forEach(sop => {
+        window.knowledgeBase.push({
+            title: sop.title,
+            category: sop.category,
+            content: sop.content,
+            fileUrl: null,
+            lastModified: today
+        });
+    });
+
+    window.saveToDisk();
+    window.showToast(sops.length + ' BWI SOPs loaded!');
+    window.showView('knowledge');
 };

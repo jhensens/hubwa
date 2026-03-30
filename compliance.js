@@ -22,7 +22,7 @@ window.renderTaskView = function() {
 window.renderTaskListTemplate = function() {
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const tasks = window.rotationalTasks || [];
-    if (tasks.length === 0) return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🔄</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rotational tasks</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add recurring tasks like deep cleans, filter changes, or stocktakes</div></div>';
+    if (tasks.length === 0) return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🔄</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rotational tasks</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add recurring tasks like deep cleans, filter changes, or stocktakes</div><button onclick="window.seedRotationalTasks()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>';
 
     return '<div id="activeTasks">' + tasks.map((t, i) => {
         // Determine due status — supports both recurring freq and specific due date
@@ -384,7 +384,7 @@ window.renderComplianceView = function() {
                     <button onclick="window.editFridges()" class="btn btn-outline" style="padding:6px 12px;font-size:11px;">⚙️ Setup Units</button>
                 </div>
             </div>
-            ${(window.fridgeUnits||[]).length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">🌡️</div><div style="font-size:13px;">No fridge units configured. Click Setup Units to add your coolrooms and fridges.</div></div>' : `
+            ${(window.fridgeUnits||[]).length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">🌡️</div><div style="font-size:13px;">No fridge units configured.</div><button onclick="window.seedFridgeUnits()" class="btn btn-blue" style="margin-top:10px;">🏮 Load BWI Defaults</button></div>' : `
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:15px;">
                 ${(window.fridgeUnits||[]).map((f,i) => `<div style="background:var(--bg-main);padding:10px;border-radius:6px;border:1px solid var(--border);">
                     <strong style="font-size:12px;display:block;margin-bottom:8px;color:var(--brand-dark);">${E(f)}</strong>
@@ -423,7 +423,7 @@ window.renderComplianceView = function() {
         content = `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:15px;">
             <button onclick="window.renderChecklistHistory()" class="btn btn-outline" style="font-size:12px;">📋 History</button>
             <button onclick="window.editChecklists()" class="btn btn-outline" style="font-size:12px;">⚙️ Edit Lists</button>
-        </div>` + (keys.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📋</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No custom checklists yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Create audit checklists for weekly deep cleans, monthly inspections, or any recurring checks your venue needs.</div></div>' :
+        </div>` + (keys.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📋</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main);">No custom checklists yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5;">Create audit checklists for weekly deep cleans, monthly inspections, or any recurring checks your venue needs.</div><button onclick="window.seedMasterChecklists()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>' :
         `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:20px;">
             ${keys.map(l => `<div class="card" style="padding:14px;"><h4 style="margin:0 0 15px 0;color:var(--brand-accent);">${E(l)}</h4>${(checklists[l]||[]).map(item => `<div style="font-size:13px;margin:8px 0;"><label style="cursor:pointer;display:flex;gap:10px;align-items:center;"><input type="checkbox" style="transform:scale(1.2);"> <span>${E(item)}</span></label></div>`).join('')}<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:15px;display:flex;gap:10px;"><input type="text" id="s-${l.replace(/\s/g,'')}" class="input-box" placeholder="Staff Initial" style="margin:0;"><button onclick="window.signCheck('${l}')" class="btn btn-dark">Sign Off</button></div></div>`).join('')}
         </div>`);
@@ -617,4 +617,197 @@ window.showContractorForm = () => {
 window.submitContractor = () => { const name = document.getElementById('con-name').value; const company = document.getElementById('con-company').value; const reason = document.getElementById('con-reason').value; if(!name || !company) return window.showToast("Required details missing.", "error"); const now = new Date(); window.contractorLogs.push({ date: now.toLocaleDateString(), timeIn: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), timeOut: null, name, company, reason }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed In!"); }
 window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
 
+
+// =============================================================================
+// BWI DATA SEEDERS — One-click defaults for Bar Wa Izakaya
+// Each function checks if data is empty before populating (never overwrites)
+// =============================================================================
+
+window.seedRotationalTasks = () => {
+    if ((window.rotationalTasks||[]).length > 0) {
+        return window.confirmAction({ title:'🔄 Seed Tasks', message:'You already have ' + window.rotationalTasks.length + ' tasks. <strong>Replace</strong> them with BWI defaults?', confirmLabel:'Replace All', tier:'dangerous',
+            onConfirm:() => { window.rotationalTasks = []; window._doSeedTasks(); }
+        });
+    }
+    window._doSeedTasks();
+};
+
+window._doSeedTasks = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const tasks = [
+        { name: 'Beer Line Clean', freq: 'Weekly', notes: 'Flush all beer lines with cleaning solution. Rinse thoroughly before reconnecting kegs.' },
+        { name: 'Grease Trap Flush', freq: 'Weekly', notes: 'Flush grease trap, scrape solids, run hot water through. Log any blockage issues.' },
+        { name: 'Exhaust Filter Deep Clean', freq: 'Weekly', notes: 'Remove kitchen exhaust filters, soak in degreaser, scrub and replace.' },
+        { name: 'Bar Mat & Floor Mat Deep Clean', freq: 'Weekly', notes: 'Remove all bar mats and floor mats. Soak, scrub, and sanitise.' },
+        { name: 'Glasswasher Descale & Clean', freq: 'Weekly', notes: 'Run descale cycle, clean filters, wipe interior and check rinse aid levels.' },
+        { name: 'Ice Machine Clean & Sanitise', freq: 'Weekly', notes: 'Empty ice, run cleaning cycle, sanitise interior, wipe exterior.' },
+        { name: 'FOH Deep Clean (Floors/Walls/Windows)', freq: 'Weekly', notes: 'Mop all floors with degreaser, wipe walls and skirting, clean windows and glass.' },
+        { name: 'Staff Fridge Cleanout', freq: 'Weekly', notes: 'Remove expired items, wipe shelves, check for unmarked containers.' },
+        { name: 'Cool Room Shelf Deep Clean', freq: 'Fortnightly', notes: 'Remove all stock, wipe down shelves with sanitiser, check for expired/damaged items. FIFO all stock back.' },
+        { name: 'POS Paper Rolls & Printer Check', freq: 'Fortnightly', notes: 'Check all receipt printers, replace low paper rolls, test kitchen/bar printers.' },
+        { name: 'Fire Extinguisher Visual Check', freq: 'Fortnightly', notes: 'Check pressure gauges, signage visible, no obstructions, pins intact.' },
+        { name: 'Full Stocktake', freq: 'Monthly', notes: 'Count all inventory items against system. Use Hub stocktake module.' },
+        { name: 'Pest Control Inspection', freq: 'Monthly', notes: 'Walk-through of all areas checking for pest evidence. Log any findings.' },
+        { name: 'First Aid Kit Audit', freq: 'Monthly', notes: 'Check all first aid kits are stocked. Replace expired items. Note anything needed.' },
+        { name: 'Staff Meeting / Training Session', freq: 'Monthly', notes: 'Team meeting — review performance, training topics, upcoming events.' },
+        { name: 'Hood Filter Professional Service', freq: 'Quarterly', notes: 'Coordinate with contractor for professional exhaust hood clean and certification.' },
+        { name: 'Fire Equipment Service Check', freq: 'Quarterly', notes: 'Extinguishers, blankets, exit signs, emergency lighting — full check with contractor if due.' }
+    ];
+    window.rotationalTasks = tasks.map(t => ({
+        name: t.name, freq: t.freq, notes: t.notes,
+        dueDateMode: 'recurring', specificDueDate: '', anchorDate: today,
+        lastLogIso: null, lastDate: 'Never'
+    }));
+    window.saveToDisk();
+    window.showToast(tasks.length + ' BWI tasks loaded!');
+    window.showView('tasks');
+};
+
+window.seedShiftChecklists = () => {
+    const current = window.shiftChecklistItems;
+    const hasCustom = current && (
+        (current.opening && current.opening.length > 0) ||
+        (current.preservice && current.preservice.length > 0) ||
+        (current.closing && current.closing.length > 0)
+    );
+    if (hasCustom) {
+        return window.confirmAction({ title:'✅ Seed Checklists', message:'You already have shift checklists. <strong>Replace</strong> them with BWI defaults?', confirmLabel:'Replace All', tier:'dangerous',
+            onConfirm:() => { window._doSeedChecklists(); }
+        });
+    }
+    window._doSeedChecklists();
+};
+
+window._doSeedChecklists = () => {
+    window.shiftChecklistItems = {
+        opening: [
+            'Log all fridge/freezer temps in Hub',
+            'Float count & till setup',
+            'POS + EFTPOS terminals tested',
+            'Check reservations & covers for service',
+            'Review prep list & confirm specials',
+            'Brief team on 86\'d items & allergens',
+            'Stock check bar essentials against PAR',
+            'Inspect & restock toilets',
+            'Turn on music / lighting / signage',
+            'Check outdoor area setup',
+            'Confirm deliveries due today',
+            'Unlock all entry points'
+        ],
+        preservice: [
+            'Final mise en place check — all stations',
+            'Ice wells & ice bins full',
+            'Garnish station stocked & fresh',
+            'Speed rail & back bar set to PAR',
+            'All menus correct & clean',
+            'Floor sweep & spot mop',
+            'Candles & table settings done',
+            'Water jugs & chopstick holders filled',
+            'Kitchen pass clear — communication test',
+            'Staff appearance check'
+        ],
+        closing: [
+            'All food wrapped, labelled & FIFO stored',
+            'Closing fridge/freezer temp log in Hub',
+            'Bar cleaned & restocked to PAR',
+            'All tills counted & reconciled',
+            'Wastage logged in Hub',
+            'Kitchen equipment off & secured',
+            'Floors mopped & drains cleared',
+            'Bins emptied & replaced',
+            'All doors/windows locked & alarmed',
+            'Handover notes written in Hub',
+            'Gas turned off (kitchen)',
+            'Final walk-through complete'
+        ]
+    };
+    window.saveToDisk();
+    window.showToast('BWI shift checklists loaded! (Opening: 12, Pre-Service: 10, Closing: 12)');
+    window._complianceTab = 'shift';
+    window.showView('compliance');
+};
+
+window.seedFridgeUnits = () => {
+    const current = window.fridgeUnits || [];
+    if (current.length > 3 || (current.length > 0 && current[0] !== 'Walk-in Coolroom')) {
+        return window.confirmAction({ title:'🌡️ Seed Fridge Units', message:'You have custom fridge units. <strong>Replace</strong> them with BWI defaults?', confirmLabel:'Replace All', tier:'dangerous',
+            onConfirm:() => { window._doSeedFridges(); }
+        });
+    }
+    window._doSeedFridges();
+};
+
+window._doSeedFridges = () => {
+    window.fridgeUnits = [
+        'Walk-in Coolroom',
+        'Walk-in Freezer',
+        'Kitchen Line Fridge',
+        'Kitchen Prep Fridge',
+        'Bar Under-counter 1',
+        'Bar Under-counter 2',
+        'Bar Display Fridge',
+        'Dessert Reach-in'
+    ];
+    window.saveToDisk();
+    window.showToast('8 BWI fridge units loaded!');
+    window._complianceTab = 'temps';
+    window.showView('compliance');
+};
+
+window.seedMasterChecklists = () => {
+    const keys = Object.keys(window.masterChecklists || {});
+    const isDefault = keys.length <= 2 && keys.includes('Opening Duties');
+    if (keys.length > 0 && !isDefault) {
+        return window.confirmAction({ title:'📋 Seed Checklists', message:'You have ' + keys.length + ' custom checklists. <strong>Replace</strong> them with BWI defaults?', confirmLabel:'Replace All', tier:'dangerous',
+            onConfirm:() => { window._doSeedMasterChecklists(); }
+        });
+    }
+    window._doSeedMasterChecklists();
+};
+
+window._doSeedMasterChecklists = () => {
+    window.masterChecklists = {
+        'Weekly Deep Clean — Kitchen': [
+            'Exhaust hood & filters degreased',
+            'Behind all equipment pulled out & cleaned',
+            'Cool room shelves & floor scrubbed',
+            'Grease traps flushed & scraped',
+            'Under benches & sinks wiped',
+            'Oven interior deep clean',
+            'Dry stores shelving wiped & organised',
+            'Dishwasher & glasswasher interior cleaned'
+        ],
+        'Weekly Deep Clean — Bar': [
+            'Speed rail & well drains flushed',
+            'Ice machine interior sanitised',
+            'Beer tap lines & drip trays cleaned',
+            'Under-counter fridges wiped out',
+            'Back bar shelving dusted & organised',
+            'Glass polishing check — no water marks',
+            'Garnish station containers deep cleaned',
+            'Bar mats & floor mats soaked & scrubbed'
+        ],
+        'Weekly Deep Clean — FOH': [
+            'All table bases & legs wiped',
+            'Window sills & ledges dusted',
+            'Bathroom deep clean (tiles, mirrors, fixtures)',
+            'Entry area & signage cleaned',
+            'Menu holders / stands wiped',
+            'Skirting boards & corners swept',
+            'Air conditioning filters / vents dusted'
+        ],
+        'Monthly Safety Walk': [
+            'Fire extinguishers checked (pressure, pin, signage)',
+            'Exit signs illuminated & visible',
+            'First aid kit fully stocked',
+            'Slip hazards assessed & addressed',
+            'Chemical storage secure & labelled (SDS available)',
+            'Emergency procedures posted & legible'
+        ]
+    };
+    window.saveToDisk();
+    window.showToast('4 BWI checklists loaded!');
+    window._complianceTab = 'custom';
+    window.showView('compliance');
+};
 

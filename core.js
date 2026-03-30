@@ -264,5 +264,157 @@ window.debounce = (fn, delay) => {
     };
 };
 
+// =============================================================================
+// BWI SETUP WIZARD — Central seeder with status indicators
+// =============================================================================
+window.seedOnboardingTemplates = () => {
+    window.onboardingTemplates = {
+        'FOH (Front of House)': {
+            'Day 1: Orientation': [
+                { id:'foh-tour', label:'Venue tour — exits, bathrooms, storage, staff areas' },
+                { id:'foh-pos', label:'POS training — orders, payments, voids, splits' },
+                { id:'foh-tables', label:'Table numbers & sections walkthrough' },
+                { id:'foh-menu', label:'Menu knowledge — key dishes, descriptions, prices' },
+                { id:'foh-allergens', label:'Allergen matrix overview & communication protocol' }
+            ],
+            'Day 2: Service Standards': [
+                { id:'foh-greet', label:'Guest greeting & seating procedure' },
+                { id:'foh-service', label:'Service sequence — timing, check-backs, clearing' },
+                { id:'foh-rsa', label:'RSA awareness — signs of intoxication, refusal steps' },
+                { id:'foh-billing', label:'Billing, splitting, tips & cash handling' },
+                { id:'foh-complaints', label:'Handling guest complaints & feedback' }
+            ],
+            'Compliance': [
+                { id:'foh-rsa-cert', label:'Upload RSA Certificate', isUpload: true, cat:'Staff RSAs & Certs' },
+                { id:'foh-emergency', label:'Read & acknowledge Emergency Evacuation SOP' },
+                { id:'foh-food-safety', label:'Food safety basics acknowledgement' }
+            ]
+        },
+        'BOH (Back of House)': {
+            'Day 1: Kitchen Orientation': [
+                { id:'boh-safety', label:'Kitchen safety — burns, cuts, slips, lifting' },
+                { id:'boh-stations', label:'Station orientation — prep, line, pass, wash' },
+                { id:'boh-knives', label:'Knife safety & storage protocol' },
+                { id:'boh-hygiene', label:'Hygiene standards — handwashing, gloves, hair nets' },
+                { id:'boh-fifo', label:'FIFO, date labelling & storage procedures' }
+            ],
+            'Day 2: Operations': [
+                { id:'boh-prep', label:'Prep lists — how to read and execute' },
+                { id:'boh-temps', label:'Temperature logging — how to use Hub temp log' },
+                { id:'boh-waste', label:'Waste management — logging in Hub, separation' },
+                { id:'boh-receive', label:'Receiving deliveries — temp checks, rejection criteria' },
+                { id:'boh-cleaning', label:'Cleaning schedule & chemical safety (SDS location)' }
+            ],
+            'Compliance': [
+                { id:'boh-food-cert', label:'Upload Food Safety Certificate', isUpload: true, cat:'Food Safety & HACCP' },
+                { id:'boh-whs', label:'WHS induction sign-off' },
+                { id:'boh-emergency', label:'Emergency procedures acknowledgement' }
+            ]
+        },
+        'Bar': {
+            'Day 1: Bar Orientation': [
+                { id:'bar-layout', label:'Bar layout — wells, speed rail, back bar, fridges' },
+                { id:'bar-pos', label:'POS operation — drink orders, tabs, payments' },
+                { id:'bar-glass', label:'Glassware knowledge — types, handling, breakage protocol' },
+                { id:'bar-spirits', label:'Spirits knowledge — house pours, premium options' },
+                { id:'bar-beer', label:'Beer & wine list — tap beers, wine by glass, sake' }
+            ],
+            'Day 2: Skills & Compliance': [
+                { id:'bar-cocktails', label:'Cocktail menu — recipes, garnishes, presentation' },
+                { id:'bar-stock', label:'Stock rotation, par levels & restocking procedure' },
+                { id:'bar-rsa', label:'RSA protocol — ID checking, refusal, intoxication signs' },
+                { id:'bar-close', label:'Bar closing procedure — clean, restock, secure' },
+                { id:'bar-coffee', label:'Coffee machine operation (if applicable)' }
+            ],
+            'Compliance': [
+                { id:'bar-rsa-cert', label:'Upload RSA Certificate', isUpload: true, cat:'Staff RSAs & Certs' },
+                { id:'bar-allergen', label:'Allergen awareness for cocktails & beverages' },
+                { id:'bar-emergency', label:'Emergency procedures acknowledgement' }
+            ]
+        }
+    };
+    window.saveToDisk();
+    window.showToast('Onboarding templates loaded! (FOH, BOH, Bar)');
+};
+
+window.renderBWISetupWizard = () => {
+    const E = window.esc;
+    const checks = {
+        tasks: (window.rotationalTasks||[]).length,
+        checklists: window.shiftChecklistItems ? (window.shiftChecklistItems.opening||[]).length : 0,
+        fridges: (window.fridgeUnits||[]).length > 3 ? (window.fridgeUnits||[]).length : 0,
+        masterCL: Object.keys(window.masterChecklists||{}).length > 2 ? Object.keys(window.masterChecklists||{}).length : 0,
+        kbCats: (window.kbCategories||[]).length,
+        sops: (window.knowledgeBase||[]).length,
+        badges: (window.badgeDefinitions||[]).length,
+        onboarding: Object.keys(window.onboardingTemplates||{}).length > 2 ? Object.keys(window.onboardingTemplates||{}).length : 0
+    };
+
+    const row = (label, count, unit, seedFn, icon) => {
+        const done = count > 0;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:20px;">${icon}</span>
+                <div>
+                    <strong style="font-size:14px;">${E(label)}</strong>
+                    <div style="font-size:12px;color:${done?'var(--green)':'var(--text-muted)'};">${done ? count + ' ' + unit + ' loaded' : 'Not configured'}</div>
+                </div>
+            </div>
+            <button onclick="${seedFn}" class="btn ${done?'btn-outline':'btn-blue'}" style="font-size:12px;padding:6px 14px;">${done?'Reset':'Load Defaults'}</button>
+        </div>`;
+    };
+
+    const html = `<div style="margin-bottom:20px;">
+        <p style="color:var(--text-muted);font-size:13px;margin:0 0 15px 0;">Load Bar Wa Izakaya operational defaults. Each section can be fully edited after loading. Existing data will ask for confirmation before replacing.</p>
+        ${row('Rotational Tasks', checks.tasks, 'tasks', 'window.seedRotationalTasks()', '🔄')}
+        ${row('Shift Checklists', checks.checklists, 'items (opening)', 'window.seedShiftChecklists()', '✅')}
+        ${row('Fridge / Freezer Units', checks.fridges, 'units', 'window.seedFridgeUnits()', '🌡️')}
+        ${row('Custom Checklists', checks.masterCL, 'categories', 'window.seedMasterChecklists()', '📋')}
+        ${row('KB Categories', checks.kbCats, 'categories', 'window._seedKBCatsWizard()', '📂')}
+        ${row('Knowledge Base SOPs', checks.sops, 'SOPs', 'window.seedKnowledgeBase()', '📚')}
+        ${row('Badge Definitions', checks.badges, 'badges', 'window._seedBadgesWizard()', '🏆')}
+        ${row('Onboarding Templates', checks.onboarding, 'roles', 'window._seedOnboardingWizard()', '👤')}
+    </div>
+    <button onclick="window._seedAllBWI()" class="btn btn-green" style="width:100%;font-size:15px;padding:12px;">🚀 Load All BWI Defaults</button>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;">Only populates sections that are empty or have placeholder data. Will not overwrite your customisations.</p>`;
+
+    window.openModal('🏮 BWI Setup Wizard', html);
+};
+
+// Wizard wrappers (avoid escaped quotes in template literals)
+window._seedKBCatsWizard = () => { window.seedKBCategories(); window.saveToDisk(); window.showToast('Categories loaded!'); window.closeModal(); window.renderBWISetupWizard(); };
+window._seedBadgesWizard = () => { window._seedDefaultBadges(); window.closeModal(); window.renderBWISetupWizard(); };
+window._seedOnboardingWizard = () => { window.seedOnboardingTemplates(); window.closeModal(); window.renderBWISetupWizard(); };
+
+window._seedAllBWI = () => {
+    let count = 0;
+    // Tasks
+    if ((window.rotationalTasks||[]).length === 0) { window._doSeedTasks(); count++; }
+    // Shift checklists — seed if null or using defaults
+    if (!window.shiftChecklistItems || (window.shiftChecklistItems.opening||[]).length <= 8) { window._doSeedChecklists(); count++; }
+    // Fridges — seed if still on generic defaults
+    if ((window.fridgeUnits||[]).length <= 3) { window._doSeedFridges(); count++; }
+    // Master checklists — seed if placeholder
+    const clKeys = Object.keys(window.masterChecklists||{});
+    if (clKeys.length <= 2 && (clKeys.includes('Opening Duties') || clKeys.length === 0)) { window._doSeedMasterChecklists(); count++; }
+    // KB categories
+    if ((window.kbCategories||[]).length === 0) { window.seedKBCategories(); count++; }
+    // SOPs
+    if ((window.knowledgeBase||[]).length === 0) { window._doSeedKB(); count++; }
+    // Badges
+    if ((window.badgeDefinitions||[]).length === 0) { window._seedDefaultBadges(); count++; }
+    // Onboarding
+    if (Object.keys(window.onboardingTemplates||{}).length <= 2) { window.seedOnboardingTemplates(); count++; }
+
+    window.saveToDisk();
+    window.closeModal();
+    if (count > 0) {
+        window.showToast('BWI defaults loaded across ' + count + ' sections!');
+    } else {
+        window.showToast('All sections already have data — nothing to seed.');
+    }
+    window.showView('dashboard');
+};
+
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys = ['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags'];
+window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags'];
