@@ -259,7 +259,7 @@ Recipe: ${rawText}`;
         const aiResult=JSON.parse(rawJson);
         window.tempIngs=aiResult.ingredients.map(ing=>{
             if(ing.matchedInvId&&window.inventoryItems.find(x=>x.id===ing.matchedInvId)){const inv=window.inventoryItems.find(x=>x.id===ing.matchedInvId);return{type:'inv',ref:ing.matchedInvId,qty:ing.qty,unit:inv.useUnit||ing.unit,name:inv.name};}
-            return {type:'raw',name:`${ing.qty} ${ing.unit} ${ing.name}`,qty:0,unit:''};
+            return {type:'raw',name:ing.name,qty:ing.qty||0,unit:ing.unit||''};
         });
         const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
         window.recipes.push(newObj); window.editRecipeForm(newObj.id); window.showToast("AI Parsing Complete!");
@@ -289,90 +289,243 @@ window.renderAiBatchLinker = () => {
         '<div id="batch-link-results"></div>' +
     '</div>';
 };
+// Auto-restore saved batch results when navigating to this view
+window.restoreBatchLinkIfSaved = () => {
+    if (!window._batchLinkQueue) {
+        try { const saved = localStorage.getItem('_batchLinkQueue'); if (saved) { window._batchLinkQueue = JSON.parse(saved); } } catch(e) {}
+    }
+    if (window._batchLinkQueue && window._batchLinkQueue.length > 0) {
+        const statusDiv = document.getElementById('batch-link-status');
+        const matches = window._batchLinkQueue.filter(q => q.suggestedInvId);
+        if (statusDiv) statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ Restored — ' + matches.length + ' matches from previous run.</div>';
+        window._batchLinkPage = 0;
+        window.renderBatchLinkQueue();
+    }
+};
+// Trigger restore after DOM renders
+const _origRenderBatchLinker = window.renderAiBatchLinker;
+window.renderAiBatchLinker = () => {
+    const html = _origRenderBatchLinker();
+    setTimeout(() => window.restoreBatchLinkIfSaved(), 100);
+    return html;
+};
+
+// Helper: safely parse JSON from AI, recovering partial matches if truncated
+window._safeParseAiJson = (text) => {
+    const clean = text.replace(/^```json\s*/g, '').replace(/```\s*$/g, '').trim();
+    // Try full parse first
+    try { const r = JSON.parse(clean); return Array.isArray(r) ? r : []; } catch(e) {}
+    // Truncated? Try to close the array
+    try { const r = JSON.parse(clean.replace(/,\s*$/, '') + ']'); return Array.isArray(r) ? r : []; } catch(e) {}
+    // Last resort: extract individual objects with regex
+    const objs = [];
+    const re = /\{\s*"idx"\s*:\s*(\d+)\s*,\s*"matchId"\s*:\s*"([^"]*)"\s*,\s*"confidence"\s*:\s*"([^"]*)"\s*\}/g;
+    let m;
+    while ((m = re.exec(clean)) !== null) {
+        objs.push({ idx: parseInt(m[1]), matchId: m[2], confidence: m[3] });
+    }
+    return objs;
+};
 
 window.runAiBatchLink = async () => {
+    console.log('[AI Batch Linker] v20260329e — batched mode');
     const statusDiv = document.getElementById('batch-link-status');
     const resultsDiv = document.getElementById('batch-link-results');
-    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Scanning all raw ingredients...</div>';
+    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Scanning all raw ingredients (v2-batched)...</div>';
     resultsDiv.innerHTML = '';
+    // Noise patterns — method steps, glass types, garnish notes, group headers etc.
+    const _noiseRe = /^(style |glass |garnish |step\d|group\d|no garnish|mix all|for the |for \d|for shell|for curd|soak all|bring to|combine |once |put |whisk all|\. |add |% blend|\(ask |others -|or$|and$|marinade$|topping$|sauce$)/i;
     const rawIngredients = [];
+    let skippedNoise = 0;
     (window.recipes || []).filter(r => !r.archived).forEach(r => {
         (r.ingredients || []).forEach((ing, idx) => {
-            if (ing.type === 'raw') rawIngredients.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, rawName: ing.name });
+            if (ing.type !== 'raw') return;
+            const n = (ing.name || '').trim();
+            if (n.length < 3 || n.length > 80 || _noiseRe.test(n)) { skippedNoise++; return; }
+            rawIngredients.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, rawName: ing.name });
         });
     });
+    if (skippedNoise) console.log('[AI Batch Linker] Skipped ' + skippedNoise + ' noise ingredients (method steps, glass types, etc.)');
     if (rawIngredients.length === 0) {
         statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ All ingredients linked!</div>';
         return;
     }
-    const invList = (window.inventoryItems||[]).filter(i=>!i.archived).map(i=>i.id+':'+i.name+' ('+( i.useUnit||'unit')+')').join('; ');
-    const rawList = rawIngredients.map((r,idx)=>idx+': '+r.rawName+' [in: '+r.recipeName+']').join('\n');
-    const prompt = 'Match each raw ingredient to the best inventory ID or null.\nINVENTORY: '+invList+'\nRAW:\n'+rawList+'\nReturn ONLY JSON array: [{"idx":0,"matchId":"id","confidence":"high"},...]. confidence: high/medium/low/none. Only suggest medium+ confidence.';
-    window.showLoadingOverlay('🤖 AI is matching ingredients...');
-    try {
-        const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+apiKey, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        const aiMatches = JSON.parse(data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim());
-        window._batchLinkQueue = rawIngredients.map((item,idx) => {
-            const match = aiMatches.find(m=>m.idx===idx);
-            const inv = match && match.matchId ? (window.inventoryItems||[]).find(i=>i.id===match.matchId) : null;
-            return {...item, suggestedInvId:inv?inv.id:null, suggestedInvName:inv?inv.name:null, confidence:match?match.confidence:'none', accepted:false, skipped:false};
-        });
-        window.renderBatchLinkQueue();
-        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ Done — '+aiMatches.filter(m=>m.matchId).length+' matches suggested.</div>';
-        window.hideLoadingOverlay();
-    } catch(e) { window.hideLoadingOverlay(); statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--red);padding:12px;color:var(--red);">Error: '+e.message+'</div>'; }
+    const apiKey = window.getApiKey(); if (!apiKey) return;
+    const invItems = (window.inventoryItems||[]).filter(i=>!i.archived);
+    const invList = invItems.map(i=>i.id+':'+i.name).join('; ');
+
+    // Batches of 25 for accuracy, 10 in parallel for speed
+    const BATCH_SIZE = 25;
+    const PARALLEL = 10;
+    const batches = [];
+    for (let i = 0; i < rawIngredients.length; i += BATCH_SIZE) {
+        batches.push(rawIngredients.slice(i, i + BATCH_SIZE));
+    }
+
+    window.showLoadingOverlay('🤖 AI matching: 0/' + batches.length);
+    const allMatches = [];
+    let totalErrors = 0;
+    let processedBatches = 0;
+
+    // Process a single batch and return results
+    const processBatch = async (b) => {
+        const batch = batches[b];
+        const globalOffset = b * BATCH_SIZE;
+        const rawList = batch.map((r, idx) => idx + ':' + r.rawName).join('\n');
+        const prompt = `You are matching recipe ingredients to inventory items for a Japanese izakaya restaurant.
+
+RULES:
+- Match each ITEM to the single best inventory ID. Only return medium or high confidence matches.
+- Ingredient names may be abbreviated or use aliases. Common equivalences:
+  tobanjan = tobandjan = doubanjiang (chilli bean paste)
+  gochujang = gochijang = korean chilli paste
+  shikuwasa = shikwasa (citrus juice)
+  gomme = gomme syrup = sugar syrup
+  cask sake = cooking sake
+  layu = chilli oil
+  ponzu = ponzu sauce
+- Match partial names: "aperol" matches "Aperol Aperitivo 700ml", "campari" matches "Campari 700ml"
+- Ignore quantity/unit prefixes in ingredient names (e.g. "45ml" or "2 cups")
+- Skip method instructions, glass types, or garnish notes — return nothing for those
+
+INV: ${invList}
+
+ITEMS:
+${rawList}
+
+Return JSON array: [{"idx":0,"matchId":"inv-id","confidence":"high"}]`;
+        try {
+            const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4096 } })
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            const rawText = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '[]';
+            const batchMatches = window._safeParseAiJson(rawText);
+            console.log('[Batch ' + (b+1) + '] got ' + batchMatches.length + ' matches');
+            batchMatches.forEach(m => { allMatches.push({ ...m, idx: m.idx + globalOffset }); });
+            processedBatches++;
+        } catch (batchErr) {
+            console.error('[Batch ' + (b+1) + '] failed:', batchErr.message);
+            totalErrors++;
+        }
+    };
+
+    // Run batches in parallel groups
+    for (let b = 0; b < batches.length; b += PARALLEL) {
+        const pct = Math.round((b / batches.length) * 100);
+        statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Batches ' + (b+1) + '-' + Math.min(b+PARALLEL, batches.length) + '/' + batches.length + ' (' + pct + '%) — ' + allMatches.length + ' matches so far' + (totalErrors > 0 ? ' — ' + totalErrors + ' errors' : '') + '</div>';
+        window.showLoadingOverlay('🤖 ' + pct + '% — ' + allMatches.length + ' matches');
+
+        // Fire PARALLEL batches simultaneously
+        const group = [];
+        for (let p = 0; p < PARALLEL && (b + p) < batches.length; p++) {
+            group.push(processBatch(b + p));
+        }
+        await Promise.all(group);
+
+        // Brief delay between groups to be polite to the API
+        if (b + PARALLEL < batches.length) await new Promise(r => setTimeout(r, 500));
+    }
+
+    // Build the review queue from all accumulated matches
+    window._batchLinkQueue = rawIngredients.map((item, idx) => {
+        const match = allMatches.find(m => m.idx === idx);
+        const inv = match && match.matchId ? invItems.find(i => i.id === match.matchId) : null;
+        return { ...item, suggestedInvId: inv ? inv.id : null, suggestedInvName: inv ? inv.name : null, confidence: match ? match.confidence : 'none', accepted: false, skipped: false };
+    });
+    // Persist to localStorage so results survive page refresh
+    try { localStorage.setItem('_batchLinkQueue', JSON.stringify(window._batchLinkQueue)); } catch(e) {}
+    window.renderBatchLinkQueue();
+    const matchCount = allMatches.filter(m => m.matchId).length;
+    const errMsg = totalErrors > 0 ? ' (' + totalErrors + ' batch' + (totalErrors > 1 ? 'es' : '') + ' failed)' : '';
+    statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ Done — ' + matchCount + ' matches from ' + processedBatches + '/' + batches.length + ' batches.' + errMsg + '</div>';
+    window.hideLoadingOverlay();
 };
 
+window._batchLinkPage = 0;
 window.renderBatchLinkQueue = () => {
+    // Restore from localStorage if not in memory
+    if (!window._batchLinkQueue) {
+        try { const saved = localStorage.getItem('_batchLinkQueue'); if (saved) window._batchLinkQueue = JSON.parse(saved); } catch(e) {}
+    }
     const queue = window._batchLinkQueue || [];
     const resultsDiv = document.getElementById('batch-link-results');
+    if (!resultsDiv) return;
     const pending = queue.filter(q => !q.accepted && !q.skipped);
     const accepted = queue.filter(q => q.accepted);
     if (pending.length === 0 && accepted.length === 0) { resultsDiv.innerHTML = ''; return; }
     const cc = {high:'var(--green)',medium:'var(--orange)',low:'var(--text-muted)',none:'var(--border)'};
     const withMatch = pending.filter(q=>q.suggestedInvId);
     const noMatch = pending.filter(q=>!q.suggestedInvId);
-    let html = '<div style="margin-bottom:15px;">';
-    if (withMatch.length>0) html += '<button onclick="window.acceptAllBatchLinks()" class="btn btn-green" style="margin-right:8px;">✅ Accept All ('+withMatch.length+')</button>';
-    if (accepted.length>0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple">💾 Commit '+accepted.length+' Links</button>';
+
+    // Summary + action buttons (always shown)
+    let html = '<div class="card" style="padding:15px;margin-bottom:15px;border-top:3px solid var(--purple);">';
+    html += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">';
+    if (withMatch.length>0) html += '<button onclick="window.acceptAllBatchLinks()" class="btn btn-green" style="font-size:15px;padding:12px 24px;">✅ Accept All ' + withMatch.length + ' Matches</button>';
+    if (accepted.length>0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="font-size:15px;padding:12px 24px;">💾 Commit ' + accepted.length + ' Links</button>';
     html += '</div>';
-    const buildRow = (item) => {
-        const qIdx = queue.indexOf(item);
-        const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
-        return '<div class="card" style="border-left:4px solid '+(cc[item.confidence]||'var(--border)')+';padding:15px;margin-bottom:10px;">' +
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
-            '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
-            (item.confidence!=='none'?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
-            '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
-            '<div style="display:flex;gap:6px;">' +
-            '<button onclick="window.acceptBatchLink('+qIdx+')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
-            '<button onclick="window.skipBatchLink('+qIdx+')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
-            '</div></div></div>';
-    };
-    if (withMatch.length>0) { html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">🔗 Suggested ('+withMatch.length+')</h3>'; withMatch.forEach(i=>{html+=buildRow(i);}); }
-    if (noMatch.length>0) { html += '<h3 style="color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:15px;">❓ No Match ('+noMatch.length+')</h3>'; noMatch.forEach(i=>{html+=buildRow(i);}); }
-    if (accepted.length>0) {
-        html += '<h3 style="color:var(--green);border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:20px;margin-bottom:10px;">✅ Ready to Commit ('+accepted.length+')</h3>';
-        accepted.forEach(item=>{ const inv=(window.inventoryItems||[]).find(x=>x.id===item.suggestedInvId); html+='<div style="padding:8px 12px;font-size:13px;color:var(--green);background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:6px;"><strong>'+esc(item.rawName)+'</strong> → <strong>'+(inv?esc(inv.name):esc(item.suggestedInvId))+'</strong> <small style="color:var(--text-muted);">in '+esc(item.recipeName)+'</small></div>'; });
-        if (pending.length===0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="width:100%;margin-top:15px;font-size:16px;padding:14px;">💾 Commit All '+accepted.length+' Links</button>';
+    html += '<div style="font-size:13px;color:var(--text-muted);">🔗 ' + withMatch.length + ' suggested · ❓ ' + noMatch.length + ' no match · ✅ ' + accepted.length + ' accepted</div>';
+    html += '</div>';
+
+    // Paginated display — only render 50 items at a time to prevent freezing
+    const PAGE_SIZE = 50;
+    const allPending = [...withMatch, ...noMatch];
+    const totalPages = Math.ceil(allPending.length / PAGE_SIZE);
+    const page = Math.min(window._batchLinkPage || 0, totalPages - 1);
+    const pageItems = allPending.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    if (allPending.length > 0) {
+        html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">Review Items (' + (page * PAGE_SIZE + 1) + '–' + Math.min((page + 1) * PAGE_SIZE, allPending.length) + ' of ' + allPending.length + ')</h3>';
+        pageItems.forEach(item => {
+            const qIdx = queue.indexOf(item);
+            const hasSuggestion = !!item.suggestedInvId;
+            const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
+            html += '<div class="card" style="border-left:4px solid '+(hasSuggestion ? (cc[item.confidence]||'var(--border)') : 'var(--border)')+';padding:15px;margin-bottom:10px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
+                '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
+                (item.confidence!=='none'&&hasSuggestion?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
+                '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
+                '<div style="display:flex;gap:6px;">' +
+                '<button onclick="window.acceptBatchLink('+qIdx+')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
+                '<button onclick="window.skipBatchLink('+qIdx+')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
+                '</div></div></div>';
+        });
+        // Pagination controls
+        if (totalPages > 1) {
+            html += '<div style="display:flex;justify-content:center;gap:10px;margin:20px 0;">';
+            if (page > 0) html += '<button onclick="window._batchLinkPage=' + (page-1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">← Prev</button>';
+            html += '<span style="padding:8px 16px;color:var(--text-muted);">Page ' + (page+1) + ' of ' + totalPages + '</span>';
+            if (page < totalPages - 1) html += '<button onclick="window._batchLinkPage=' + (page+1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">Next →</button>';
+            html += '</div>';
+        }
+    }
+
+    // Show accepted count summary (not individual items — too many)
+    if (accepted.length > 0 && pending.length === 0) {
+        html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="width:100%;margin-top:15px;font-size:16px;padding:14px;">💾 Commit All ' + accepted.length + ' Links</button>';
     }
     resultsDiv.innerHTML = html;
 };
-window.acceptBatchLink = (qIdx) => { const sel=document.getElementById('bl-sel-'+qIdx); const id=sel?sel.value:window._batchLinkQueue[qIdx].suggestedInvId; if(!id) return window.showToast('Select an item first.','error'); const inv=(window.inventoryItems||[]).find(x=>x.id===id); window._batchLinkQueue[qIdx].suggestedInvId=id; window._batchLinkQueue[qIdx].suggestedInvName=inv?inv.name:id; window._batchLinkQueue[qIdx].accepted=true; window.renderBatchLinkQueue(); };
-window.skipBatchLink = (qIdx) => { window._batchLinkQueue[qIdx].skipped=true; window.renderBatchLinkQueue(); };
-window.acceptAllBatchLinks = () => { (window._batchLinkQueue||[]).forEach(item=>{ if(!item.accepted&&!item.skipped&&item.suggestedInvId) item.accepted=true; }); window.renderBatchLinkQueue(); };
+window._saveBatchQueue = () => { try { localStorage.setItem('_batchLinkQueue', JSON.stringify(window._batchLinkQueue)); } catch(e) {} };
+window.acceptBatchLink = (qIdx) => { const sel=document.getElementById('bl-sel-'+qIdx); const id=sel?sel.value:window._batchLinkQueue[qIdx].suggestedInvId; if(!id) return window.showToast('Select an item first.','error'); const inv=(window.inventoryItems||[]).find(x=>x.id===id); window._batchLinkQueue[qIdx].suggestedInvId=id; window._batchLinkQueue[qIdx].suggestedInvName=inv?inv.name:id; window._batchLinkQueue[qIdx].accepted=true; window._saveBatchQueue(); window.renderBatchLinkQueue(); };
+window.skipBatchLink = (qIdx) => { window._batchLinkQueue[qIdx].skipped=true; window._saveBatchQueue(); window.renderBatchLinkQueue(); };
+window.acceptAllBatchLinks = () => { (window._batchLinkQueue||[]).forEach(item=>{ if(!item.accepted&&!item.skipped&&item.suggestedInvId) item.accepted=true; }); window._saveBatchQueue(); window.renderBatchLinkQueue(); };
 window.commitBatchLinks = () => {
     const accepted=(window._batchLinkQueue||[]).filter(q=>q.accepted&&q.suggestedInvId);
     if(accepted.length===0) return window.showToast('Nothing to commit.','error');
     let count=0;
-    accepted.forEach(item=>{ const recipe=window.recipes.find(r=>r.id===item.recipeId); if(!recipe) return; const ing=recipe.ingredients[item.ingIdx]; if(!ing||ing.type!=='raw') return; const inv=window.inventoryItems.find(i=>i.id===item.suggestedInvId); if(!inv) return; recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:1,unit:inv.useUnit||'unit',name:inv.name}; count++; });
-    window.saveToDisk(); window._batchLinkQueue=null; window.showToast(count+' ingredients linked!'); window.showView('recipes');
+    accepted.forEach(item=>{
+        const recipe=window.recipes.find(r=>r.id===item.recipeId); if(!recipe) return;
+        const ing=recipe.ingredients[item.ingIdx]; if(!ing||ing.type!=='raw') return;
+        const inv=window.inventoryItems.find(i=>i.id===item.suggestedInvId); if(!inv) return;
+        let origQty=ing.qty; let origUnit=ing.unit||'';
+        if(!origQty){ const parsed=window._parseIngredientLine(ing.name); origQty=parsed.qty||1; origUnit=origUnit||parsed.unit; }
+        recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:origQty,unit:origUnit||inv.useUnit||'unit',name:inv.name,_rawName:ing.name};
+        count++;
+    });
+    window.recalcAllCosts(); window._batchLinkQueue=null; try { localStorage.removeItem('_batchLinkQueue'); } catch(e) {} window.showToast(count+' ingredients linked!'); window.showView('recipes');
 };
 
 // =============================================================================

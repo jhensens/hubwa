@@ -62,6 +62,199 @@ window.getApiKey = () => {
 };
 window.resetApiKey = () => { localStorage.removeItem('geminiApiKey'); window.showToast("API Key cleared."); };
 
+// Auto-fix useUnit for bar items — spirits/liqueurs/wine/sake should use ml, not bottle/each
+// Excludes miscategorised items (olive oil, ginger beer, cooking sake, vinegar, mirin)
+window._isMiscategorisedBev = (name) => /olive oil|vinegar|ginger beer|cooking sake|mirin/i.test(name || '');
+window.fixBevUseUnits = () => {
+    const mlSubcats = ['Spirits', 'Liqueurs', 'Sake', 'Wine', 'Fortified Wine', 'Vermouth', 'Gin', 'Vodka', 'Whisky', 'Rum', 'Tequila', 'Mezcal'];
+    const wrongUnits = ['each', 'bottle', 'per bottle', 'unit', 'btl', 'l'];
+    let fixed = 0;
+    (window.inventoryItems || []).forEach(i => {
+        if (window._isMiscategorisedBev(i.name)) return;
+        if (mlSubcats.some(s => (i.subcategory || '').toLowerCase().includes(s.toLowerCase())) && wrongUnits.includes((i.useUnit || '').toLowerCase())) {
+            i.useUnit = 'ml';
+            fixed++;
+        }
+    });
+    if (fixed > 0) { window.saveToDisk(); window.showToast(fixed + ' beverage items updated to ml.'); }
+    return fixed;
+};
+
+// Auto-fix yield for bar items — extract bottle size from name, default 700ml spirits / 750ml wine
+// Excludes miscategorised items and handles 1.8L sake bottles
+window.fixBevYields = () => {
+    const mlSubcats = ['Spirits', 'Liqueurs', 'Sake', 'Wine', 'Fortified Wine', 'Vermouth', 'Gin', 'Vodka', 'Whisky', 'Rum', 'Tequila', 'Mezcal'];
+    const wineSubcats = ['Wine', 'Fortified Wine', 'Vermouth'];
+    let fixed = 0;
+    (window.inventoryItems || []).forEach(i => {
+        if (window._isMiscategorisedBev(i.name)) return;
+        if (!mlSubcats.some(s => (i.subcategory || '').toLowerCase().includes(s.toLowerCase()))) return;
+        const name = i.name || '';
+        // Check for ml in name first (e.g., "700ml", "720ml", "360ml")
+        const mlMatch = name.match(/(\d{3,4})\s*ml/i);
+        // Check for litres (e.g., "1.8L", "5L")
+        const lMatch = name.match(/([\d.]+)\s*L\b/);
+        if (mlMatch) {
+            const newYield = parseInt(mlMatch[1]);
+            if (i.yield !== newYield) { i.yield = newYield; fixed++; }
+        } else if (lMatch) {
+            const newYield = Math.round(parseFloat(lMatch[1]) * 1000);
+            if (i.yield !== newYield) { i.yield = newYield; fixed++; }
+        } else if (!i.yield || i.yield <= 1) {
+            const sub = (i.subcategory || '').toLowerCase();
+            const isWine = wineSubcats.some(s => sub.includes(s.toLowerCase()));
+            const isSake = sub.includes('sake');
+            i.yield = isWine ? 750 : isSake ? 720 : 700;
+            fixed++;
+        }
+    });
+    if (fixed > 0) { window.saveToDisk(); window.showToast(fixed + ' beverage yields updated.'); }
+    return fixed;
+};
+
+// Comprehensive yield/unit fix — ALL categories: food, beverage, other
+// Parses volume/weight from item names, fixes useUnit mismatches, handles multi-packs
+window.fixAllYields = () => {
+    let fixed = 0;
+    const log = [];
+    // Skip non-product items
+    const skipNames = /delivery charge|freight|surcharge|credit note/i;
+
+    (window.inventoryItems || []).forEach(i => {
+        const name = i.name || '';
+        if (skipNames.test(name)) return;
+        let u = (i.useUnit || '').toLowerCase();
+        const cat = (i.category || '').toLowerCase();
+        let changed = false;
+
+        // ── STEP 0: Standardize malformed useUnit values ──
+        const unitMap = { 'gr': 'g', 'gram': 'g', 'gm': 'g', 'b': 'bottle' };
+        if (unitMap[u]) { i.useUnit = unitMap[u]; u = unitMap[u]; changed = true; }
+
+        // ── STEP 1: Litres in name → ml (all categories) ──
+        // Guard: only fix if yield matches the raw litre number or is default (1)
+        if (!changed) {
+            const m = name.match(/([\d.]+)\s*(?:l|lt|ltr|litre|liter)s?\b/i);
+            if (m) {
+                const litres = parseFloat(m[1]);
+                const mlYield = Math.round(litres * 1000);
+                if (litres > 0 && (i.yield <= litres || i.yield === 1)) {
+                    log.push(name + ': yield ' + i.yield + '→' + mlYield + 'ml');
+                    i.yield = mlYield; i.useUnit = 'ml'; changed = true;
+                }
+            }
+        }
+
+        // ── STEP 2: Kilograms in name → g ──
+        // Guard: only fix if yield matches the raw kg number or is default (1)
+        if (!changed) {
+            const m = name.match(/([\d.]+)\s*kg\b/i);
+            if (m) {
+                const kg = parseFloat(m[1]);
+                const gYield = Math.round(kg * 1000);
+                if (kg > 0 && (i.yield <= kg || i.yield === 1)) {
+                    log.push(name + ': yield ' + i.yield + '→' + gYield + 'g');
+                    i.yield = gYield; i.useUnit = 'g'; changed = true;
+                }
+            }
+        }
+
+        // ── STEP 3: Millilitres in name → ml (standalone items only) ──
+        // Guard: only fix if yield is default (1) — don't overwrite pack counts
+        if (!changed) {
+            const isMultiPack = /[x×]\s*\d+|\d+\s*(pk|pack)\b|\d+\/\d+\s*ml/i.test(name);
+            if (!isMultiPack) {
+                const m = name.match(/(\d{2,5})\s*ml\b/i);
+                if (m) {
+                    const ml = parseInt(m[1]);
+                    if (ml > 0 && i.yield <= 1) {
+                        log.push(name + ': yield ' + i.yield + '→' + ml + 'ml');
+                        i.yield = ml; i.useUnit = 'ml'; changed = true;
+                    }
+                }
+            }
+        }
+
+        // ── STEP 4: Grams in name → g ──
+        // Guard: only fix if yield is default (1) — don't overwrite portion counts
+        if (!changed) {
+            const m = name.match(/(\d{2,5})\s*(?:gm?|gram)s?\b/i);
+            if (m) {
+                const g = parseInt(m[1]);
+                if (g > 0 && i.yield <= 1) {
+                    log.push(name + ': yield ' + i.yield + '→' + g + 'g');
+                    i.yield = g; i.useUnit = 'g'; changed = true;
+                }
+            }
+        }
+
+        // ── STEP 5: Multi-pack beverages → yield = pack count ──
+        if (!changed && cat === 'beverage') {
+            const xMatch = name.match(/[x×]\s*(\d+)\b/i) || name.match(/(\d+)\s*(?:pk|pack)\b/i);
+            const slashMatch = !xMatch ? name.match(/(\d+)\/\d+\s*(?:ml|g)/i) : null;
+            const packMatch = xMatch || slashMatch;
+            if (packMatch) {
+                const count = parseInt(packMatch[1]);
+                if (count > 1 && i.yield <= 1) {
+                    log.push(name + ': yield ' + i.yield + '→' + count + ' (pack)');
+                    i.yield = count; changed = true;
+                }
+            }
+        }
+
+        // ── STEP 6: useUnit is litres but yield is raw litres → convert ──
+        if (!changed && ['l', 'lt', 'ltr', 'litre', 'liter'].includes(u) && i.yield > 0 && i.yield < 100) {
+            log.push(name + ': ' + i.yield + u + '→' + (i.yield * 1000) + 'ml');
+            i.yield = Math.round(i.yield * 1000); i.useUnit = 'ml'; changed = true;
+        }
+
+        // ── STEP 7: useUnit is kg → convert (or fix beverages with wrong unit) ──
+        if (!changed && u === 'kg' && i.yield > 0 && i.yield < 100) {
+            if (cat !== 'beverage') {
+                log.push(name + ': ' + i.yield + 'kg→' + (i.yield * 1000) + 'g');
+                i.yield = Math.round(i.yield * 1000); i.useUnit = 'g'; changed = true;
+            } else {
+                log.push(name + ': useUnit kg→each (beverage)');
+                i.useUnit = 'each'; changed = true;
+            }
+        }
+
+        if (changed) fixed++;
+    });
+
+    if (fixed > 0) window.saveToDisk();
+    console.log('fixAllYields log:', log);
+    window.showToast(fixed + ' inventory yields fixed.');
+    return { fixed, log };
+};
+};
+
+// Delete all recipes (backs up to localStorage first)
+window.deleteAllRecipes = () => {
+    const count = (window.recipes || []).length;
+    if (count === 0) return window.showToast('No recipes to delete.', 'error');
+    try { localStorage.setItem('_recipesBackup', JSON.stringify(window.recipes)); } catch(e) {}
+    window.recipes = [];
+    window.saveToDisk();
+    window.showToast(count + ' recipes deleted. Backup saved to localStorage.');
+    return count;
+};
+
+// Unlink all inventory-linked ingredients back to raw
+window.unlinkAllIngredients = () => {
+    let count = 0;
+    (window.recipes || []).forEach(r => {
+        (r.ingredients || []).forEach((ing, idx) => {
+            if (ing.type === 'inv') {
+                r.ingredients[idx] = { type: 'raw', name: ing._rawName || ing.name, qty: 0, unit: '' };
+                count++;
+            }
+        });
+    });
+    if (count > 0) { window.saveToDisk(); window.showToast(count + ' ingredients unlinked.'); }
+    return count;
+};
+
 // --- STOCK MOVEMENT AUDIT TRAIL ---
 window.logStockMovement = function(itemId, qtyChange, source, opts) {
     opts = opts || {};

@@ -107,6 +107,8 @@ window.renderRecipeHub = () => {
 };
 
 window.renderRecipeView = () => {
+    // Migrate old "86'd" status to "Off Menu"
+    (window.recipes || []).forEach(r => { if (r.status === "86'd") r.status = 'Off Menu'; });
     const stationColor = { 'Kitchen': 'var(--orange)', 'Bar': 'var(--blue)', 'Prep': 'var(--purple)' };
     let filtered = (window.recipes || []).filter(r => {
         if (window.recFilters.status !== 'All' && (r.status || 'Active') !== window.recFilters.status) return false;
@@ -121,12 +123,114 @@ window.renderRecipeView = () => {
     });
     const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('');
     const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
-    const statusPills = ['Active',"86'd",'Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
+    const statusPills = ['Active','Off Menu','Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
+    // Sort logic for table view
+    const sort = window._recSort || { col: 'name', dir: 'asc' };
+    const sortFn = (a, b) => {
+        let va, vb;
+        switch (sort.col) {
+            case 'name': va = a.name.toLowerCase(); vb = b.name.toLowerCase(); break;
+            case 'station': va = (a.station||'Kitchen'); vb = (b.station||'Kitchen'); break;
+            case 'type': va = a.type; vb = b.type; break;
+            case 'cost': va = a.cost||0; vb = b.cost||0; break;
+            case 'sell': va = a.price||0; vb = b.price||0; break;
+            case 'gp': va = a.gp||0; vb = b.gp||0; break;
+            case 'linked': va = (a.ingredients||[]).filter(i=>i.type==='inv'||i.type==='batch').length; vb = (b.ingredients||[]).filter(i=>i.type==='inv'||i.type==='batch').length; break;
+            default: va = a.name.toLowerCase(); vb = b.name.toLowerCase();
+        }
+        if (va < vb) return sort.dir === 'asc' ? -1 : 1;
+        if (va > vb) return sort.dir === 'asc' ? 1 : -1;
+        return 0;
+    };
+
+    const viewMode = window._recViewMode || localStorage.getItem('recViewMode') || 'grid';
+    const sortArrow = (col) => sort.col === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    const sortClick = (col) => `window._recSort=window._recSort||{col:'name',dir:'asc'};if(window._recSort.col==='${col}')window._recSort.dir=window._recSort.dir==='asc'?'desc':'asc';else{window._recSort.col='${col}';window._recSort.dir='asc';}window.showView('recipes');`;
+    const viewToggle = `<div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <button onclick="window._recViewMode='grid';localStorage.setItem('recViewMode','grid');window.showView('recipes');" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;color:${viewMode==='grid'?'#fff':'var(--text-muted)'};background:${viewMode==='grid'?'var(--blue)':'var(--card-bg)'};">Grid</button>
+        <button onclick="window._recViewMode='table';localStorage.setItem('recViewMode','table');window.showView('recipes');" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;color:${viewMode==='table'?'#fff':'var(--text-muted)'};background:${viewMode==='table'?'var(--blue)':'var(--card-bg)'};">Table</button>
+    </div>`;
+
+    // Build grid view
+    const emptyHtml = '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);grid-column:1/-1;"><div style="font-size:36px;margin-bottom:12px">⚖️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No recipes found</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Try adjusting your filters or create a new recipe.</div></div>';
+
+    const gridHtml = filtered.length === 0 ? emptyHtml : filtered.map(r => {
+        const gpColor = r.gp >= GP_TARGET ? 'var(--green)' : r.gp > 0 ? 'var(--red)' : 'var(--text-muted)';
+        const station = r.station || 'Kitchen';
+        const status = r.status || 'Active';
+        const statusColor = status === 'Active' ? 'var(--green)' : status === 'Off Menu' ? 'var(--red)' : 'var(--orange)';
+        return `<div class="card" style="border-left:4px solid ${stationColor[station] || 'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:12px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            ${r.photo ? `<img src="${r.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">` : ''}
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${esc(r.name)}</h4>
+                <span style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};padding:2px 5px;border-radius:8px;white-space:nowrap;">${status}</span>
+            </div>
+            <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
+                <span style="font-size:11px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:2px 7px;border-radius:8px;">${station}</span>
+                <span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:6px 8px;border-radius:5px;font-size:11px;border:1px solid var(--border);">
+                <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost || 0).toFixed(2)}</strong><br>${r.type === 'Menu' ? `Sell: $${Number(r.price || 0).toFixed(2)}` : `Yield: ${r.yieldQty} ${esc(r.yieldUnit)}`}</div>
+                ${r.type === 'Menu' && r.price > 0 ? `<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp || 0}%</div>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients || []).filter(i => i.type === 'inv' || i.type === 'batch').length} linked · ${(r.ingredients || []).filter(i => i.type === 'raw').length} raw</div>
+        </div>`;
+    }).join('');
+
+    // Build table view
+    const sortedForTable = [...filtered].sort(sortFn);
+    const tableRows = sortedForTable.length === 0 ? `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No recipes found</td></tr>` : sortedForTable.map(r => {
+        const station = r.station || 'Kitchen';
+        const status = r.status || 'Active';
+        const statusColor = status === 'Active' ? 'var(--green)' : status === 'Off Menu' ? 'var(--red)' : 'var(--orange)';
+        const gpColor = r.gp >= GP_TARGET ? 'var(--green)' : r.gp > 0 ? 'var(--red)' : 'var(--text-muted)';
+        const linked = (r.ingredients || []).filter(i => i.type === 'inv' || i.type === 'batch').length;
+        const raw = (r.ingredients || []).filter(i => i.type === 'raw').length;
+        const total = linked + raw;
+        const linkPct = total > 0 ? Math.round((linked / total) * 100) : 0;
+        const linkColor = linkPct === 100 ? 'var(--green)' : linkPct > 50 ? 'var(--orange)' : 'var(--red)';
+        return `<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+            <td style="padding:10px 12px;"><strong style="font-size:13px;">${esc(r.name)}</strong>${r.posAlias ? `<br><small style="color:var(--text-muted);">${esc(r.posAlias)}</small>` : ''}</td>
+            <td style="padding:10px 8px;"><span style="font-size:11px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:2px 7px;border-radius:8px;">${station}</span></td>
+            <td style="padding:10px 8px;"><span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span></td>
+            <td style="padding:10px 8px;font-weight:bold;color:var(--brand-accent);font-size:13px;">$${Number(r.cost || 0).toFixed(2)}</td>
+            <td style="padding:10px 8px;font-size:13px;">${r.type === 'Menu' ? '$' + Number(r.price || 0).toFixed(2) : '<span style="color:var(--text-muted);font-size:11px;">' + (r.yieldQty || '') + ' ' + esc(r.yieldUnit || '') + '</span>'}</td>
+            <td style="padding:10px 8px;font-weight:bold;font-size:14px;color:${gpColor};">${r.type === 'Menu' && r.price > 0 ? (r.gp || 0) + '%' : '—'}</td>
+            <td style="padding:10px 8px;font-size:12px;"><span style="color:${linkColor};">${linked}/${total}</span><div style="width:50px;height:4px;background:var(--border);border-radius:2px;margin-top:3px;"><div style="width:${linkPct}%;height:100%;background:${linkColor};border-radius:2px;"></div></div></td>
+            <td style="padding:10px 8px;"><span style="font-size:11px;font-weight:bold;color:${statusColor};">${status}</span></td>
+            <td style="padding:10px 8px;white-space:nowrap;" onclick="event.stopPropagation();">
+                <button onclick="window.editRecipeForm('${r.id}')" class="btn btn-outline" style="font-size:11px;padding:4px 8px;" title="Edit">✏️</button>
+                <button onclick="window.duplicateRecipe('${r.id}')" class="btn btn-outline" style="font-size:11px;padding:4px 8px;" title="Duplicate">📋</button>
+                <button onclick="var rc=window.recipes.find(x=>x.id==='${r.id}');if(rc){rc.status=rc.status==='Off Menu'?'Active':'Off Menu';window.saveToDisk();window.showView('recipes');}" class="btn btn-outline" style="font-size:11px;padding:4px 8px;${status === 'Off Menu' ? 'border-color:var(--green);color:var(--green);' : 'border-color:var(--red);color:var(--red);'}" title="${status === 'Off Menu' ? 'Put back on menu' : 'Take off menu'}">${status === 'Off Menu' ? '✅' : '🚫'}</button>
+            </td>
+        </tr>`;
+    }).join('');
+
+    const tableHtml = `<div class="card" style="padding:0;overflow:hidden;">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">
+                <th style="padding:10px 12px;text-align:left;cursor:pointer;" onclick="${sortClick('name')}">Name${sortArrow('name')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('station')}">Station${sortArrow('station')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('type')}">Type${sortArrow('type')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('cost')}">Cost${sortArrow('cost')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('sell')}">Sell/Yield${sortArrow('sell')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('gp')}">GP%${sortArrow('gp')}</th>
+                <th style="padding:10px 8px;text-align:left;cursor:pointer;" onclick="${sortClick('linked')}">Linked${sortArrow('linked')}</th>
+                <th style="padding:10px 8px;text-align:left;">Status</th>
+                <th style="padding:10px 8px;text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+        </table>
+        </div>
+    </div>`;
+
     return `
     <div style="max-width:1200px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
             <div><h2 style="margin:0">⚖️ Recipe Engine <span style="font-size:14px;color:var(--text-muted);font-weight:normal;">(${filtered.length} shown)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Create and manage recipes to track food costs and GP%</div></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                ${viewToggle}
                 <button onclick="window.showView('sell-price-editor')" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">💰 Sell Prices</button>
                 <button onclick="window.showView('bulk-category-editor')" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">🏷️ Categories</button>
                 <button onclick="window.showView('pos-alias-editor')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 POS Aliases</button>
@@ -143,30 +247,7 @@ window.renderRecipeView = () => {
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Station</small><div style="margin-top:5px;">${stationPills}</div></div>
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
         </div>
-        <div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;">
-            ${filtered.length===0?'<div style="text-align:center;padding:48px 20px;color:var(--text-muted);grid-column:1/-1;"><div style="font-size:36px;margin-bottom:12px">⚖️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No recipes yet</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create your first recipe to start tracking food costs and GP%</div></div>':filtered.map(r=>{
-                const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--red)':'var(--text-muted)';
-                const station=r.station||'Kitchen';
-                const status=r.status||'Active';
-                const statusColor=status==='Active'?'var(--green)':status==="86'd"?'var(--red)':'var(--orange)';
-                return `<div class="card" style="border-top:4px solid ${stationColor[station]||'var(--border)'};cursor:pointer;transition:transform 0.15s;padding:12px;" onclick="window.viewRecipe('${r.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                    ${r.photo?`<img src="${r.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">`:''}
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-                        <h4 style="margin:0;font-size:14px;flex:1;padding-right:6px;line-height:1.3;">${esc(r.name)}</h4>
-                        <span style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};padding:2px 5px;border-radius:8px;white-space:nowrap;">${status}</span>
-                    </div>
-                    <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
-                        <span style="font-size:11px;color:${stationColor[station]};border:1px solid ${stationColor[station]};padding:2px 7px;border-radius:8px;">${station}</span>
-                        <span style="font-size:11px;color:var(--text-muted);border:1px solid var(--border);padding:2px 7px;border-radius:8px;">${r.type}</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;background:var(--bg-main);padding:6px 8px;border-radius:5px;font-size:11px;border:1px solid var(--border);">
-                        <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost||0).toFixed(2)}</strong><br>${r.type==='Menu'?`Sell: $${Number(r.price||0).toFixed(2)}`:`Yield: ${r.yieldQty} ${esc(r.yieldUnit)}`}</div>
-                        ${r.type==='Menu'&&r.price>0?`<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp||0}%</div>`:''}
-                    </div>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients||[]).filter(i=>i.type==='inv'||i.type==='batch').length} linked · ${(r.ingredients||[]).filter(i=>i.type==='raw').length} raw</div>
-                </div>`;
-            }).join('')}
-        </div>
+        ${viewMode === 'table' ? tableHtml : `<div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;">${gridHtml}</div>`}
     </div>`;
 };
 
@@ -304,6 +385,39 @@ window.cascadeRecipeCosts = (changedInvIds) => {
     });
     if (updatedBatches>0||updatedMenus>0) window.saveToDisk();
     return { updatedBatches, updatedMenus, gpAlerts };
+};
+
+// Recalculate costs for ALL recipes (batches first, then menus)
+window.recalcAllCosts = () => {
+    let count = 0;
+    (window.recipes||[]).filter(r => r.type === 'Batch').forEach(r => {
+        let cost = 0;
+        (r.ingredients||[]).forEach(ing => {
+            if (ing.type === 'inv') {
+                const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
+                if (inv) cost += ing.qty * ((inv.price||0) / (inv.yield||1));
+            }
+        });
+        r.cost = cost;
+        count++;
+    });
+    (window.recipes||[]).filter(r => r.type === 'Menu').forEach(r => {
+        let cost = 0;
+        (r.ingredients||[]).forEach(ing => {
+            if (ing.type === 'inv') {
+                const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
+                if (inv) cost += ing.qty * ((inv.price||0) / (inv.yield||1));
+            } else if (ing.type === 'batch') {
+                const b = (window.recipes||[]).find(x => x.id === ing.ref);
+                if (b) cost += ing.qty * ((b.cost||0) / (b.yieldQty||1));
+            }
+        });
+        r.cost = cost;
+        r.gp = r.price > 0 ? parseFloat(((r.price - cost) / r.price * 100).toFixed(1)) : 0;
+        count++;
+    });
+    window.saveToDisk();
+    return count;
 };
 
 // =============================================================================
@@ -534,7 +648,7 @@ window.editRecipeForm = (id = null) => {
                     <div><label style="font-size:11px;color:var(--text-muted);">Name</label><input type="text" id="r-n" class="input-box" value="${esc(r.name)}" style="margin:0;"></div>
                     <div><label style="font-size:11px;color:var(--text-muted);">Type</label><select id="r-type" class="input-box" style="margin:0;" onchange="window.refreshRB()"><option ${r.type==='Menu'?'selected':''}>Menu</option><option ${r.type==='Batch'?'selected':''}>Batch</option></select></div>
                     <div><label style="font-size:11px;color:var(--text-muted);">Station</label><select id="r-station" class="input-box" style="margin:0;"><option ${(r.station||'Kitchen')==='Kitchen'?'selected':''}>Kitchen</option><option ${r.station==='Bar'?'selected':''}>Bar</option><option ${r.station==='Prep'?'selected':''}>Prep</option></select></div>
-                    <div><label style="font-size:11px;color:var(--text-muted);">Status</label><select id="r-status" class="input-box" style="margin:0;"><option ${(r.status||'Active')==='Active'?'selected':''}>Active</option><option ${r.status==="86'd"?'selected':''}>86'd</option><option ${r.status==='Development'?'selected':''}>Development</option></select></div>
+                    <div><label style="font-size:11px;color:var(--text-muted);">Status</label><select id="r-status" class="input-box" style="margin:0;"><option ${(r.status||'Active')==='Active'?'selected':''}>Active</option><option ${r.status==='Off Menu'?'selected':''}>Off Menu</option><option ${r.status==='Development'?'selected':''}>Development</option></select></div>
                 </div>
                 <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
                     ${!isBatch?`<div><label style="font-size:11px;color:var(--blue);font-weight:bold;">Lightspeed POS Alias</label><input type="text" id="r-pos" class="input-box" value="${esc(r.posAlias||'')}" placeholder="Exact POS name..." style="margin:0;border-color:var(--blue);"></div>`:'<div></div>'}
