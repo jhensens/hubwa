@@ -99,13 +99,18 @@ window.safeCategories = [
     'Staff RSAs & Certs', 'Employment & HR', 'Lease & Property', 'Supplier Agreements',
     'Financial & Tax', 'Training & Procedures', 'Health & Safety (WHS)', 'Menus & Marketing', 'General / Other'
 ];
-window.kbCategories = [];
+window.kbCategories = ["Opening & Closing", "Food Safety & HACCP", "Bar Procedures", "FOH Procedures", "BOH Procedures", "Emergency & Safety", "Equipment Guides", "HR & Policies"];
 window.onboardingTemplates = {
     'FOH (Front of House)': { 'Day 1: Basics': [{id: 'foh1', label: 'Venue Tour & Safety'}], 'Compliance': [{id: 'foh3', label: 'Upload RSA', isUpload: true, cat: 'Staff RSAs'}] },
     'BOH (Back of House)': { 'Day 1: Kitchen': [{id: 'boh1', label: 'Kitchen Safety'}], 'Compliance': [{id: 'boh3', label: 'Upload Food Safety Cert', isUpload: true, cat: 'Food Safety Certs'}] }
 };
-window.fridgeUnits = ["Walk-in Coolroom", "Kitchen Fridge 1", "Bar Reach-in"];
-window.masterChecklists = { "Opening Duties": ["Unlock doors", "Check coffee machine"], "Closing Kitchen": ["Deep clean grill", "Empty bins"] };
+window.fridgeUnits = ["Walk-in Coolroom", "Walk-in Freezer", "Kitchen Line Fridge", "Kitchen Prep Fridge", "Bar Under-counter 1", "Bar Under-counter 2", "Bar Display Fridge", "Dessert Reach-in"];
+window.masterChecklists = {
+    "Weekly Deep Clean \u2014 Kitchen": ["Exhaust hood & filters degreased","Behind all equipment pulled out & cleaned","Cool room shelves & floor scrubbed","Grease traps flushed & scraped","Under benches & sinks wiped","Oven interior deep clean","Dry stores shelving wiped & organised","Dishwasher & glasswasher interior cleaned"],
+    "Weekly Deep Clean \u2014 Bar": ["Speed rail & well drains flushed","Ice machine interior sanitised","Beer tap lines & drip trays cleaned","Under-counter fridges wiped out","Back bar shelving dusted & organised","Glass polishing check \u2014 no water marks","Garnish station containers deep cleaned","Bar mats & floor mats soaked & scrubbed"],
+    "Weekly Deep Clean \u2014 FOH": ["All table bases & legs wiped","Window sills & ledges dusted","Bathroom deep clean (tiles, mirrors, fixtures)","Entry area & signage cleaned","Menu holders / stands wiped","Skirting boards & corners swept","Air conditioning filters / vents dusted"],
+    "Monthly Safety Walk": ["Fire extinguishers checked (pressure, pin, signage)","Exit signs illuminated & visible","First aid kit fully stocked","Slip hazards assessed & addressed","Chemical storage secure & labelled (SDS available)","Emergency procedures posted & legible"]
+};
 
 // --- 1b. HTML ESCAPE UTILITY (XSS Prevention) ---
 window.esc = function(str) {
