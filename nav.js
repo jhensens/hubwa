@@ -157,18 +157,63 @@ window.globalSearch = (query) => {
         }
     });
 
-    // Quick-nav views
-    var viewLinks = [
-        { keywords: ['depletion', 'deplete', 'eod', 'stock depletion'], icon: '📉', label: 'Depletion History', sub: 'Stock depletion run history & undo', view: 'depletion-history' },
-        { keywords: ['audit', 'audit log', 'trail'], icon: '📋', label: 'Audit Log', sub: 'Full change audit trail', view: 'audit-log' }
-    ];
-    viewLinks.forEach(function(vl) {
-        if (vl.keywords.some(function(k) { return k.includes(q) || q.includes(k); })) {
-            results.push({ type: 'nav', icon: vl.icon, label: vl.label, sub: vl.sub, action: "window.showView('" + vl.view + "')" });
+    // Search rotational tasks
+    (window.rotationalTasks || []).forEach((t, i) => {
+        if (t.name.toLowerCase().includes(q) || (t.notes && t.notes.toLowerCase().includes(q))) {
+            results.push({ type: 'task', icon: '🔄', label: t.name, sub: (t.freq || 'Weekly') + (t.notes ? ' · ' + t.notes.substring(0, 40) : ''), action: "window.showView('tasks')" });
         }
     });
 
-    return results.slice(0, 15);
+    // Search incidents
+    (window.incidentLogs || []).forEach((inc, i) => {
+        const searchStr = [inc.type, inc.description, inc.staff, inc.notes, inc.location].filter(Boolean).join(' ').toLowerCase();
+        if (searchStr.includes(q)) {
+            results.push({ type: 'incident', icon: '⚠️', label: inc.type || 'Incident', sub: (inc.date || '') + (inc.staff ? ' · ' + inc.staff : ''), action: "window.showView('incidents')" });
+        }
+    });
+
+    // Search maintenance / defect logs
+    (window.defectLogs || []).forEach((d, i) => {
+        if ((d.item && d.item.toLowerCase().includes(q)) || (d.desc && d.desc.toLowerCase().includes(q))) {
+            const status = d.status === 'Resolved' ? '✓ Resolved' : '⏳ Open';
+            results.push({ type: 'maintenance', icon: '🛠️', label: d.item || 'Issue', sub: status + (d.desc ? ' · ' + d.desc.substring(0, 40) : ''), action: "window.showView('maintenance')" });
+        }
+    });
+
+    // Search equipment / assets
+    (window.equipmentData || []).forEach((e, i) => {
+        if ((e.name && e.name.toLowerCase().includes(q)) || (e.code && e.code.toLowerCase().includes(q))) {
+            results.push({ type: 'asset', icon: '⚙️', label: e.name, sub: 'Code: ' + (e.code || 'N/A') + ' · Service: every ' + (e.interval || '?') + ' months', action: "window.showView('maintenance')" });
+        }
+    });
+
+    // Search announcements
+    (window.announcements || []).forEach((a, i) => {
+        if ((a.title && a.title.toLowerCase().includes(q)) || (a.body && a.body.toLowerCase().includes(q))) {
+            results.push({ type: 'announcement', icon: '📢', label: a.title || 'Announcement', sub: (a.priority || 'info') + ' · ' + (a.date || ''), action: "window.showView('noticeboard')" });
+        }
+    });
+
+    // Quick-nav views
+    var viewLinks = [
+        { keywords: ['depletion', 'deplete', 'eod', 'stock depletion'], icon: '📉', label: 'Depletion History', sub: 'Stock depletion run history & undo', view: 'depletion-history' },
+        { keywords: ['audit', 'audit log', 'trail'], icon: '📋', label: 'Audit Log', sub: 'Full change audit trail', view: 'audit-log' },
+        { keywords: ['wastage', 'waste', 'spoilage', 'waste log'], icon: '🗑️', label: 'Wastage Tracker', sub: 'Log spoilage, breakage, expired stock', view: 'wastage' },
+        { keywords: ['handover', 'debrief', 'shift notes'], icon: '📋', label: 'Handover / Debrief', sub: 'Shift handover notes', view: 'handover' },
+        { keywords: ['roster', 'schedule', 'shifts', 'tanda'], icon: '🗓️', label: 'Roster', sub: 'Staff scheduling & rosters', view: 'rosters' },
+        { keywords: ['comply', 'compliance', 'checklist', 'temperature', 'temp log', 'haccp'], icon: '🌡️', label: 'Compliance', sub: 'Temps, shift checklists, HACCP', view: 'compliance' },
+        { keywords: ['badge', 'recognition', 'kudos', 'achievement'], icon: '🏆', label: 'Badge Management', sub: 'Staff recognition badges', view: 'badge-management' },
+        { keywords: ['onboard', 'orientation', 'training', 'new staff'], icon: '👥', label: 'Staff Management', sub: 'Onboarding, qualifications, directory', view: 'orientation' },
+        { keywords: ['setup', 'wizard', 'seed', 'bwi default'], icon: '🏮', label: 'BWI Setup Wizard', sub: 'Load venue defaults', view: null }
+    ];
+    viewLinks.forEach(function(vl) {
+        if (vl.keywords.some(function(k) { return k.includes(q) || q.includes(k); })) {
+            const action = vl.view ? "window.showView('" + vl.view + "')" : "window.renderBWISetupWizard()";
+            results.push({ type: 'nav', icon: vl.icon, label: vl.label, sub: vl.sub, action: action });
+        }
+    });
+
+    return results.slice(0, 20);
 };
 
 window._debouncedGlobalSearch = window.debounce ? window.debounce((val) => window.renderGlobalSearchResults(val), 250) : (val) => window.renderGlobalSearchResults(val);
@@ -191,7 +236,7 @@ window.renderGlobalSearchResults = (query) => {
     }
     const grouped = {};
     results.forEach(r => { if (!grouped[r.type]) grouped[r.type] = []; grouped[r.type].push(r); });
-    const typeLabels = { inventory:'Inventory', recipe:'Recipes', sop:'Knowledge Base', contact:'Contacts', document:'Digital Safe', staff:'Staff', supplier:'Suppliers' };
+    const typeLabels = { inventory:'Inventory', recipe:'Recipes', sop:'Knowledge Base', contact:'Contacts', document:'Digital Safe', staff:'Staff', supplier:'Suppliers', task:'Tasks', incident:'Incidents', maintenance:'Maintenance', asset:'Equipment', announcement:'Noticeboard', nav:'Quick Navigation' };
     let html = '';
     Object.keys(grouped).forEach(type => {
         html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 15px 4px;font-weight:bold;">' + (typeLabels[type]||type) + '</div>';

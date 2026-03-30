@@ -441,6 +441,38 @@ window.renderComplianceView = function() {
     </div>`;
 }
 
+window.showTempHistory = () => {
+    const logs = (window.tempLogs || []).slice().reverse();
+    if (!logs.length) return window.showToast('No temperature logs yet.', 'error');
+    const units = [...new Set(logs.map(t => t.unit))].sort();
+    const filterUnit = window._tempHistFilter || '';
+    const filtered = filterUnit ? logs.filter(t => t.unit === filterUnit) : logs;
+    const unitOpts = '<option value="">All Units</option>' + units.map(u => '<option value="' + esc(u) + '"' + (filterUnit === u ? ' selected' : '') + '>' + esc(u) + '</option>').join('');
+    const rows = filtered.slice(0, 100).map(t => {
+        const temp = Number(t.value || 0);
+        const fail = temp > 5 || temp < -25;
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + esc(t.time || '') + '</td>' +
+            '<td style="padding:6px 8px;font-size:13px;">' + esc(t.unit || '') + '</td>' +
+            '<td style="padding:6px 8px;font-weight:bold;color:' + (fail ? 'var(--red)' : 'var(--green)') + ';">' + temp + '°C</td>' +
+            '<td style="padding:6px 8px;font-size:12px;color:' + (fail ? 'var(--red)' : 'var(--green)') + ';">' + (fail ? 'FAIL' : 'PASS') + '</td>' +
+            '<td style="padding:6px 8px;font-size:12px;">' + esc(t.staff || '') + '</td>' +
+            '<td style="padding:6px 8px;font-size:11px;color:var(--red);">' + (t.action ? esc(t.action) : '') + '</td>' +
+        '</tr>';
+    }).join('');
+    const html = '<div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+        '<select class="input-box" style="margin:0;flex:1;" onchange="window._tempHistFilter=this.value;window.showTempHistory()">' + unitOpts + '</select>' +
+        '<button onclick="window.exportTempLogCSV()" class="btn btn-outline" style="font-size:12px;">📥 Export CSV</button>' +
+        '<button onclick="window.printTempLog()" class="btn btn-outline" style="font-size:12px;">🖨️ Print</button>' +
+        '<span style="font-size:12px;color:var(--text-muted);">' + filtered.length + ' logs</span>' +
+    '</div>' +
+    '<div style="max-height:55vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+    '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;position:sticky;top:0;">' +
+    '<th style="padding:8px;text-align:left;">Date/Time</th><th style="padding:8px;text-align:left;">Unit</th><th style="padding:8px;text-align:left;">Temp</th><th style="padding:8px;text-align:left;">Status</th><th style="padding:8px;text-align:left;">Staff</th><th style="padding:8px;text-align:left;">Action</th>' +
+    '</tr></thead><tbody>' + (rows || '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text-muted);">No logs yet.</td></tr>') + '</tbody></table></div>';
+    window.openModal('🌡️ Temperature Log History (' + filtered.length + ' entries)', html);
+};
+
 window.checkT = (i) => { document.getElementById(`t-warn-${i}`).style.display = parseFloat(document.getElementById(`t-val-${i}`).value) > 5 ? 'block' : 'none'; };
 window.logAllTemps = () => { 
     const staff = document.getElementById('t-staff').value;

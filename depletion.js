@@ -79,6 +79,7 @@ window.renderWastageView = () => {
                 <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Log spoilage, breakage, and expired stock to track and reduce waste</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="window.exportWastageCSV()" class="btn btn-outline" style="font-size:12px;">📥 Export CSV</button>
                 <button onclick="window.showWastageReport()" class="btn btn-outline" style="font-size:12px;">📊 Wastage Report</button>
             </div>
         </div>
@@ -180,6 +181,22 @@ window.showWastageReport = () => {
     topReasons.map(([r,v]) => '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span>' + esc(r) + '</span><span style="color:var(--red);font-weight:bold;">$' + v.toFixed(2) + '</span></div>').join('');
 
     window.openModal('🗑️ Wastage Report — Last 30 Days', html);
+};
+
+window.exportWastageCSV = () => {
+    const logs = window.wastageLogs || [];
+    if (!logs.length) return window.showToast('No wastage logs to export.', 'error');
+    const headers = ['Date/Time','Item','Quantity','Unit','Reason','Staff','Value ($)'];
+    const rows = logs.map(w => [
+        w.time || '', w.itemName || '', w.logQty || '', w.unitLog || '',
+        w.reason || '', w.staff || '', Number(w.value || 0).toFixed(2)
+    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'wastage-log-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    window.showToast(logs.length + ' wastage entries exported.');
 };
 
 window.logWastage = () => {
