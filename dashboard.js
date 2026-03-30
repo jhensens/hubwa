@@ -942,12 +942,12 @@ window.newHandoverForm = () => {
     // Enhanced auto-populate from today's data
     const prefills = window._generateHandoverPrefill ? window._generateHandoverPrefill() : {};
 
-    const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
+    const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', 'Off Menu Items', 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
 
     const sectionFields = sections.map((sec, i) => {
         let placeholder = 'Notes...';
         const prefill = prefills[sec] || '';
-        if (sec.toLowerCase().includes('86')) placeholder = "List any items 86'd during service...";
+        if (sec.toLowerCase().includes('off menu')) placeholder = 'List any items off menu during service...';
         if (sec.toLowerCase().includes('stock')) placeholder = 'Stock issues or items running low...';
         if (sec.toLowerCase().includes('service summary')) placeholder = 'How was the shift? Covers, vibe, any issues...';
         if (sec.toLowerCase().includes('opening')) placeholder = 'What does the opening team need to know?';
@@ -986,7 +986,7 @@ window.saveAndGenerateDebrief = async () => {
     if (!mgr) return window.showToast('Enter your name.', 'error');
 
     // Gather structured section data before validation
-    const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
+    const sections = (window.handoverTemplateConfig || {}).sections || ['Service Summary', 'Off Menu Items', 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'];
     const sectionData = {};
     sections.forEach((sec, i) => {
         const el = document.getElementById('h-sec-' + i);

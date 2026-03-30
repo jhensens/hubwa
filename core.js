@@ -89,7 +89,7 @@ window.inventorySubcategories = window.inventorySubcategories || {};
 window.kbSubcategories = window.kbSubcategories || {};
 window.safeSubcategories = window.safeSubcategories || {};
 window.handoverTemplateConfig = window.handoverTemplateConfig || {
-    sections: ['Service Summary', "What's 86'd", 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'],
+    sections: ['Service Summary', 'Off Menu Items', 'Stock Alerts', 'Issues / Follow-ups', 'Opening Notes for Tomorrow'],
     requireStaff: true
 };
 window.lsImportLog = [];

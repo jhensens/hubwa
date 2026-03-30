@@ -416,11 +416,11 @@ window._generateHandoverPrefill = () => {
     sections.forEach(sec => {
         const lower = sec.toLowerCase();
 
-        if (lower.includes('86')) {
-            const items86 = (window.inventoryItems || []).filter(i => !i.archived && (i.stock <= 0)).map(i => i.name);
-            const recipes86 = (window.recipes || []).filter(r => r.status === "86'd" && !r.archived).map(r => r.name);
-            const all86 = [...new Set([...items86, ...recipes86])];
-            prefills[sec] = all86.length > 0 ? all86.join(', ') : 'Nothing 86\'d';
+        if (lower.includes('off menu')) {
+            const itemsOff = (window.inventoryItems || []).filter(i => !i.archived && (i.stock <= 0)).map(i => i.name);
+            const recipesOff = (window.recipes || []).filter(r => r.status === 'Off Menu' && !r.archived).map(r => r.name);
+            const allOff = [...new Set([...itemsOff, ...recipesOff])];
+            prefills[sec] = allOff.length > 0 ? allOff.join(', ') : 'Nothing off menu';
         }
 
         if (lower.includes('stock')) {
@@ -684,7 +684,7 @@ Wastage: $${wasteTotal.toFixed(2)} (${todayWaste.length} items)
 Temp logs: ${todayTemps.length} recorded, ${breaches.length} breaches
 Incidents: ${todayIncidents.length}
 Stock: ${lowStock.length} below PAR, ${zeroItems.length} at zero
-86'd items: ${zeroItems.slice(0,5).map(i=>i.name).join(', ') || 'None'}`;
+Off menu items: ${zeroItems.slice(0,5).map(i=>i.name).join(', ') || 'None'}`;
 
     const prompt = `You are writing a concise end-of-day summary for ${venue}.
 

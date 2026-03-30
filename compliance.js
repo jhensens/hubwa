@@ -207,7 +207,7 @@ window.renderShiftChecklists = () => {
             'Check bar stock levels against PAR',
             'Float count and till setup',
             'Check reservations and covers for service',
-            'Brief FOH team on specials and 86s',
+            'Brief FOH team on specials and off-menu items',
             'Check cleanliness of all areas',
             'Check toilets and restock supplies'
         ],

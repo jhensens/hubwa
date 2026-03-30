@@ -131,7 +131,7 @@ window.renderVarianceReport = () => {
             '</table>' +
         '</div>' +
         '<div class="card" style="margin-top:20px;border-left:4px solid var(--blue);padding:12px 18px;">' +
-            '<p style="margin:0;font-size:13px;color:var(--text-muted);"><strong>How to read this:</strong> Positive variance means more was used than recipes predicted (possible: over-portioning, theft, unrecorded waste). Negative means less used than expected (possible: under-portioning, count error, unreported 86s).</p>' +
+            '<p style="margin:0;font-size:13px;color:var(--text-muted);"><strong>How to read this:</strong> Positive variance means more was used than recipes predicted (possible: over-portioning, theft, unrecorded waste). Negative means less used than expected (possible: under-portioning, count error, unreported off-menu items).</p>' +
         '</div>' +
     '</div>';
 };

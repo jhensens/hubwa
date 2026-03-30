@@ -222,11 +222,127 @@ window.fixAllYields = () => {
         if (changed) fixed++;
     });
 
-    if (fixed > 0) window.saveToDisk();
+    // Also fix buyUnit=kg with useUnit=g and yield=1 → yield=1000
+    (window.inventoryItems || []).forEach(i => {
+        const bu = (i.buyUnit || '').toLowerCase();
+        const uu = (i.useUnit || '').toLowerCase();
+        if (bu === 'kg' && uu === 'g' && i.yield === 1) {
+            log.push((i.name||'?') + ': buyUnit=kg, useUnit=g, yield 1→1000');
+            i.yield = 1000; fixed++;
+        }
+        if (bu === '100g' && i.yield <= 1) {
+            log.push((i.name||'?') + ': buyUnit=100g, yield→100, useUnit→g');
+            i.yield = 100; i.useUnit = 'g'; fixed++;
+        }
+        // Fix case/N spirits — price is per case, yield should be bottles × ml
+        const cm = (i.name||'').match(/case\s*\/\s*(\d+)/i);
+        if (cm) {
+            const packSize = parseInt(cm[1]);
+            const mlMatch = (i.name||'').match(/(\d{3,4})\s*ml/i);
+            if (mlMatch && packSize > 1 && i.yield === parseInt(mlMatch[1])) {
+                const newYield = parseInt(mlMatch[1]) * packSize;
+                log.push((i.name||'?') + ': case/' + packSize + ' yield ' + i.yield + '→' + newYield + 'ml');
+                i.yield = newYield; fixed++;
+            }
+        }
+    });
+
+    if (fixed > 0) {
+        window.saveToDisk();
+        // Auto-recalculate all recipe costs after yield changes
+        if (window.recalcAllCosts) {
+            const rc = window.recalcAllCosts();
+            window.showToast(fixed + ' yields fixed, ' + rc + ' recipe costs updated.');
+        } else {
+            window.showToast(fixed + ' inventory yields fixed.');
+        }
+    } else {
+        window.showToast('All yields look correct — nothing to fix.');
+    }
     console.log('fixAllYields log:', log);
-    window.showToast(fixed + ' inventory yields fixed.');
     return { fixed, log };
 };
+
+// ── Yield Health Check — finds items needing manual yield entry ──
+window.showYieldProblems = () => {
+    const problems = [];
+    const seen = new Set();
+    (window.recipes || []).forEach(r => {
+        (r.ingredients || []).forEach(ing => {
+            if (ing.type !== 'inv' || seen.has(ing.ref)) return;
+            const inv = (window.inventoryItems || []).find(i => i.id === ing.ref);
+            if (!inv) return;
+            const cost = ing.qty * ((inv.price || 0) / (inv.yield || 1));
+            if (inv.yield <= 6 && ing.qty > 5 && cost > 15) {
+                seen.add(ing.ref);
+                problems.push(inv);
+            }
+        });
+    });
+    if (problems.length === 0) {
+        window.showToast('No yield problems found!', 'success');
+        return;
+    }
+    // Build a modal showing the problem items with inline edit
+    const rows = problems.sort((a, b) => a.name.localeCompare(b.name)).map(inv => {
+        return `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;font-size:13px;"><strong>${window.esc(inv.name)}</strong><br>
+                <small style="color:var(--text-muted);">$${Number(inv.price||0).toFixed(2)} / ${window.esc(inv.buyUnit||'unit')}</small></td>
+            <td style="padding:8px;text-align:center;font-size:12px;color:var(--red);font-weight:bold;">${inv.yield} ${window.esc(inv.useUnit||'?')}</td>
+            <td style="padding:8px;text-align:center;">
+                <input type="number" step="1" class="input-box" value="" placeholder="e.g. 1000" style="width:80px;margin:0;padding:4px;font-size:12px;" id="yfix-${inv.id}">
+            </td>
+            <td style="padding:8px;text-align:center;">
+                <select class="input-box" style="width:70px;margin:0;padding:4px;font-size:12px;" id="yufix-${inv.id}">
+                    <option value="g" ${inv.useUnit==='g'?'selected':''}>g</option>
+                    <option value="ml" ${inv.useUnit==='ml'?'selected':''}>ml</option>
+                    <option value="each" ${inv.useUnit==='each'?'selected':''}>each</option>
+                </select>
+            </td>
+        </tr>`;
+    }).join('');
+
+    const html = `<div style="max-height:70vh;overflow-y:auto;">
+        <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">These items are priced "per unit" but recipes use them by weight/volume. Set the yield to how many grams/ml are in one buy unit.</p>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;border-bottom:2px solid var(--border);">
+                <th style="padding:6px 8px;text-align:left;">Item</th>
+                <th style="padding:6px 8px;text-align:center;">Current</th>
+                <th style="padding:6px 8px;text-align:center;">New Yield</th>
+                <th style="padding:6px 8px;text-align:center;">Unit</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
+
+    window.confirmAction({
+        title: '🔧 Yield Problems (' + problems.length + ' items)',
+        message: html,
+        confirmLabel: '💾 Save & Recalculate',
+        tier: 'standard',
+        onConfirm: () => {
+            let count = 0;
+            problems.forEach(inv => {
+                const yEl = document.getElementById('yfix-' + inv.id);
+                const uEl = document.getElementById('yufix-' + inv.id);
+                const newYield = yEl ? parseFloat(yEl.value) : 0;
+                const newUnit = uEl ? uEl.value : inv.useUnit;
+                if (newYield > 0) {
+                    inv.yield = newYield;
+                    inv.useUnit = newUnit;
+                    count++;
+                }
+            });
+            if (count > 0) {
+                if (window.recalcAllCosts) window.recalcAllCosts();
+                else window.saveToDisk();
+                window.showToast(count + ' yields updated, costs recalculated.');
+            } else {
+                window.showToast('No changes made.', 'info');
+            }
+            window.showView('inventory');
+        }
+    });
 };
 
 // Delete all recipes (backs up to localStorage first)
@@ -816,35 +932,9 @@ window.renderInventoryHub = () => {
     return '<div style="max-width:1100px;margin:auto;">' + tabBar + '</div>' + content;
 };
 
-window.renderInventoryView = () => {
-    let isWeekend = [0, 5, 6].includes(new Date().getDay());
-
-    let filtered = (window.inventoryItems || []).filter(item => {
-        let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
-        if (window.invFilters.filter === 'Active' && item.archived) return false;
-        if (window.invFilters.filter === 'Archived' && !item.archived) return false;
-        if (window.invFilters.filter === 'Below PAR' && (item.stock >= parTarget || item.archived)) return false;
-        if (!['Active','Archived','Below PAR'].includes(window.invFilters.filter) && item.category !== window.invFilters.filter) return false;
-        if (window.invFilters.search) {
-            const s = window.invFilters.search.toLowerCase();
-            return item.name.toLowerCase().includes(s) || (item.sku && item.sku.toLowerCase().includes(s));
-        }
-        return true;
-    });
-
-    const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
-    const belowParCount = (window.inventoryItems||[]).filter(i => {
-        if (i.archived) return false;
-        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
-        return i.stock < par;
-    }).length;
-    const belowBadge = belowParCount > 0 ? ' <span style="background:var(--red);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;">' + belowParCount + '</span>' : '';
-    const pillsHtml = ['Active', 'Below PAR', ...cats, 'Archived'].map(c =>
-        '<div class="tag-pill ' + (window.invFilters.filter===c?'active':'') + '" onclick="window.invFilters.filter=\'' + c + '\'; window.showView(\'inventory\')">' +
-        (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c) + '</div>'
-    ).join('');
-
-    // Performance: show total count, cap render at 200 items
+// Builds the accordion HTML for the filtered/grouped inventory list
+window._buildInvAccordion = (filtered, isWeekend) => {
+    const esc = window.esc || (s => s);
     const totalFiltered = filtered.length;
     const RENDER_CAP = 200;
     if (filtered.length > RENDER_CAP) filtered = filtered.slice(0, RENDER_CAP);
@@ -902,7 +992,7 @@ window.renderInventoryView = () => {
                 </span>
                 <span style="color:var(--blue); font-size:11px;">▼</span>
             </summary>
-            <div id="inv-list-container" style="overflow-x:auto; overflow-y:visible;">
+            <div style="overflow-x:auto; overflow-y:visible;">
                 <table style="width:100%; border-collapse:collapse;">
                     <thead><tr style="background:#0a0a0c; font-size:10px; color:var(--text-muted); text-transform:uppercase;">
                         <th style="padding:5px; width:30px;"></th>
@@ -937,10 +1027,52 @@ window.renderInventoryView = () => {
         </div>
     </div>` : '';
 
+    return { html: accordionHtml + bulkBar, totalFiltered, shownCount: Math.min(totalFiltered, RENDER_CAP) };
+};
+
+// Filters inventory items based on current invFilters state
+window._filterInvItems = (isWeekend) => {
+    return (window.inventoryItems || []).filter(item => {
+        let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
+        if (window.invFilters.filter === 'Active' && item.archived) return false;
+        if (window.invFilters.filter === 'Archived' && !item.archived) return false;
+        if (window.invFilters.filter === 'Below PAR' && (item.stock >= parTarget || item.archived)) return false;
+        if (!['Active','Archived','Below PAR'].includes(window.invFilters.filter) && item.category !== window.invFilters.filter) return false;
+        if (window.invFilters.search) {
+            const s = window.invFilters.search.toLowerCase();
+            return (item.name && item.name.toLowerCase().includes(s)) ||
+                   (item.sku && item.sku.toLowerCase().includes(s)) ||
+                   (item.supplier && item.supplier.toLowerCase().includes(s));
+        }
+        return true;
+    });
+};
+
+window.renderInventoryView = () => {
+    let isWeekend = [0, 5, 6].includes(new Date().getDay());
+    let filtered = window._filterInvItems(isWeekend);
+
+    const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
+    const belowParCount = (window.inventoryItems||[]).filter(i => {
+        if (i.archived) return false;
+        const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
+        return i.stock < par;
+    }).length;
+    const belowBadge = belowParCount > 0 ? ' <span style="background:var(--red);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;">' + belowParCount + '</span>' : '';
+    const pillsHtml = ['Active', 'Below PAR', ...cats, 'Archived'].map(c =>
+        '<div class="tag-pill ' + (window.invFilters.filter===c?'active':'') + '" onclick="window.invFilters.filter=\'' + c + '\'; window.showView(\'inventory\')">' +
+        (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c) + '</div>'
+    ).join('');
+
+    const result = window._buildInvAccordion(filtered, isWeekend);
+    const countLabel = result.totalFiltered > result.shownCount
+        ? result.shownCount + ' of ' + result.totalFiltered
+        : '' + result.totalFiltered;
+
     return `
     <div style="max-width:1100px; margin:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-            <div><h2 style="margin:0">📦 Live Inventory <span style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${totalFiltered > filtered.length ? filtered.length + ' of ' + totalFiltered : filtered.length} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
+            <div><h2 style="margin:0">📦 Live Inventory <span id="inv-count-label" style="font-size:14px; color:var(--text-muted); font-weight:normal;">(${countLabel} items)</span></h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">Track stock levels, pricing, and PAR targets across all zones</div></div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button onclick="window.showView('stock-count')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--green); color:var(--green);">✅ Quick Count</button>
                 <button onclick="window.showView(\'par-editor\')" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);">📋 PAR Editor</button>
@@ -948,6 +1080,8 @@ window.renderInventoryView = () => {
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
                 <button onclick="window.exportInventoryCSV()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">📥 Export CSV</button>
                 <button onclick="window.printStockLevels()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">🖨️ Print Stock</button>
+                <button onclick="window.fixAllYields()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--purple); color:var(--purple);" title="Auto-fix yields from item names and recalculate recipe costs">🔧 Fix Yields</button>
+                <button onclick="window.showYieldProblems()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);" title="Find items with wrong yields causing inflated recipe costs">⚠️ Yield Issues</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
@@ -959,8 +1093,7 @@ window.renderInventoryView = () => {
             <button onclick="window.invFilters.groupBy='Category'; window.showView(\'inventory\')" class="btn ${window.invFilters.groupBy==='Category'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Category</button>
             <button onclick="window.invFilters.groupBy='Zone'; window.showView(\'inventory\')" class="btn ${window.invFilters.groupBy==='Zone'?'btn-dark':'btn-outline'}" style="padding:6px 15px; font-size:12px;">Zone</button>
         </div>
-        ${accordionHtml}
-        ${bulkBar}
+        <div id="inv-accordion-wrap">${result.html}</div>
     </div>`;
 };
 

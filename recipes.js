@@ -16,29 +16,26 @@ window.recFilters = window.recFilters || { search: '', filter: 'All', station: '
 // -----------------------------------------------------------------------
 window._debouncedInvRefresh = window.debounce ? window.debounce(() => window._refreshInvList(), 250) : () => window._refreshInvList();
 window._refreshInvList = () => {
-    const container = document.getElementById('inv-list-container');
-    if (!container) { window.showView('inventory'); return; }
+    const wrap = document.getElementById('inv-accordion-wrap');
+    if (!wrap) { window.showView('inventory'); return; }
     const isWeekend = [0, 5, 6].includes(new Date().getDay());
-    let filtered = (window.inventoryItems || []).filter(item => {
-        let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
-        if (window.invFilters.filter === 'Active' && item.archived) return false;
-        if (window.invFilters.filter === 'Archived' && !item.archived) return false;
-        if (window.invFilters.filter === 'Low Stock' && (item.archived || item.stock >= parTarget)) return false;
-        if (window.invFilters.groupBy !== 'All' && item.category !== window.invFilters.groupBy && window.invFilters.groupBy !== 'Category') {
-            if (item.location !== window.invFilters.groupBy) return false;
-        }
-        if (window.invFilters.search) {
-            const s = window.invFilters.search.toLowerCase();
-            return (item.name && item.name.toLowerCase().includes(s)) ||
-                   (item.sku && item.sku.toLowerCase().includes(s)) ||
-                   (item.supplier && item.supplier.toLowerCase().includes(s));
-        }
-        return true;
-    });
-    // Re-render just the table body rows
-    container.innerHTML = window._buildInvRows(filtered, isWeekend);
-    // Re-attach bulk select
-    window._invSelected = window._invSelected || new Set();
+    let filtered = window._filterInvItems ? window._filterInvItems(isWeekend) : [];
+    const result = window._buildInvAccordion(filtered, isWeekend);
+    // Save cursor position before DOM update
+    const searchBox = document.getElementById('inv-search-box');
+    const cursorPos = searchBox ? searchBox.selectionStart : 0;
+    // Update accordion content only (search bar stays untouched)
+    wrap.innerHTML = result.html;
+    // Update item count label
+    const countLabel = document.getElementById('inv-count-label');
+    if (countLabel) {
+        const label = result.totalFiltered > result.shownCount
+            ? result.shownCount + ' of ' + result.totalFiltered
+            : '' + result.totalFiltered;
+        countLabel.textContent = '(' + label + ' items)';
+    }
+    // Restore focus and cursor
+    if (searchBox) { searchBox.focus(); searchBox.selectionStart = searchBox.selectionEnd = cursorPos; }
 };
 
 window._refreshRecList = () => {
@@ -234,6 +231,7 @@ window.renderRecipeView = () => {
                 <button onclick="window.showView('sell-price-editor')" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;">💰 Sell Prices</button>
                 <button onclick="window.showView('bulk-category-editor')" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);font-size:12px;">🏷️ Categories</button>
                 <button onclick="window.showView('pos-alias-editor')" class="btn btn-outline" style="border-color:var(--orange);color:var(--orange);font-size:12px;">🔗 POS Aliases</button>
+                <button onclick="window._recalcAllWithToast()" class="btn btn-outline" style="border-color:var(--green);color:var(--green);font-size:12px;" title="Recalculate all recipe costs from current inventory prices and yields">🔄 Recalc Costs</button>
                 <button onclick="window.openCostingReport()" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Costing Report</button>
                 <button onclick="window.exportRecipeBook()" class="btn btn-outline" style="font-size:12px;">📖 Recipe Book</button>
                 <button onclick="window.showView('batch-linker')" class="btn btn-outline" style="font-size:12px;">🔗 Link Ingredients</button>
@@ -418,6 +416,13 @@ window.recalcAllCosts = () => {
     });
     window.saveToDisk();
     return count;
+};
+
+// UI wrapper for recalcAllCosts — shows toast and refreshes view
+window._recalcAllWithToast = () => {
+    const count = window.recalcAllCosts();
+    window.showToast('✅ ' + count + ' recipe costs recalculated from current inventory.');
+    window.showView('recipes');
 };
 
 // =============================================================================
