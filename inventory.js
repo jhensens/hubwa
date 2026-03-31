@@ -1207,7 +1207,7 @@ window.editInvItem = (id = null) => {
     const cleanId = id ? String(id).trim() : null;
     let found = cleanId ? window.inventoryItems.find(i => i.id === cleanId) : null;
     let e = found || {
-        id: cleanId || window.generateId('inv'), name:'', category:'Food', supplier:'', price:0, sku:'',
+        id: cleanId || window.generateId('inv'), name:'', recipeName:'', category:'Food', supplier:'', price:0, sku:'',
         location:'', gstFree:false, buyUnit:'Unit', yield:1, useUnit:'Unit',
         stock:0, parWeekday:0, parWeekend:0, archived: false, history:[]
     };
@@ -1223,10 +1223,14 @@ window.editInvItem = (id = null) => {
     let html = `
     <div class="card" style="max-width:700px; margin:auto; padding-bottom: 80px;">
         <h2 style="margin-top:0;">${id ? 'Edit Product' : 'New Product'}</h2>
-        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:10px; margin-bottom:15px;">
+        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:10px; margin-bottom:10px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Product Name</label><input type="text" id="iv-n" class="input-box" value="${esc(e.name)}"></div>
             <div><label style="font-size:11px; color:var(--text-muted);">Category</label><input type="text" id="iv-cat" list="cat-list" class="input-box" value="${esc(e.category)}"><datalist id="cat-list">${catOpts}</datalist></div>
             <div><label style="font-size:11px; color:var(--text-muted);">Sub-category</label><input type="text" id="iv-subcat" list="subcat-list" class="input-box" value="${esc(e.subcategory || '')}" placeholder="e.g. Proteins, Spirits..."><datalist id="subcat-list">${(() => { const subs = new Set(); (window.inventoryItems||[]).forEach(i => { if (i.subcategory) subs.add(i.subcategory); }); return [...subs].map(s => '<option value="'+esc(s)+'">').join(''); })()}</datalist></div>
+        </div>
+        <div style="margin-bottom:15px;">
+            <label style="font-size:11px; color:var(--green);">Recipe Display Name <span style="color:var(--text-muted);font-weight:normal;">(optional — friendly name shown in recipes instead of full product name)</span></label>
+            <input type="text" id="iv-recipeName" class="input-box" value="${esc(e.recipeName || '')}" placeholder="e.g. Brown Onion, Soy Sauce, Chicken Thigh..." style="border-color:var(--green);">
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
             <div><label style="font-size:11px; color:var(--text-muted);">Supplier</label><select id="iv-s" class="input-box"><option value="">-- None --</option>${supplierOpts}</select></div>
@@ -1268,6 +1272,7 @@ window.subInvItem = (id, addAnother, isModal = false) => {
     let obj = {
         id: id,
         name: nameVal,
+        recipeName: (document.getElementById('iv-recipeName') ? document.getElementById('iv-recipeName').value.trim() : '') || '',
         category: document.getElementById('iv-cat').value.trim(),
         sku: document.getElementById('iv-sku').value.trim(),
         supplier: document.getElementById('iv-s').value.trim(),

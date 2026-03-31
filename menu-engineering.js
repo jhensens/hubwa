@@ -258,7 +258,7 @@ Recipe: ${rawText}`;
         let rawJson=data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim();
         const aiResult=JSON.parse(rawJson);
         window.tempIngs=aiResult.ingredients.map(ing=>{
-            if(ing.matchedInvId&&window.inventoryItems.find(x=>x.id===ing.matchedInvId)){const inv=window.inventoryItems.find(x=>x.id===ing.matchedInvId);return{type:'inv',ref:ing.matchedInvId,qty:ing.qty,unit:inv.useUnit||ing.unit,name:inv.name};}
+            if(ing.matchedInvId&&window.inventoryItems.find(x=>x.id===ing.matchedInvId)){const inv=window.inventoryItems.find(x=>x.id===ing.matchedInvId);return{type:'inv',ref:ing.matchedInvId,qty:ing.qty,unit:inv.useUnit||ing.unit,name:inv.recipeName||inv.name};}
             return {type:'raw',name:ing.name,qty:ing.qty||0,unit:ing.unit||''};
         });
         const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
@@ -522,7 +522,7 @@ window.commitBatchLinks = () => {
         const inv=window.inventoryItems.find(i=>i.id===item.suggestedInvId); if(!inv) return;
         let origQty=ing.qty; let origUnit=ing.unit||'';
         if(!origQty){ const parsed=window._parseIngredientLine(ing.name); origQty=parsed.qty||1; origUnit=origUnit||parsed.unit; }
-        recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:origQty,unit:origUnit||inv.useUnit||'unit',name:inv.name,_rawName:ing.name};
+        recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:origQty,unit:origUnit||inv.useUnit||'unit',name:inv.recipeName||inv.name,_rawName:ing.name};
         count++;
     });
     window.recalcAllCosts(); window._batchLinkQueue=null; try { localStorage.removeItem('_batchLinkQueue'); } catch(e) {} window.showToast(count+' ingredients linked!'); window.showView('recipes');

@@ -442,13 +442,28 @@ window.renderManagerHub = () => {
 
     // --- TASKS ---
     const freqMap = { 'Weekly':7, 'Fortnightly':14, 'Monthly':30, 'Quarterly':90 };
-    const overdueTasks = (window.rotationalTasks||[]).filter(t => {
+    const _isTaskOverdue = (t) => {
         if (t.dueDateMode === 'specific') return t.specificDueDate && new Date(t.specificDueDate) <= today;
         if (t.lastLogIso) return ((today - new Date(t.lastLogIso)) / 86400000) >= (freqMap[t.freq]||7);
         if (t.anchorDate) { const ad = new Date(t.anchorDate); if (ad > today) return false; const ds = (today-ad)/86400000; const iv = freqMap[t.freq]||7; return today >= new Date(ad.getTime()+Math.floor(ds/iv)*iv*86400000); }
         return true;
-    });
+    };
+    const _taskDaysUntilDue = (t) => {
+        if (t.dueDateMode === 'specific' && t.specificDueDate) return Math.round((new Date(t.specificDueDate) - today) / 86400000);
+        const iv = freqMap[t.freq] || 7;
+        if (t.lastLogIso) return Math.ceil(iv - ((today - new Date(t.lastLogIso)) / 86400000));
+        if (t.anchorDate) { const ad = new Date(t.anchorDate); if (ad > today) return Math.round((ad - today) / 86400000); const ds = (today-ad)/86400000; return Math.ceil(iv - (ds % iv)); }
+        return 0;
+    };
+    const overdueTasks = (window.rotationalTasks||[]).filter(_isTaskOverdue);
+    const upcomingTasks = (window.rotationalTasks||[]).filter(t => !_isTaskOverdue(t)).map(t => ({...t, _daysUntil: _taskDaysUntilDue(t)})).filter(t => t._daysUntil <= 7 && t._daysUntil > 0).sort((a,b) => a._daysUntil - b._daysUntil);
     const openTickets = (window.defectLogs||[]).filter(d => d.status !== 'Resolved');
+
+    // --- FRIDGE TEMP COVERAGE ---
+    const allFridgeUnits = window.fridgeUnits || [];
+    const loggedUnitsToday = [...new Set(todayTemps.map(t => t.unit))];
+    const unloggedFridges = allFridgeUnits.filter(u => !loggedUnitsToday.includes(u));
+    const fridgeCoverage = allFridgeUnits.length > 0 ? Math.round((loggedUnitsToday.length / allFridgeUnits.length) * 100) : 100;
 
     // --- TEAM ---
     const activeStaff = (window.staffDirectory||[]).filter(s => s.status !== 'Inactive');
@@ -475,7 +490,7 @@ window.renderManagerHub = () => {
 
     // --- HEALTH SCORE (0-100) ---
     let healthScore = 100;
-    // Revenue: -20 if no data today
+    // Revenue: -15 if no data today
     if (!hasTodayData) healthScore -= 15;
     // Labor: -15 if over target
     if (laborPct && laborPct > wageTarget) healthScore -= Math.min(15, Math.round((laborPct - wageTarget) / 2));
@@ -484,6 +499,8 @@ window.renderManagerHub = () => {
     // Compliance: -15 for breaches, -10 for incomplete checklist
     if (breaches.length > 0) healthScore -= Math.min(15, breaches.length * 5);
     if (checkPct < 100) healthScore -= Math.round((1 - checkPct/100) * 10);
+    // Fridge coverage: -8 if not all units logged
+    if (fridgeCoverage < 100 && allFridgeUnits.length > 0) healthScore -= Math.round((1 - fridgeCoverage/100) * 8);
     // Tasks: -3 per overdue
     healthScore -= Math.min(15, overdueTasks.length * 3);
     // Tickets: -2 per open
@@ -522,7 +539,15 @@ window.renderManagerHub = () => {
     // --- TODAY'S FOCUS ---
     const focusItems = [];
     breaches.forEach(t => focusItems.push({pri:0, icon:'🌡️', color:'var(--red)', text:E((t.unit||'Unit')+' temp breach: '+t.value+'°C'), view:'compliance'}));
-    overdueTasks.forEach(t => focusItems.push({pri:1, icon:'🔄', color:'var(--red)', text:E(t.name)+' is overdue', view:'tasks'}));
+    // Unlogged fridge units (only alert if past noon — give time for opening logs)
+    if (hour >= 12 && unloggedFridges.length > 0) {
+        if (unloggedFridges.length <= 3) {
+            unloggedFridges.forEach(u => focusItems.push({pri:0, icon:'🌡️', color:'var(--orange)', text:E(u)+' — no temp logged today', view:'compliance'}));
+        } else {
+            focusItems.push({pri:0, icon:'🌡️', color:'var(--orange)', text:unloggedFridges.length+'/'+allFridgeUnits.length+' fridge units not logged today', view:'compliance'});
+        }
+    }
+    overdueTasks.forEach(t => focusItems.push({pri:1, icon:'🔄', color:'var(--red)', text:E(t.name)+(t.zone?' ('+E(t.zone)+')':'')+' is overdue', view:'tasks'}));
     expiringDocs.filter(d => (new Date(d.expiry)-today)/86400000 <= 7).forEach(d => {
         const dl = (new Date(d.expiry)-today)/86400000;
         focusItems.push({pri:2, icon:'📄', color:dl<0?'var(--red)':'var(--orange)', text:E(d.name)+' — '+(dl<0?'EXPIRED':'Expires in '+Math.ceil(dl)+'d'), view:'safe'});
@@ -692,6 +717,10 @@ window.renderManagerHub = () => {
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+todayTemps.length+' temp logs · '+(breaches.length>0?'<span style="color:var(--red);font-weight:600;">'+breaches.length+' breach'+(breaches.length===1?'':'es')+'</span>':'0 breaches')+'</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Checklist: '+checkPct+'% complete</div>';
+    if (allFridgeUnits.length > 0) {
+        var fcCol = fridgeCoverage === 100 ? 'var(--green)' : fridgeCoverage >= 50 ? 'var(--orange)' : 'var(--red)';
+        html += '<div style="font-size:11px;margin-top:2px;color:'+fcCol+';font-weight:'+(fridgeCoverage<100?'600':'400')+';">Fridges: '+loggedUnitsToday.length+'/'+allFridgeUnits.length+' logged</div>';
+    }
     html += '</div>';
 
     // Tasks
@@ -702,7 +731,17 @@ window.renderManagerHub = () => {
     html += '<div style="font-size:22px;font-weight:800;color:'+taskColor+';">'+overdueTasks.length+'</div>';
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+(overdueTasks.length === 0 ? 'All current' : overdueTasks.length+' overdue')+'</div>';
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+(window.rotationalTasks||[]).length+' total tasks tracked</div>';
+    if (overdueTasks.length > 0) {
+        var zoneBreakdown = {};
+        overdueTasks.forEach(function(t) { var z = t.zone || 'Unassigned'; zoneBreakdown[z] = (zoneBreakdown[z]||0) + 1; });
+        var zbText = Object.entries(zoneBreakdown).map(function(e) { return e[1] + ' ' + e[0]; }).join(' · ');
+        html += '<div style="font-size:10px;color:var(--red);margin-top:2px;opacity:0.8;">'+zbText+'</div>';
+    } else {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+(window.rotationalTasks||[]).length+' total tracked</div>';
+    }
+    if (upcomingTasks.length > 0) {
+        html += '<div style="font-size:10px;color:var(--orange);margin-top:2px;">'+upcomingTasks.length+' due this week</div>';
+    }
     html += '</div>';
 
     // Team + On Floor
@@ -824,6 +863,36 @@ window.renderManagerHub = () => {
         html += '<button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button></div>';
         marginAlerts.slice(0,4).forEach(a => {
             html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span style="color:var(--red);">'+E(a.name)+'</span><span><strong>'+a.currentGp+'%</strong> GP</span></div>';
+        });
+        html += '</div>';
+    }
+
+    // --- WEEK AHEAD — Upcoming tasks ---
+    if (upcomingTasks.length > 0 || overdueTasks.length > 0) {
+        html += '<div class="card" style="padding:16px;margin-bottom:14px;border-top:3px solid var(--orange);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<div style="font-size:13px;font-weight:700;">📅 Week Ahead — Tasks</div>';
+        html += '<button onclick="window.showView(\'tasks\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button></div>';
+        // Overdue first
+        overdueTasks.slice(0, 3).forEach(function(t) {
+            html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px;">';
+            html += '<span style="color:var(--red);font-size:11px;font-weight:700;min-width:60px;">OVERDUE</span>';
+            html += '<span style="flex:1;">'+E(t.name)+'</span>';
+            html += (t.zone ? '<span style="font-size:10px;background:var(--bg-main);color:var(--brand-accent);padding:1px 6px;border-radius:8px;border:1px solid var(--border);">'+E(t.zone)+'</span>' : '');
+            html += '</div>';
+        });
+        if (overdueTasks.length > 3) {
+            html += '<div style="font-size:11px;color:var(--red);padding:4px 0;">+' + (overdueTasks.length - 3) + ' more overdue</div>';
+        }
+        // Upcoming
+        upcomingTasks.slice(0, 5).forEach(function(t) {
+            var dayLabel = t._daysUntil === 1 ? 'Tomorrow' : 'In ' + t._daysUntil + ' days';
+            var dayColor = t._daysUntil <= 2 ? 'var(--orange)' : 'var(--text-muted)';
+            html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px;">';
+            html += '<span style="color:'+dayColor+';font-size:11px;font-weight:600;min-width:60px;">'+dayLabel+'</span>';
+            html += '<span style="flex:1;">'+E(t.name)+'</span>';
+            html += (t.zone ? '<span style="font-size:10px;background:var(--bg-main);color:var(--brand-accent);padding:1px 6px;border-radius:8px;border:1px solid var(--border);">'+E(t.zone)+'</span>' : '');
+            html += '</div>';
         });
         html += '</div>';
     }

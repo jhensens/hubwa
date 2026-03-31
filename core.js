@@ -104,6 +104,7 @@ window.onboardingTemplates = {
     'FOH (Front of House)': { 'Day 1: Basics': [{id: 'foh1', label: 'Venue Tour & Safety'}], 'Compliance': [{id: 'foh3', label: 'Upload RSA', isUpload: true, cat: 'Staff RSAs'}] },
     'BOH (Back of House)': { 'Day 1: Kitchen': [{id: 'boh1', label: 'Kitchen Safety'}], 'Compliance': [{id: 'boh3', label: 'Upload Food Safety Cert', isUpload: true, cat: 'Food Safety Certs'}] }
 };
+window.taskZones = ["FOH", "BOH", "Bar", "Office", "Maintenance", "All Areas"];
 window.fridgeUnits = ["Walk-in Coolroom", "Walk-in Freezer", "Kitchen Line Fridge", "Kitchen Prep Fridge", "Bar Under-counter 1", "Bar Under-counter 2", "Bar Display Fridge", "Dessert Reach-in"];
 window.masterChecklists = {
     "Weekly Deep Clean \u2014 Kitchen": ["Exhaust hood & filters degreased","Behind all equipment pulled out & cleaned","Cool room shelves & floor scrubbed","Grease traps flushed & scraped","Under benches & sinks wiped","Oven interior deep clean","Dry stores shelving wiped & organised","Dishwasher & glasswasher interior cleaned"],
@@ -346,6 +347,7 @@ window.renderBWISetupWizard = () => {
     const E = window.esc;
     const checks = {
         tasks: (window.rotationalTasks||[]).length,
+        zones: (window.taskZones||[]).length,
         checklists: window.shiftChecklistItems ? (window.shiftChecklistItems.opening||[]).length : 0,
         fridges: (window.fridgeUnits||[]).length > 3 ? (window.fridgeUnits||[]).length : 0,
         masterCL: Object.keys(window.masterChecklists||{}).length > 2 ? Object.keys(window.masterChecklists||{}).length : 0,
@@ -372,6 +374,7 @@ window.renderBWISetupWizard = () => {
     const html = `<div style="margin-bottom:20px;">
         <p style="color:var(--text-muted);font-size:13px;margin:0 0 15px 0;">Load Bar Wa Izakaya operational defaults. Each section can be fully edited after loading. Existing data will ask for confirmation before replacing.</p>
         ${row('Rotational Tasks', checks.tasks, 'tasks', 'window.seedRotationalTasks()', '🔄')}
+        ${row('Task Zones', checks.zones, 'zones', 'window._seedZonesWizard()', '🏷️')}
         ${row('Shift Checklists', checks.checklists, 'items (opening)', 'window.seedShiftChecklists()', '✅')}
         ${row('Fridge / Freezer Units', checks.fridges, 'units', 'window.seedFridgeUnits()', '🌡️')}
         ${row('Custom Checklists', checks.masterCL, 'categories', 'window.seedMasterChecklists()', '📋')}
@@ -387,6 +390,7 @@ window.renderBWISetupWizard = () => {
 };
 
 // Wizard wrappers (avoid escaped quotes in template literals)
+window._seedZonesWizard = () => { window.taskZones = ["FOH", "BOH", "Bar", "Office", "Maintenance", "All Areas"]; window.saveToDisk(); window.showToast('6 task zones loaded!'); window.closeModal(); window.renderBWISetupWizard(); };
 window._seedKBCatsWizard = () => { window.seedKBCategories(); window.saveToDisk(); window.showToast('Categories loaded!'); window.closeModal(); window.renderBWISetupWizard(); };
 window._seedBadgesWizard = () => { window._seedDefaultBadges(); window.closeModal(); window.renderBWISetupWizard(); };
 window._seedOnboardingWizard = () => { window.seedOnboardingTemplates(); window.closeModal(); window.renderBWISetupWizard(); };
@@ -395,6 +399,8 @@ window._seedAllBWI = () => {
     let count = 0;
     // Tasks
     if ((window.rotationalTasks||[]).length === 0) { window._doSeedTasks(); count++; }
+    // Task Zones
+    if ((window.taskZones||[]).length === 0) { window.taskZones = ["FOH", "BOH", "Bar", "Office", "Maintenance", "All Areas"]; count++; }
     // Shift checklists — seed if null or using defaults
     if (!window.shiftChecklistItems || (window.shiftChecklistItems.opening||[]).length <= 8) { window._doSeedChecklists(); count++; }
     // Fridges — seed if still on generic defaults
@@ -422,4 +428,4 @@ window._seedAllBWI = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags'];
+window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones'];

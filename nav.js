@@ -83,6 +83,7 @@ window.showView = (view) => {
         else if (view === 'lightspeed-import' && window.renderLightspeedImportView) content.innerHTML = window.renderLightspeedImportView();
         else if (view === 'bulk-category-editor' && window.renderBulkCategoryEditor) content.innerHTML = window.renderBulkCategoryEditor();
         else if (view === 'pos-alias-editor' && window.renderPosAliasEditor) content.innerHTML = window.renderPosAliasEditor();
+        else if (view === 'pos-linker' && window.renderPOSLinkerView) content.innerHTML = window.renderPOSLinkerView();
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
         else if (view === 'noticeboard' && window.renderNoticeboardView) content.innerHTML = window.renderNoticeboardView();
         else if (view === 'audit-log' && window.renderAuditLogView) content.innerHTML = window.renderAuditLogView();
@@ -204,6 +205,7 @@ window.globalSearch = (query) => {
         { keywords: ['comply', 'compliance', 'checklist', 'temperature', 'temp log', 'haccp'], icon: '🌡️', label: 'Compliance', sub: 'Temps, shift checklists, HACCP', view: 'compliance' },
         { keywords: ['badge', 'recognition', 'kudos', 'achievement'], icon: '🏆', label: 'Badge Management', sub: 'Staff recognition badges', view: 'badge-management' },
         { keywords: ['onboard', 'orientation', 'training', 'new staff'], icon: '👥', label: 'Staff Management', sub: 'Onboarding, qualifications, directory', view: 'orientation' },
+        { keywords: ['pos', 'linker', 'link', 'lightspeed', 'kounta', 'mapping', 'pos alias', 'auto-link'], icon: '🔗', label: 'POS Auto-Linker', sub: 'Import POS products & match to recipes', view: 'pos-linker' },
         { keywords: ['setup', 'wizard', 'seed', 'bwi default'], icon: '🏮', label: 'BWI Setup Wizard', sub: 'Load venue defaults', view: null }
     ];
     viewLinks.forEach(function(vl) {

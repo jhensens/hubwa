@@ -2,29 +2,52 @@
 // Rotational tasks, shift checklists, temperature logging, compliance, maintenance, assets, contractors
 
 // --- 3. ROTATIONAL TASKS ---
+window._taskZoneFilter = window._taskZoneFilter || 'all';
 window.renderTaskView = function() {
-    return `<div style="max-width: 900px; margin: auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
-            <div>
-                <h2 style="margin:0">🔄 Rotational Tasks</h2>
-                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Recurring tasks like deep cleans, filter changes, and stocktakes</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button onclick="window.renderTaskList()" class="btn btn-dark">Active Tasks</button>
-                <button onclick="window.renderTaskHistory()" class="btn btn-outline">Audit History</button>
-                <button onclick="window.addTaskForm()" class="btn btn-blue">+ Add Task</button>
-            </div>
-        </div>
-        <div id="taskSubContent">${window.renderTaskListTemplate()}</div>
-    </div>`;
+    const zones = window.taskZones || [];
+    const tasks = window.rotationalTasks || [];
+    const activeZone = window._taskZoneFilter || 'all';
+    const zonePills = [
+        '<span class="tag-pill ' + (activeZone==='all'?'active':'') + '" onclick="window._taskZoneFilter=\'all\';window.showView(\'tasks\');">All (' + tasks.length + ')</span>'
+    ].concat(zones.map(function(z) {
+        var count = tasks.filter(function(t) { return t.zone === z; }).length;
+        return '<span class="tag-pill ' + (activeZone===z?'active':'') + '" onclick="window._taskZoneFilter=\'' + z.replace(/'/g,"\\'") + '\';window.showView(\'tasks\');">' + esc(z) + ' (' + count + ')</span>';
+    })).join('');
+    var unzonedCount = tasks.filter(function(t) { return !t.zone; }).length;
+    var unzonedPill = unzonedCount > 0 ? '<span class="tag-pill ' + (activeZone==='unzoned'?'active':'') + '" onclick="window._taskZoneFilter=\'unzoned\';window.showView(\'tasks\');">Unassigned (' + unzonedCount + ')</span>' : '';
+
+    return '<div style="max-width: 900px; margin: auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">' +
+            '<div>' +
+                '<h2 style="margin:0">🔄 Rotational Tasks</h2>' +
+                '<div style="color:var(--text-muted);font-size:13px;margin-top:2px">Recurring tasks like deep cleans, filter changes, and stocktakes</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+                '<button onclick="window.renderTaskList()" class="btn btn-dark">Active Tasks</button>' +
+                '<button onclick="window.renderTaskHistory()" class="btn btn-outline">Audit History</button>' +
+                '<button onclick="window.editTaskZones()" class="btn btn-outline" title="Edit Zones">⚙️ Zones</button>' +
+                '<button onclick="window.addTaskForm()" class="btn btn-blue">+ Add Task</button>' +
+            '</div>' +
+        '</div>' +
+        '<div style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px;">' + zonePills + unzonedPill + '</div>' +
+        '<div id="taskSubContent">' + window.renderTaskListTemplate() + '</div>' +
+    '</div>';
 };
 
 window.renderTaskListTemplate = function() {
     const freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
-    const tasks = window.rotationalTasks || [];
-    if (tasks.length === 0) return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🔄</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rotational tasks</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add recurring tasks like deep cleans, filter changes, or stocktakes</div><button onclick="window.seedRotationalTasks()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>';
+    const allTasks = window.rotationalTasks || [];
+    if (allTasks.length === 0) return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🔄</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No rotational tasks</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add recurring tasks like deep cleans, filter changes, or stocktakes</div><button onclick="window.seedRotationalTasks()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>';
 
-    return '<div id="activeTasks">' + tasks.map((t, i) => {
+    const zoneFilter = window._taskZoneFilter || 'all';
+    const tasks = allTasks.map(function(t, i) { return Object.assign({}, t, { _origIdx: i }); }).filter(function(t) {
+        if (zoneFilter === 'all') return true;
+        if (zoneFilter === 'unzoned') return !t.zone;
+        return t.zone === zoneFilter;
+    });
+    if (tasks.length === 0) return '<div style="text-align:center;padding:32px 20px;color:var(--text-muted)"><div style="font-size:28px;margin-bottom:8px">📭</div><div style="font-size:14px;">No tasks in this zone.</div></div>';
+
+    return '<div id="activeTasks">' + tasks.map((t) => { var i = t._origIdx;
         // Determine due status — supports both recurring freq and specific due date
         let isDue = true, daysLeftText = 'DUE NOW', nextDueStr = '';
 
@@ -68,6 +91,7 @@ window.renderTaskListTemplate = function() {
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
                 '<div style="flex:1;">' +
                     '<strong style="font-size:14px;">' + esc(t.name) + '</strong>' +
+                    (t.zone ? ' <span style="font-size:10px;background:var(--bg-main);color:var(--brand-accent);padding:2px 7px;border-radius:10px;margin-left:6px;font-weight:600;border:1px solid var(--border);">' + esc(t.zone) + '</span>' : '') +
                     (t.notes ? '<br><small style="color:var(--text-muted);font-size:12px;">' + esc(t.notes) + '</small>' : '') +
                     '<br><small style="color:var(--text-muted);">' + nextDueStr + '</small>' +
                     '<br><strong style="font-size:12px;display:inline-block;margin-top:4px;color:' + (isDue?'var(--red)':'var(--green)') + ';">' + daysLeftText + '</strong>' +
@@ -85,23 +109,32 @@ window.renderTaskListTemplate = function() {
 
 window.renderTaskList = () => { document.getElementById('taskSubContent').innerHTML = window.renderTaskListTemplate(); };
 window.renderTaskHistory = () => {
-    const rows = (window.taskHistory||[]).slice().reverse().map(h =>
-        '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:12px 15px;font-size:13px;color:var(--text-muted);">' + esc(h.date) + '</td><td style="padding:12px 15px;">' + esc(h.name) + '</td><td style="padding:12px 15px;"><strong>' + esc(h.staff) + '</strong></td></tr>'
+    const zoneFilter = window._taskZoneFilter || 'all';
+    const allHistory = (window.taskHistory||[]).slice().reverse();
+    const filtered = zoneFilter === 'all' ? allHistory :
+        zoneFilter === 'unzoned' ? allHistory.filter(function(h) { return !h.zone; }) :
+        allHistory.filter(function(h) { return h.zone === zoneFilter; });
+    const rows = filtered.map(h =>
+        '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:12px 15px;font-size:13px;color:var(--text-muted);">' + esc(h.date) + '</td><td style="padding:12px 15px;">' + esc(h.name) + '</td><td style="padding:12px 15px;">' + (h.zone ? '<span style="font-size:10px;background:var(--bg-main);color:var(--brand-accent);padding:2px 6px;border-radius:10px;border:1px solid var(--border);">' + esc(h.zone) + '</span>' : '<span style="color:var(--text-muted);font-size:11px;">—</span>') + '</td><td style="padding:12px 15px;"><strong>' + esc(h.staff) + '</strong></td></tr>'
     ).join('');
     document.getElementById('taskSubContent').innerHTML = '<table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">' +
         '<thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
-        '<th style="padding:12px 15px;">Date</th><th style="padding:12px 15px;">Task</th><th style="padding:12px 15px;">Staff</th></tr></thead>' +
-        '<tbody>' + (rows || '<tr><td colspan="3" style="padding:15px;color:var(--text-muted);text-align:center;">No history yet.</td></tr>') + '</tbody></table>';
+        '<th style="padding:12px 15px;">Date</th><th style="padding:12px 15px;">Task</th><th style="padding:12px 15px;">Zone</th><th style="padding:12px 15px;">Staff</th></tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="4" style="padding:15px;color:var(--text-muted);text-align:center;">No history yet.</td></tr>') + '</tbody></table>';
 };
 
 window.addTaskForm = (editIdx) => {
-    const t = editIdx !== undefined ? window.rotationalTasks[editIdx] : { name:'', freq:'Weekly', dueDateMode:'recurring', specificDueDate:'', notes:'' };
+    const t = editIdx !== undefined ? window.rotationalTasks[editIdx] : { name:'', freq:'Weekly', dueDateMode:'recurring', specificDueDate:'', notes:'', zone:'' };
     const isEdit = editIdx !== undefined;
     const today = new Date().toISOString().split('T')[0];
+    const zones = window.taskZones || [];
+    const zoneOpts = '<option value="">(No Zone)</option>' + zones.map(z => '<option value="' + esc(z) + '" ' + (t.zone===z?'selected':'') + '>' + esc(z) + '</option>').join('');
     const html = '<label style="font-size:11px;color:var(--text-muted);">Task Name</label>' +
         '<input type="text" id="t-n" class="input-box" value="' + esc(t.name||'') + '" placeholder="e.g. Grease Trap Clean">' +
-        '<label style="font-size:11px;color:var(--text-muted);">Notes (optional)</label>' +
-        '<input type="text" id="t-notes" class="input-box" value="' + esc(t.notes||'') + '" placeholder="e.g. Check gasket seal">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+            '<div><label style="font-size:11px;color:var(--text-muted);">Zone</label><select id="t-zone" class="input-box">' + zoneOpts + '</select></div>' +
+            '<div><label style="font-size:11px;color:var(--text-muted);">Notes (optional)</label><input type="text" id="t-notes" class="input-box" value="' + esc(t.notes||'') + '" placeholder="e.g. Check gasket seal"></div>' +
+        '</div>' +
         '<label style="font-size:11px;color:var(--text-muted);">Schedule Type</label>' +
         '<select id="t-mode" class="input-box" onchange="document.getElementById(\'t-recurring\').style.display=this.value===\'recurring\'?\'block\':\'none\';document.getElementById(\'t-specific\').style.display=this.value===\'specific\'?\'block\':\'none\'">' +
             '<option value="recurring" ' + ((t.dueDateMode||'recurring')==='recurring'?'selected':'') + '>Recurring (Weekly/Monthly etc)</option>' +
@@ -133,13 +166,15 @@ window.subTask = (editIdx) => {
     const freq = mode === 'recurring' ? document.getElementById('t-f').value : 'Once';
     const specificDueDate = mode === 'specific' ? document.getElementById('t-date').value : '';
     const notes = document.getElementById('t-notes').value.trim();
+    const zone = document.getElementById('t-zone') ? document.getElementById('t-zone').value : '';
     const anchorDate = mode === 'recurring' && document.getElementById('t-anchor') ? document.getElementById('t-anchor').value : '';
-    const obj = { name, freq, dueDateMode: mode, specificDueDate, notes, anchorDate, lastLogIso: null, lastDate: 'Never' };
+    const obj = { name, freq, dueDateMode: mode, specificDueDate, notes, zone, anchorDate, lastLogIso: null, lastDate: 'Never' };
     if (editIdx !== undefined && editIdx !== 'undefined') {
         // Preserve completion history when editing
         obj.lastLogIso = window.rotationalTasks[editIdx].lastLogIso;
         obj.lastDate = window.rotationalTasks[editIdx].lastDate;
         if (!obj.anchorDate) obj.anchorDate = window.rotationalTasks[editIdx].anchorDate;
+        if (!obj.zone && window.rotationalTasks[editIdx].zone) obj.zone = window.rotationalTasks[editIdx].zone;
         window.rotationalTasks[editIdx] = obj;
         window.showToast('Task updated!');
     } else {
@@ -177,7 +212,7 @@ window._confirmTaskLog = (i, staff, mode) => {
         logDate = new Date();
     }
     const dateStr = logDate.toLocaleDateString('en-AU');
-    window.taskHistory.push({ name: window.rotationalTasks[i].name, staff, date: dateStr });
+    window.taskHistory.push({ name: window.rotationalTasks[i].name, staff, date: dateStr, zone: window.rotationalTasks[i].zone || '' });
     window.rotationalTasks[i].lastLogIso = logDate.toISOString();
     window.rotationalTasks[i].lastDate = dateStr;
     // If specific due date mode — clear the due date after completion (task done)
@@ -651,6 +686,78 @@ window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = n
 
 
 // =============================================================================
+// TASK ZONE EDITOR — Manage customisable zone categories
+// =============================================================================
+window.editTaskZones = () => {
+    const zones = window.taskZones || [];
+    const tasks = window.rotationalTasks || [];
+    const rows = zones.map((z, i) => {
+        const count = tasks.filter(t => t.zone === z).length;
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">' +
+            '<input type="text" class="input-box zone-edit-input" data-idx="' + i + '" value="' + esc(z) + '" style="flex:1;margin:0;">' +
+            '<span style="color:var(--text-muted);font-size:12px;white-space:nowrap;">' + count + ' task' + (count!==1?'s':'') + '</span>' +
+            '<button onclick="window._delTaskZone(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;padding:0 4px;" title="Remove zone">&times;</button>' +
+        '</div>';
+    }).join('');
+    const html = '<div id="zone-list">' + rows + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;">' +
+            '<input type="text" id="new-zone-name" class="input-box" placeholder="New zone name..." style="flex:1;margin:0;">' +
+            '<button onclick="window._addTaskZone()" class="btn btn-blue">+ Add</button>' +
+        '</div>' +
+        '<button onclick="window._saveTaskZones()" class="btn btn-green" style="width:100%;margin-top:15px;">Save Zones</button>';
+    window.openModal('⚙️ Edit Task Zones', html);
+};
+
+window._addTaskZone = () => {
+    const input = document.getElementById('new-zone-name');
+    const name = input.value.trim();
+    if (!name) return window.showToast('Enter a zone name.', 'error');
+    if ((window.taskZones||[]).includes(name)) return window.showToast('Zone already exists.', 'error');
+    window.taskZones.push(name);
+    window.saveToDisk();
+    window.editTaskZones(); // re-render modal
+};
+
+window._delTaskZone = (idx) => {
+    const zone = window.taskZones[idx];
+    const affected = (window.rotationalTasks||[]).filter(t => t.zone === zone).length;
+    if (affected > 0) {
+        return window.confirmAction({ title: 'Remove Zone', message: '<strong>' + esc(zone) + '</strong> is assigned to ' + affected + ' task' + (affected!==1?'s':'') + '. Those tasks will become unassigned. Continue?', confirmLabel: 'Remove', tier: 'standard',
+            onConfirm: () => {
+                window.rotationalTasks.forEach(t => { if (t.zone === zone) t.zone = ''; });
+                window.taskZones.splice(idx, 1);
+                window.saveToDisk();
+                window.editTaskZones();
+            }
+        });
+    }
+    window.taskZones.splice(idx, 1);
+    window.saveToDisk();
+    window.editTaskZones();
+};
+
+window._saveTaskZones = () => {
+    const inputs = document.querySelectorAll('.zone-edit-input');
+    const oldZones = [...(window.taskZones || [])];
+    const newZones = [];
+    inputs.forEach((inp, i) => {
+        const val = inp.value.trim();
+        if (val) {
+            newZones.push(val);
+            // Rename zone on tasks if changed
+            if (oldZones[i] && oldZones[i] !== val) {
+                (window.rotationalTasks||[]).forEach(t => { if (t.zone === oldZones[i]) t.zone = val; });
+            }
+        }
+    });
+    window.taskZones = newZones;
+    window.saveToDisk();
+    window.closeModal();
+    window.showView('tasks');
+    window.showToast('Zones saved!');
+};
+
+// =============================================================================
 // BWI DATA SEEDERS — One-click defaults for Bar Wa Izakaya
 // Each function checks if data is empty before populating (never overwrites)
 // =============================================================================
@@ -667,26 +774,26 @@ window.seedRotationalTasks = () => {
 window._doSeedTasks = () => {
     const today = new Date().toISOString().split('T')[0];
     const tasks = [
-        { name: 'Beer Line Clean', freq: 'Weekly', notes: 'Flush all beer lines with cleaning solution. Rinse thoroughly before reconnecting kegs.' },
-        { name: 'Grease Trap Flush', freq: 'Weekly', notes: 'Flush grease trap, scrape solids, run hot water through. Log any blockage issues.' },
-        { name: 'Exhaust Filter Deep Clean', freq: 'Weekly', notes: 'Remove kitchen exhaust filters, soak in degreaser, scrub and replace.' },
-        { name: 'Bar Mat & Floor Mat Deep Clean', freq: 'Weekly', notes: 'Remove all bar mats and floor mats. Soak, scrub, and sanitise.' },
-        { name: 'Glasswasher Descale & Clean', freq: 'Weekly', notes: 'Run descale cycle, clean filters, wipe interior and check rinse aid levels.' },
-        { name: 'Ice Machine Clean & Sanitise', freq: 'Weekly', notes: 'Empty ice, run cleaning cycle, sanitise interior, wipe exterior.' },
-        { name: 'FOH Deep Clean (Floors/Walls/Windows)', freq: 'Weekly', notes: 'Mop all floors with degreaser, wipe walls and skirting, clean windows and glass.' },
-        { name: 'Staff Fridge Cleanout', freq: 'Weekly', notes: 'Remove expired items, wipe shelves, check for unmarked containers.' },
-        { name: 'Cool Room Shelf Deep Clean', freq: 'Fortnightly', notes: 'Remove all stock, wipe down shelves with sanitiser, check for expired/damaged items. FIFO all stock back.' },
-        { name: 'POS Paper Rolls & Printer Check', freq: 'Fortnightly', notes: 'Check all receipt printers, replace low paper rolls, test kitchen/bar printers.' },
-        { name: 'Fire Extinguisher Visual Check', freq: 'Fortnightly', notes: 'Check pressure gauges, signage visible, no obstructions, pins intact.' },
-        { name: 'Full Stocktake', freq: 'Monthly', notes: 'Count all inventory items against system. Use Hub stocktake module.' },
-        { name: 'Pest Control Inspection', freq: 'Monthly', notes: 'Walk-through of all areas checking for pest evidence. Log any findings.' },
-        { name: 'First Aid Kit Audit', freq: 'Monthly', notes: 'Check all first aid kits are stocked. Replace expired items. Note anything needed.' },
-        { name: 'Staff Meeting / Training Session', freq: 'Monthly', notes: 'Team meeting — review performance, training topics, upcoming events.' },
-        { name: 'Hood Filter Professional Service', freq: 'Quarterly', notes: 'Coordinate with contractor for professional exhaust hood clean and certification.' },
-        { name: 'Fire Equipment Service Check', freq: 'Quarterly', notes: 'Extinguishers, blankets, exit signs, emergency lighting — full check with contractor if due.' }
+        { name: 'Beer Line Clean', freq: 'Weekly', zone: 'Bar', notes: 'Flush all beer lines with cleaning solution. Rinse thoroughly before reconnecting kegs.' },
+        { name: 'Grease Trap Flush', freq: 'Weekly', zone: 'BOH', notes: 'Flush grease trap, scrape solids, run hot water through. Log any blockage issues.' },
+        { name: 'Exhaust Filter Deep Clean', freq: 'Weekly', zone: 'BOH', notes: 'Remove kitchen exhaust filters, soak in degreaser, scrub and replace.' },
+        { name: 'Bar Mat & Floor Mat Deep Clean', freq: 'Weekly', zone: 'Bar', notes: 'Remove all bar mats and floor mats. Soak, scrub, and sanitise.' },
+        { name: 'Glasswasher Descale & Clean', freq: 'Weekly', zone: 'Bar', notes: 'Run descale cycle, clean filters, wipe interior and check rinse aid levels.' },
+        { name: 'Ice Machine Clean & Sanitise', freq: 'Weekly', zone: 'Bar', notes: 'Empty ice, run cleaning cycle, sanitise interior, wipe exterior.' },
+        { name: 'FOH Deep Clean (Floors/Walls/Windows)', freq: 'Weekly', zone: 'FOH', notes: 'Mop all floors with degreaser, wipe walls and skirting, clean windows and glass.' },
+        { name: 'Staff Fridge Cleanout', freq: 'Weekly', zone: 'BOH', notes: 'Remove expired items, wipe shelves, check for unmarked containers.' },
+        { name: 'Cool Room Shelf Deep Clean', freq: 'Fortnightly', zone: 'BOH', notes: 'Remove all stock, wipe down shelves with sanitiser, check for expired/damaged items. FIFO all stock back.' },
+        { name: 'POS Paper Rolls & Printer Check', freq: 'Fortnightly', zone: 'FOH', notes: 'Check all receipt printers, replace low paper rolls, test kitchen/bar printers.' },
+        { name: 'Fire Extinguisher Visual Check', freq: 'Fortnightly', zone: 'All Areas', notes: 'Check pressure gauges, signage visible, no obstructions, pins intact.' },
+        { name: 'Full Stocktake', freq: 'Monthly', zone: 'All Areas', notes: 'Count all inventory items against system. Use Hub stocktake module.' },
+        { name: 'Pest Control Inspection', freq: 'Monthly', zone: 'All Areas', notes: 'Walk-through of all areas checking for pest evidence. Log any findings.' },
+        { name: 'First Aid Kit Audit', freq: 'Monthly', zone: 'All Areas', notes: 'Check all first aid kits are stocked. Replace expired items. Note anything needed.' },
+        { name: 'Staff Meeting / Training Session', freq: 'Monthly', zone: 'Office', notes: 'Team meeting — review performance, training topics, upcoming events.' },
+        { name: 'Hood Filter Professional Service', freq: 'Quarterly', zone: 'BOH', notes: 'Coordinate with contractor for professional exhaust hood clean and certification.' },
+        { name: 'Fire Equipment Service Check', freq: 'Quarterly', zone: 'Maintenance', notes: 'Extinguishers, blankets, exit signs, emergency lighting — full check with contractor if due.' }
     ];
     window.rotationalTasks = tasks.map(t => ({
-        name: t.name, freq: t.freq, notes: t.notes,
+        name: t.name, freq: t.freq, notes: t.notes, zone: t.zone,
         dueDateMode: 'recurring', specificDueDate: '', anchorDate: today,
         lastLogIso: null, lastDate: 'Never'
     }));

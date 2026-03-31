@@ -261,7 +261,7 @@ window.viewRecipe = (id) => {
     const ingRows = (r.ingredients||[]).map(ing => {
         const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
         const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
-        const name = inv?E(inv.name):batch?E(batch.name):E(ing.name||'Unknown');
+        const name = inv?E(inv.recipeName||inv.name):batch?E(batch.name):E(ing.name||'Unknown');
         const qty = ing.qty||'';
         const unit = inv?(inv.useUnit||''):batch?(batch.yieldUnit||''):'';
         const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):'—';
@@ -559,7 +559,7 @@ window.printRecipe = (id) => {
         if (ing.type==='raw') return `<li>${esc(ing.name)}</li>`;
         const inv = ing.type==='inv'?window.inventoryItems.find(i=>i.id===ing.ref):null;
         const batch = ing.type==='batch'?window.recipes.find(x=>x.id===ing.ref):null;
-        if (inv) return `<li>${ing.qty} ${esc(inv.useUnit)} — ${esc(inv.name)}</li>`;
+        if (inv) return `<li>${ing.qty} ${esc(inv.useUnit)} — ${esc(inv.recipeName||inv.name)}</li>`;
         if (batch) return `<li>${ing.qty} ${esc(batch.yieldUnit)} — ${esc(batch.name)}</li>`;
         return `<li>${esc(ing.name)}</li>`;
     }).join('');
@@ -613,21 +613,21 @@ window.editRecipeForm = (id = null) => {
         window.tempIngs = JSON.parse(JSON.stringify(r.ingredients||[]));
         window.tempRecipeId = cleanId||'new';
     }
-    let invOpts = (window.inventoryItems||[]).filter(i=>!i.archived).map(inv=>`<option value="inv_${inv.id}">${esc(inv.name)} (per ${esc(inv.useUnit||'Unit')})</option>`).join('');
+    let invOpts = (window.inventoryItems||[]).filter(i=>!i.archived).map(inv=>`<option value="inv_${inv.id}">${esc(inv.recipeName||inv.name)} (per ${esc(inv.useUnit||'Unit')})</option>`).join('');
     let batchOpts = (window.recipes||[]).filter(b=>b.type==='Batch'&&b.id!==cleanId).map(b=>`<option value="batch_${b.id}">[Batch] ${esc(b.name)} (per ${esc(b.yieldUnit)})</option>`).join('');
 
     const renderBuilder = () => {
         let totalCost = 0;
         let ingHtml = window.tempIngs.map((ing,tIdx) => {
             let itemCost=0,displayUnit=ing.unit||'',isErr=false;
-            if (ing.type==='inv'){const inv=window.inventoryItems.find(i=>i.id===ing.ref);if(inv){itemCost=ing.qty*((inv.price||0)/(inv.yield||1));displayUnit=inv.useUnit;}else{isErr=true;}}
+            if (ing.type==='inv'){const inv=window.inventoryItems.find(i=>i.id===ing.ref);if(inv){itemCost=ing.qty*((inv.price||0)/(inv.yield||1));displayUnit=inv.useUnit;ing._displayName=inv.recipeName||inv.name;}else{isErr=true;}}
             else if (ing.type==='batch'){const b=window.recipes.find(x=>x.id===ing.ref);if(b){itemCost=ing.qty*((b.cost||0)/(b.yieldQty||1));displayUnit=b.yieldUnit;}else{isErr=true;}}
             totalCost+=itemCost;
             const isRaw=ing.type==='raw';
             return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;gap:6px;">
                 <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
                     ${isRaw?`<span style="font-size:10px;color:var(--orange);border:1px solid var(--orange);padding:1px 5px;border-radius:8px;flex-shrink:0;">raw</span>`:`<input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx},this.value)" style="width:65px;margin:0;padding:4px;border-color:var(--blue);flex-shrink:0;">`}
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${esc(displayUnit)} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${esc(ing.name)}${isErr?' ⚠️':''}</strong></span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${esc(displayUnit)} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${esc(ing._displayName||ing.name)}${isErr?' ⚠️':''}</strong></span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                     ${!isRaw&&itemCost>0?`<span style="color:var(--brand-accent);font-size:11px;">$${itemCost.toFixed(3)}</span>`:''}
@@ -719,7 +719,7 @@ window._filterIngSearch = (query) => {
     if (!dropdown) return;
     const q = query.toLowerCase();
     
-    const invItems = (window.inventoryItems||[]).filter(i => !i.archived && (!q || i.name.toLowerCase().includes(q)));
+    const invItems = (window.inventoryItems||[]).filter(i => !i.archived && (!q || (i.recipeName||i.name).toLowerCase().includes(q) || i.name.toLowerCase().includes(q)));
     const batchItems = (window.recipes||[]).filter(b => b.type==='Batch' && (!q || b.name.toLowerCase().includes(q)));
     
     if (invItems.length === 0 && batchItems.length === 0) {
@@ -732,8 +732,8 @@ window._filterIngSearch = (query) => {
     if (invItems.length > 0) {
         html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:8px 12px 4px;font-weight:bold;">Inventory</div>';
         invItems.slice(0, 10).forEach(inv => {
-            var safeName = inv.name.replace(/'/g, '');
-            html += '<div class="search-dropdown-item" data-val="inv_' + inv.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>' + esc(inv.name) + '</span><small style="color:var(--blue);">per ' + (inv.useUnit||'Unit') + '</small></div>';
+            var safeName = (inv.recipeName||inv.name).replace(/'/g, '');
+            html += '<div class="search-dropdown-item" data-val="inv_' + inv.id + '" data-name="' + safeName + '" onclick="window._selectIngFromSearch(this.dataset.val, this.dataset.name)"><span>' + esc(inv.recipeName||inv.name) + '</span><small style="color:var(--blue);">per ' + (inv.useUnit||'Unit') + '</small></div>';
         });
     }
     if (batchItems.length > 0) {
@@ -793,7 +793,7 @@ window.updateUnitHint = () => {
         const qty=parseFloat(document.getElementById('add-qty').value); const selVal=document.getElementById('add-sel').value;
         if (!qty||!selVal) return window.showToast("Select item and enter quantity.","error");
         const parts=selVal.split('_'); const type=parts[0]; const refId=selVal.replace(type+'_','');
-        if (type==='inv'){const inv=window.inventoryItems.find(i=>i.id===refId);if(!inv)return;window.tempIngs.push({type:'inv',ref:refId,qty,unit:inv.useUnit||'Unit',name:inv.name});}
+        if (type==='inv'){const inv=window.inventoryItems.find(i=>i.id===refId);if(!inv)return;window.tempIngs.push({type:'inv',ref:refId,qty,unit:inv.useUnit||'Unit',name:inv.recipeName||inv.name});}
         else {const b=window.recipes.find(x=>x.id===refId);if(!b)return;window.tempIngs.push({type:'batch',ref:refId,qty,unit:b.yieldUnit,name:b.name});}
         window.refreshRB();
     };

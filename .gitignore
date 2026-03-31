@@ -18,5 +18,8 @@ desktop.ini
 *.pyc
 __pycache__/
 
+# Firebase
+.firebase/
+
 # Claude Code
-.claude/plans/
+.claude/
