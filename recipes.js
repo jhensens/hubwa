@@ -45,6 +45,7 @@ window._refreshRecList = () => {
         if (window.recFilters.status !== 'All' && (r.status || 'Active') !== window.recFilters.status) return false;
         if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
         if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
+        if (window.recFilters.filter === 'QtyFix' && !(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName)) return false;
         if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
         if (window.recFilters.search) {
             const s = window.recFilters.search.toLowerCase();
@@ -111,6 +112,7 @@ window.renderRecipeView = () => {
         if (window.recFilters.status !== 'All' && (r.status || 'Active') !== window.recFilters.status) return false;
         if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
         if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
+        if (window.recFilters.filter === 'QtyFix' && !(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName)) return false;
         if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
         if (window.recFilters.search) {
             const s = window.recFilters.search.toLowerCase();
@@ -118,7 +120,8 @@ window.renderRecipeView = () => {
         }
         return true;
     });
-    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('');
+    const qtyFixCount = (window.recipes||[]).filter(r=>!r.archived&&(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName)).length;
+    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('') + (qtyFixCount>0?`<div class="tag-pill ${window.recFilters.filter==='QtyFix'?'active':''}" style="border-color:var(--orange);${window.recFilters.filter==='QtyFix'?'background:var(--orange);color:#fff;':'color:var(--orange);'}" onclick="window.recFilters.filter='QtyFix';window.showView(\'recipes\')">🔧 Qty Fix (${qtyFixCount})</div>`:'');
     const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
     const statusPills = ['Active','Off Menu','Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
     // Sort logic for table view
@@ -170,7 +173,7 @@ window.renderRecipeView = () => {
                 <div style="color:var(--text-muted);">Cost:<strong style="color:var(--brand-accent);"> $${Number(r.cost || 0).toFixed(2)}</strong><br>${r.type === 'Menu' ? `Sell: $${Number(r.price || 0).toFixed(2)}` : `Yield: ${r.yieldQty} ${esc(r.yieldUnit)}`}</div>
                 ${r.type === 'Menu' && r.price > 0 ? `<div style="font-size:20px;font-weight:bold;color:${gpColor};align-self:center;">${r.gp || 0}%</div>` : ''}
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients || []).filter(i => i.type === 'inv' || i.type === 'batch').length} linked · ${(r.ingredients || []).filter(i => i.type === 'raw').length} raw</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📋 ${(r.ingredients || []).filter(i => i.type === 'inv' || i.type === 'batch').length} linked · ${(r.ingredients || []).filter(i => i.type === 'raw').length} raw${(()=>{const qf=(r.ingredients||[]).filter(i=>i.type==='inv'&&i.qty===1&&i._rawName).length;return qf?` · <span style="color:var(--orange);font-weight:bold;">🔧 ${qf} qty fix</span>`:''})()}</div>
         </div>`;
     }).join('');
 
@@ -266,8 +269,10 @@ window.viewRecipe = (id) => {
         const unit = inv?(inv.useUnit||''):batch?(batch.yieldUnit||''):'';
         const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):'—';
         const source = ing.type==='inv'?'Inventory':ing.type==='batch'?'Batch':'<span style="color:var(--orange);">Unlinked</span>';
-        return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-size:13px;">${name}</td><td style="padding:8px 12px;font-size:13px;text-align:center;">${qty}</td><td style="padding:8px 12px;font-size:13px;text-align:center;">${E(unit)}</td><td style="padding:8px 12px;font-size:13px;text-align:right;">$${cost}</td><td style="padding:8px 12px;font-size:11px;color:var(--text-muted);">${source}</td></tr>`;
+        const needsQtyFix = ing.type==='inv'&&ing.qty===1&&ing._rawName;
+        return `<tr style="border-bottom:1px solid var(--border);${needsQtyFix?'background:rgba(255,165,0,0.08);':''}"><td style="padding:8px 12px;font-size:13px;">${name}${needsQtyFix?`<div style="font-size:10px;color:var(--orange);margin-top:2px;">raw: ${E(ing._rawName)}</div>`:''}</td><td style="padding:8px 12px;font-size:13px;text-align:center;${needsQtyFix?'color:var(--orange);font-weight:bold;':''}">${qty}${needsQtyFix?' ⚠️':''}</td><td style="padding:8px 12px;font-size:13px;text-align:center;">${E(unit)}</td><td style="padding:8px 12px;font-size:13px;text-align:right;">$${cost}</td><td style="padding:8px 12px;font-size:11px;color:var(--text-muted);">${source}</td></tr>`;
     }).join('');
+    const qtyFixIngs = (r.ingredients||[]).filter(i=>i.type==='inv'&&i.qty===1&&i._rawName);
 
     const ingTable = (r.ingredients||[]).length > 0
         ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:var(--bg-main);border-radius:8px;"><thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:8px 12px;text-align:left;">Ingredient</th><th style="padding:8px 12px;text-align:center;">Qty</th><th style="padding:8px 12px;text-align:center;">Unit</th><th style="padding:8px 12px;text-align:right;">Cost</th><th style="padding:8px 12px;text-align:left;">Source</th></tr></thead><tbody>${ingRows}</tbody></table></div>`
@@ -321,7 +326,10 @@ window.viewRecipe = (id) => {
 
         <!-- INGREDIENTS -->
         <div class="card" style="padding:18px;margin-bottom:15px;">
-            <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="margin:0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Ingredients</h3>
+                ${qtyFixIngs.length>0?`<button onclick="window.openQtyFixModal('${r.id}')" class="btn btn-outline" style="font-size:11px;border-color:var(--orange);color:var(--orange);padding:4px 10px;">🔧 Fix Quantities (${qtyFixIngs.length})</button>`:''}
+            </div>
             ${ingTable}
         </div>
 
@@ -861,6 +869,58 @@ window.subRecipe = (id, totalCost) => {
     if (type==='Menu'&&obj.price>0) obj.gp=parseFloat(((obj.price-totalCost)/obj.price*100).toFixed(1));
     if (existingIdx>=0) window.recipes[existingIdx]=obj; else window.recipes.push(obj);
     window.tempRecipeId=null; window.saveToDisk(); window.showToast("Recipe saved!"); window.showView('recipes');
+};
+
+window.openQtyFixModal = (recipeId) => {
+    const r = window.recipes.find(x=>x.id===recipeId);
+    if (!r) return;
+    const fixIngs = (r.ingredients||[]).map((ing,idx)=>({...ing,idx})).filter(i=>i.type==='inv'&&i.qty===1&&i._rawName);
+    if (!fixIngs.length) return window.showToast('No quantities to fix!');
+    const rows = fixIngs.map(ing => {
+        const inv = window.inventoryItems.find(i=>i.id===ing.ref);
+        const displayName = inv?(inv.recipeName||inv.name):ing.name;
+        const unit = inv?(inv.useUnit||''):'';
+        return `<div style="display:grid;grid-template-columns:1fr 80px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div>
+                <div style="font-size:13px;font-weight:600;">${esc(displayName)}</div>
+                <div style="font-size:11px;color:var(--text-muted);">raw: "${esc(ing._rawName)}"</div>
+                <div style="font-size:11px;color:var(--blue);">Unit: ${esc(unit)}</div>
+            </div>
+            <input type="number" step="0.001" min="0" class="input-box qtyfix-input" data-idx="${ing.idx}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;">
+        </div>`;
+    }).join('');
+    window.openModal('🔧 Fix Ingredient Quantities', `
+        <p style="margin:0 0 10px;font-size:13px;color:var(--text-muted);">Recipe: <strong>${esc(r.name)}</strong><br>These ${fixIngs.length} ingredients defaulted to qty=1 during AI import. Enter the correct quantities.</p>
+        <div style="max-height:400px;overflow-y:auto;">${rows}</div>
+        <div style="display:flex;gap:10px;margin-top:15px;">
+            <button onclick="window._saveQtyFixes('${recipeId}')" class="btn btn-green" style="flex:1;padding:10px;">Save All</button>
+            <button onclick="window.closeModal()" class="btn" style="flex:1;padding:10px;">Cancel</button>
+        </div>`);
+};
+window._saveQtyFixes = (recipeId) => {
+    const r = window.recipes.find(x=>x.id===recipeId);
+    if (!r) return;
+    let changed = 0;
+    document.querySelectorAll('.qtyfix-input').forEach(input => {
+        const idx = parseInt(input.dataset.idx);
+        const newQty = parseFloat(input.value);
+        if (!isNaN(newQty) && newQty > 0 && r.ingredients[idx]) {
+            r.ingredients[idx].qty = newQty;
+            changed++;
+        }
+    });
+    // Recalculate recipe cost
+    let cost = 0;
+    (r.ingredients||[]).forEach(ing => {
+        if (ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
+        else if (ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
+    });
+    r.cost = cost;
+    if (r.type==='Menu'&&r.price>0) r.gp=parseFloat(((r.price-cost)/r.price*100).toFixed(1));
+    window.saveToDisk();
+    window.closeModal();
+    window.showToast(`${changed} quantities updated!`);
+    window.viewRecipe(recipeId);
 };
 
 window.delRecipe = (id) => {
