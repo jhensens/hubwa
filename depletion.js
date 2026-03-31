@@ -553,6 +553,7 @@ window.renderDepletionHistoryView = function() {
             '<p style="margin:5px 0 0; color:var(--text-muted); font-size:13px;">' + logs.length + ' depletion runs recorded</p></div>' +
             '<div style="display:flex; gap:8px;">' +
                 '<button onclick="window.showView(\'sales\')" class="btn btn-outline" style="font-size:12px;">Back to Takings</button>' +
+                '<button onclick="window.showView(\'depletion-match-rate\')" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);font-size:12px;">📊 Match Rate</button>' +
                 '<button onclick="window.openAiDepletion()" class="btn btn-purple" style="font-size:12px;">New AI Depletion</button>' +
                 '<button onclick="window.showView(\'lightspeed-import\')" class="btn btn-blue" style="font-size:12px;">CSV Import</button>' +
             '</div>' +
@@ -1482,5 +1483,110 @@ window.clearPOSMappings = function() {
             window.showToast('All POS mappings cleared.');
         }
     });
+};
+
+// =============================================================================
+// POS MATCH RATE DASHBOARD
+// =============================================================================
+window.renderDepletionMatchRateView = function() {
+    var E = window.esc;
+    var logs = (window.depletionLogs || []).filter(function(d) { return !d.reversed; });
+    var totalMatched = 0, totalUnmatched = 0;
+    var unmatchedFreq = {};
+    var perRunRates = [];
+
+    logs.forEach(function(d) {
+        var m = (d.matched || []).length;
+        var u = (d.unmatched || []).length;
+        totalMatched += m;
+        totalUnmatched += u;
+        if (m + u > 0) perRunRates.push({ date: d.date || '', rate: Math.round(m / (m + u) * 100) });
+        (d.unmatched || []).forEach(function(item) {
+            var name = item.rawName || item.posName || item.name || item || 'Unknown';
+            if (typeof name !== 'string') name = String(name);
+            unmatchedFreq[name] = (unmatchedFreq[name] || 0) + 1;
+        });
+    });
+
+    var overallRate = (totalMatched + totalUnmatched) > 0 ? Math.round(totalMatched / (totalMatched + totalUnmatched) * 100) : 0;
+    var rateColor = overallRate >= 80 ? 'var(--green)' : overallRate >= 50 ? 'var(--orange)' : 'var(--red)';
+
+    var topUnmatched = Object.entries(unmatchedFreq).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
+
+    var recipesWithAlias = (window.recipes || []).filter(function(r) { return !r.archived && r.posAlias; }).length;
+    var totalActiveRecipes = (window.recipes || []).filter(function(r) { return !r.archived; }).length;
+    var learnedMappings = Object.keys(window.posMappings || {}).length;
+    var bwiAliases = Object.keys(window._bwiAliasMap || {}).length;
+
+    var sparkline = function(data, w, h, color) {
+        if (!data.length || data.every(function(d) { return d === 0; })) return '';
+        var max = Math.max.apply(null, data.concat([1]));
+        var pts = data.map(function(v, i) { return (i / (data.length - 1)) * w + ',' + (h - (v / max) * h * 0.85); }).join(' ');
+        return '<svg width="' + w + '" height="' + h + '" style="display:block;"><polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    };
+
+    var trendData = perRunRates.slice(-20).map(function(r) { return r.rate; });
+
+    var html = '<div style="max-width:900px;margin:auto;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">';
+    html += '<div><button onclick="window.showView(\'depletion-history\')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;margin-bottom:6px;">← Back to History</button>';
+    html += '<h2 style="margin:0;">📊 POS Match Rate Dashboard</h2>';
+    html += '<div style="color:var(--text-muted);font-size:13px;margin-top:4px;">Analyzing ' + logs.length + ' depletion runs</div></div></div>';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:15px;">';
+    html += '<div class="card" style="padding:16px;text-align:center;border-top:4px solid ' + rateColor + ';">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Overall Match Rate</div>';
+    html += '<div style="font-size:36px;font-weight:bold;color:' + rateColor + ';">' + overallRate + '%</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">' + totalMatched + ' matched · ' + totalUnmatched + ' unmatched</div></div>';
+
+    html += '<div class="card" style="padding:16px;text-align:center;border-top:4px solid var(--blue);">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Learned Mappings</div>';
+    html += '<div style="font-size:36px;font-weight:bold;color:var(--blue);">' + learnedMappings + '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">User-confirmed matches</div></div>';
+
+    html += '<div class="card" style="padding:16px;text-align:center;border-top:4px solid var(--purple);">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">BWI Curated Aliases</div>';
+    html += '<div style="font-size:36px;font-weight:bold;color:var(--purple);">' + bwiAliases + '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">Smart Matcher entries</div></div>';
+
+    var aliasPct = totalActiveRecipes > 0 ? Math.round(recipesWithAlias / totalActiveRecipes * 100) : 0;
+    html += '<div class="card" style="padding:16px;text-align:center;border-top:4px solid var(--orange);">';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Recipe POS Alias Coverage</div>';
+    html += '<div style="font-size:36px;font-weight:bold;color:var(--orange);">' + aliasPct + '%</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);">' + recipesWithAlias + ' of ' + totalActiveRecipes + ' recipes</div></div>';
+    html += '</div>';
+
+    if (trendData.length > 1) {
+        html += '<div class="card" style="padding:16px;margin-bottom:15px;">';
+        html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">Match Rate Trend (last ' + trendData.length + ' runs)</div>';
+        html += '<div style="padding:10px 0;">' + sparkline(trendData, 800, 60, rateColor) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">';
+        html += '<span>' + (perRunRates.length > 20 ? perRunRates[perRunRates.length - 20].date : perRunRates[0].date) + '</span>';
+        html += '<span>' + perRunRates[perRunRates.length - 1].date + '</span></div></div>';
+    }
+
+    if (topUnmatched.length > 0) {
+        html += '<div class="card" style="padding:16px;margin-bottom:15px;">';
+        html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">Top Unmatched POS Items</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">These items appear most often without a match. Consider adding aliases or POS mappings.</div>';
+        topUnmatched.forEach(function(item, i) {
+            var barWidth = topUnmatched[0][1] > 0 ? Math.round(item[1] / topUnmatched[0][1] * 100) : 0;
+            html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">';
+            html += '<span style="font-size:11px;color:var(--text-muted);width:20px;text-align:right;">' + (i + 1) + '.</span>';
+            html += '<div style="flex:1;"><div style="font-size:13px;font-weight:600;margin-bottom:3px;">' + E(item[0]) + '</div>';
+            html += '<div style="width:100%;height:4px;background:var(--border);border-radius:2px;"><div style="width:' + barWidth + '%;height:100%;background:var(--red);border-radius:2px;"></div></div></div>';
+            html += '<span style="font-size:12px;font-weight:bold;color:var(--red);min-width:40px;text-align:right;">' + item[1] + 'x</span></div>';
+        });
+        html += '</div>';
+    }
+
+    if (logs.length === 0) {
+        html += '<div class="card" style="text-align:center;padding:40px;">';
+        html += '<div style="font-size:48px;margin-bottom:10px;">📊</div>';
+        html += '<p style="color:var(--text-muted);">No depletion runs yet. Run your first stock depletion to see match rate analytics.</p></div>';
+    }
+
+    html += '</div>';
+    return html;
 };
 

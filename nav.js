@@ -87,6 +87,8 @@ window.showView = (view) => {
         else if (view === 'haccp-history' && window.renderComplianceView) { window._complianceTab = 'haccp'; content.innerHTML = window.renderComplianceView(); }
         else if (view === 'noticeboard' && window.renderNoticeboardView) content.innerHTML = window.renderNoticeboardView();
         else if (view === 'audit-log' && window.renderAuditLogView) content.innerHTML = window.renderAuditLogView();
+        else if (view === 'batch-qty-fix' && window.renderBatchQtyFixView) content.innerHTML = window.renderBatchQtyFixView();
+        else if (view === 'depletion-match-rate' && window.renderDepletionMatchRateView) content.innerHTML = window.renderDepletionMatchRateView();
         else if (view === 'depletion-history' && window.renderDepletionHistoryView) content.innerHTML = window.renderDepletionHistoryView();
         else if (view === 'ask-hub' && window.renderAskHubView) content.innerHTML = window.renderAskHubView();
         else if (view === 'my-hub' && window.renderMyHubView) content.innerHTML = window.renderMyHubView();

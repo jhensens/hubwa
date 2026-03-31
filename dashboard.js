@@ -481,6 +481,16 @@ window.renderManagerHub = () => {
     // --- MARGIN ALERTS ---
     const marginAlerts = typeof window.checkRecipeMargins === 'function' ? window.checkRecipeMargins() : [];
 
+    // --- RECIPE COSTING HEALTH ---
+    const _activeRecipes = (window.recipes||[]).filter(r => !r.archived);
+    const _totalIngs = _activeRecipes.reduce((s,r) => s + (r.ingredients||[]).length, 0);
+    const _linkedIngs = _activeRecipes.reduce((s,r) => s + (r.ingredients||[]).filter(i => i.type==='inv'||i.type==='batch').length, 0);
+    const _rawIngs = _totalIngs - _linkedIngs;
+    const _costingAccuracy = _totalIngs > 0 ? Math.round(_linkedIngs / _totalIngs * 100) : 100;
+    const _fullyCost = _activeRecipes.filter(r => (r.ingredients||[]).length > 0 && (r.ingredients||[]).every(i => i.type==='inv'||i.type==='batch')).length;
+    const _partiallyCost = _activeRecipes.filter(r => { const ings = r.ingredients||[]; return ings.length > 0 && ings.some(i => i.type==='raw') && ings.some(i => i.type==='inv'||i.type==='batch'); }).length;
+    const _top5Unlinked = _activeRecipes.map(r => ({ id:r.id, name:r.name, rawCount:(r.ingredients||[]).filter(i => i.type==='raw').length })).filter(r => r.rawCount > 0).sort((a,b) => b.rawCount - a.rawCount).slice(0, 5);
+
     // --- COGS (from today's wastage + depletion) ---
     const todayWastage = (window.wastageLogs||[]).filter(w => w.time && w.time.includes(todayStr)).reduce((s,w)=>s+(w.value||0), 0);
 
@@ -864,6 +874,36 @@ window.renderManagerHub = () => {
         marginAlerts.slice(0,4).forEach(a => {
             html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span style="color:var(--red);">'+E(a.name)+'</span><span><strong>'+a.currentGp+'%</strong> GP</span></div>';
         });
+        html += '</div>';
+    }
+
+    // --- RECIPE COSTING HEALTH WIDGET ---
+    if (_showFinancials && _totalIngs > 0) {
+        const _accColor = _costingAccuracy >= 80 ? 'var(--green)' : _costingAccuracy >= 50 ? 'var(--orange)' : 'var(--red)';
+        html += '<div class="card" style="padding:16px;margin-bottom:14px;border-top:3px solid '+_accColor+';">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<div style="font-size:13px;font-weight:700;">⚖️ Recipe Costing Health</div>';
+        html += '<button onclick="window.showView(\'batch-linker\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">Link Ingredients →</button></div>';
+        html += '<div style="display:flex;gap:20px;align-items:center;">';
+        html += '<div style="position:relative;width:80px;height:80px;flex-shrink:0;">';
+        html += scoreRing(_costingAccuracy, 80, 6, _accColor);
+        html += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">';
+        html += '<div style="font-size:20px;font-weight:800;color:'+_accColor+';">'+_costingAccuracy+'%</div>';
+        html += '</div></div>';
+        html += '<div style="flex:1;font-size:12px;line-height:1.8;color:var(--text-muted);">';
+        html += _activeRecipes.length+' recipes · '+_linkedIngs+'/'+_totalIngs+' ingredients linked<br>';
+        html += '<span style="color:var(--green);">'+_fullyCost+' fully costed</span> · <span style="color:var(--orange);">'+_partiallyCost+' partial</span> · <span style="color:var(--red);">'+_rawIngs+' unlinked</span>';
+        html += '</div></div>';
+        if (_costingAccuracy < 80) {
+            html += '<div style="margin-top:10px;padding:8px;background:rgba(239,68,68,0.06);border-radius:6px;font-size:12px;color:var(--red);font-weight:600;">GP% may be unreliable — '+_rawIngs+' unlinked ingredients have $0 cost</div>';
+        }
+        if (_top5Unlinked.length > 0) {
+            html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Top Unlinked Recipes</div>';
+            _top5Unlinked.forEach(r => {
+                html += '<div onclick="window.viewRecipe(\''+r.id+'\')" style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);font-size:12px;cursor:pointer;">';
+                html += '<span>'+E(r.name)+'</span><span style="color:var(--red);font-weight:600;">'+r.rawCount+' raw</span></div>';
+            });
+        }
         html += '</div>';
     }
 

@@ -8,41 +8,93 @@
 
 // --- INGREDIENT LINE PARSER ---
 // Parses raw ingredient text like "45ml Rien Nashi pear liqueur" into {qty, unit, name}
+// Enhanced: handles unicode fractions, word numbers, descriptive quantities, prefix stripping
 window._parseIngredientLine = (line) => {
     if (!line || typeof line !== 'string') return { qty: 0, unit: '', name: line || '' };
-    line = line.trim();
-    const knownUnits = /^(ml|g|kg|l|oz|lb|cup|cups|tsp|tbsp|tablespoon|tablespoons|teaspoon|teaspoons|dash|dashes|pinch|bunch|cloves|medium|large|small|slice|slices|piece|pieces|can|cans|bottle|bottles|sprig|sprigs|sheet|sheets|handful)$/i;
-    // Try to match: optional qty (number, fraction, or range) + optional unit + rest is name
-    // Pattern: (qty_part)? (unit_part)? (name)
-    const m = line.match(/^(\d+\/\d+|\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(.*)/);
-    if (!m) return { qty: 0, unit: '', name: line };
-    let qtyStr = m[1];
-    let rest = (m[2] || '').trim();
-    // Parse qty: fraction, range, or plain number
-    let qty = 0;
-    if (qtyStr.includes('/')) {
-        const parts = qtyStr.split('/');
-        qty = parseFloat(parts[0]) / parseFloat(parts[1]);
-    } else if (/\d\s*-\s*\d/.test(qtyStr)) {
-        const rangeParts = qtyStr.split(/\s*-\s*/);
-        qty = (parseFloat(rangeParts[0]) + parseFloat(rangeParts[1])) / 2;
-    } else {
-        qty = parseFloat(qtyStr);
+    const originalLine = line.trim();
+    line = originalLine;
+
+    const knownUnits = /^(ml|g|kg|l|oz|lb|cup|cups|tsp|tbsp|tablespoon|tablespoons|teaspoon|teaspoons|dash|dashes|pinch|pinches|bunch|bunches|clove|cloves|medium|large|small|slice|slices|piece|pieces|can|cans|bottle|bottles|sprig|sprigs|sheet|sheets|handful|head|heads|stalk|stalks|rasher|rashers|fillet|fillets|knob|drop|drops|splash|leaves|leaf|whole|tin|tins|pack|packs|punnet|punnets|wedge|wedges)$/i;
+
+    const unicodeFracs = {'\u00BD':0.5, '\u2153':0.3333, '\u00BC':0.25, '\u2154':0.6667, '\u00BE':0.75, '\u215B':0.125, '\u2155':0.2, '\u2156':0.4, '\u2157':0.6, '\u2158':0.8, '\u2159':0.1667, '\u215A':0.8333};
+    const wordNums = {a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,half:0.5};
+    const prefixes = ['approximately','approx','about','roughly','around','generous','heaped','level','scant'];
+
+    // Phase 0: Strip parentheticals — "2 eggs (separated)" → "2 eggs"
+    line = line.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+
+    // Phase 1: Descriptive zero-qty — "to taste", "as needed", "for garnish", "for serving"
+    const lower = line.toLowerCase();
+    if (/^(to taste|as needed|as required|for garnish|for serving|for decoration|optional)$/i.test(lower) ||
+        /^(salt and pepper|salt & pepper|salt, pepper|seasoning)$/i.test(lower)) {
+        return { qty: 0, unit: '', name: originalLine };
     }
-    if (isNaN(qty)) qty = 0;
-    // Check if rest starts with a unit (with or without space after qty)
-    // Also handle unit attached to number like "45ml"
+
+    // Phase 2: Strip prefixes — "approx 2 cups sugar" → "2 cups sugar"
+    for (const pfx of prefixes) {
+        if (lower.startsWith(pfx + ' ') || lower.startsWith(pfx + '.')) {
+            line = line.substring(pfx.length).trim();
+            if (line.startsWith('.')) line = line.substring(1).trim();
+            break;
+        }
+    }
+
+    // Phase 3: Unicode fractions — "½ cup flour", "1½ cups"
+    let qty = 0, rest = '';
+    const firstChar = line.charAt(0);
+    if (unicodeFracs[firstChar] !== undefined) {
+        qty = unicodeFracs[firstChar];
+        rest = line.substring(1).trim();
+    } else {
+        // Mixed: "1½" — digit(s) followed by unicode fraction
+        const mixedMatch = line.match(/^(\d+)([½⅓¼⅔¾⅛⅕⅖⅗⅘⅙⅚])\s*(.*)/);
+        if (mixedMatch) {
+            qty = parseInt(mixedMatch[1]) + (unicodeFracs[mixedMatch[2]] || 0);
+            rest = (mixedMatch[3] || '').trim();
+        }
+    }
+
+    // Phase 4: Word numbers — "a pinch of salt", "one clove garlic", "two eggs"
+    if (qty === 0 && !rest) {
+        const firstWord = line.split(/\s+/)[0].toLowerCase();
+        if (wordNums[firstWord] !== undefined) {
+            qty = wordNums[firstWord];
+            rest = line.substring(firstWord.length).trim();
+        }
+    }
+
+    // Phase 5: Existing digit regex (original logic, unchanged)
+    if (qty === 0 && !rest) {
+        const m = line.match(/^(\d+\/\d+|\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(.*)/);
+        if (!m) return { qty: 0, unit: '', name: originalLine };
+        const qtyStr = m[1];
+        rest = (m[2] || '').trim();
+        if (qtyStr.includes('/')) {
+            const parts = qtyStr.split('/');
+            qty = parseFloat(parts[0]) / parseFloat(parts[1]);
+        } else if (/\d\s*-\s*\d/.test(qtyStr)) {
+            const rangeParts = qtyStr.split(/\s*-\s*/);
+            qty = (parseFloat(rangeParts[0]) + parseFloat(rangeParts[1])) / 2;
+        } else {
+            qty = parseFloat(qtyStr);
+        }
+        if (isNaN(qty)) qty = 0;
+    }
+
+    // Phase 6: Unit matching — first word of rest against known units
     let unit = '';
     let name = rest;
-    // Try splitting first word as unit
     const unitMatch = rest.match(/^([a-zA-Z]+)\b\s*(.*)/);
     if (unitMatch && knownUnits.test(unitMatch[1])) {
         unit = unitMatch[1];
         name = (unitMatch[2] || '').trim();
+        // Strip leading "of" — "a pinch of salt" → name = "salt"
+        if (name.match(/^of\s+/i)) name = name.replace(/^of\s+/i, '');
     }
+
     // Round qty to avoid floating point noise
     qty = Math.round(qty * 10000) / 10000;
-    return { qty, unit, name: name || line };
+    return { qty, unit, name: name || originalLine };
 };
 
 // --- SECURE API KEY MANAGER ---
