@@ -661,6 +661,8 @@ window._applyStocktakeCounts = function() {
             window._activeStocktake = null;
             window._stocktakeTab = 'history';
             window.saveToDisk();
+            // Recalculate all recipe costs after stock levels change
+            if (typeof window.recalcAllCosts === 'function') { window.recalcAllCosts(); }
             window.showView('stocktake');
             window.showToast(updated + ' stock levels updated from stocktake.');
         }

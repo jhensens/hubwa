@@ -311,7 +311,7 @@ window.fixAllYields = () => {
     } else {
         window.showToast('All yields look correct — nothing to fix.');
     }
-    console.log('fixAllYields log:', log);
+    // Debug log removed for production
     return { fixed, log };
 };
 
@@ -1084,7 +1084,7 @@ window._buildInvAccordion = (filtered, isWeekend) => {
 
 // Filters inventory items based on current invFilters state
 window._filterInvItems = (isWeekend) => {
-    return (window.inventoryItems || []).filter(item => {
+    let items = (window.inventoryItems || []).filter(item => {
         let parTarget = isWeekend ? (item.parWeekend || item.par || 0) : (item.parWeekday || item.par || 0);
         if (window.invFilters.filter === 'Active' && item.archived) return false;
         if (window.invFilters.filter === 'Archived' && !item.archived) return false;
@@ -1098,6 +1098,17 @@ window._filterInvItems = (isWeekend) => {
         }
         return true;
     });
+    // Apply sort
+    const sort = window.invFilters.sort || 'name-az';
+    if (sort === 'name-az') items.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    else if (sort === 'name-za') items.sort((a,b) => (b.name||'').localeCompare(a.name||''));
+    else if (sort === 'price-high') items.sort((a,b) => (b.price||0) - (a.price||0));
+    else if (sort === 'price-low') items.sort((a,b) => (a.price||0) - (b.price||0));
+    else if (sort === 'stock-low') items.sort((a,b) => (a.stock||0) - (b.stock||0));
+    else if (sort === 'supplier') items.sort((a,b) => (a.supplier||'').localeCompare(b.supplier||''));
+    else if (sort === 'category') items.sort((a,b) => (a.category||'').localeCompare(b.category||''));
+    else if (sort === 'recipe-count') items.sort((a,b) => window._getRecipesUsingItem(b.id).length - window._getRecipesUsingItem(a.id).length);
+    return items;
 };
 
 window.renderInventoryView = () => {
@@ -1138,7 +1149,19 @@ window.renderInventoryView = () => {
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
         </div>
-        <input type="text" class="search-bar" id="inv-search-box" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window._debouncedInvRefresh()">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+            <input type="text" class="search-bar" id="inv-search-box" placeholder="🔍 Search items or SKU..." value="${window.invFilters.search}" oninput="window.invFilters.search=this.value; window._debouncedInvRefresh()" style="flex:1;margin-bottom:0;">
+            <select class="input-box" style="margin:0;width:auto;font-size:12px;padding:8px 10px;" onchange="window.invFilters.sort=this.value;window.showView('inventory')">
+                <option value="name-az" ${(window.invFilters.sort||'name-az')==='name-az'?'selected':''}>Name A→Z</option>
+                <option value="name-za" ${window.invFilters.sort==='name-za'?'selected':''}>Name Z→A</option>
+                <option value="price-high" ${window.invFilters.sort==='price-high'?'selected':''}>Price High→Low</option>
+                <option value="price-low" ${window.invFilters.sort==='price-low'?'selected':''}>Price Low→High</option>
+                <option value="stock-low" ${window.invFilters.sort==='stock-low'?'selected':''}>Stock Low→High</option>
+                <option value="supplier" ${window.invFilters.sort==='supplier'?'selected':''}>Supplier</option>
+                <option value="category" ${window.invFilters.sort==='category'?'selected':''}>Category</option>
+                <option value="recipe-count" ${window.invFilters.sort==='recipe-count'?'selected':''}>Most Used in Recipes</option>
+            </select>
+        </div>
         <div style="margin-bottom:15px;">${pillsHtml}</div>
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:15px; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted); align-self:center;">Group By:</span>
@@ -1255,6 +1278,39 @@ window._commitInlinePar = (id, field) => {
     item[field] = n; item.par = n; window.closeModal(); window.saveToDisk(); window.showToast(item.name + ' PAR → ' + n); window.showView('inventory');
 };
 
+// =============================================================================
+// WHERE USED — Show which recipes reference an inventory item
+// =============================================================================
+window._getRecipesUsingItem = (invId) => {
+    return (window.recipes||[]).filter(r => !r.archived && (r.ingredients||[]).some(ing => ing.type==='inv' && ing.ref===invId));
+};
+
+window._renderWhereUsed = (invId) => {
+    const recipes = window._getRecipesUsingItem(invId);
+    if (recipes.length === 0) {
+        return `<div style="background:rgba(245,158,11,0.08);border:1px solid var(--orange);border-radius:8px;padding:12px 15px;margin-bottom:15px;">
+            <span style="font-size:12px;color:var(--orange);font-weight:600;">⚠️ Not used in any recipe</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">This item isn't linked to any recipes yet.</span>
+        </div>`;
+    }
+    const rows = recipes.map(r => {
+        const ing = (r.ingredients||[]).find(i => i.type==='inv' && i.ref===invId);
+        const qty = ing ? ing.qty : '?';
+        const typeColor = r.type==='Batch'?'var(--purple)':'var(--green)';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <span style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${window.esc(r.name)}</span>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <span style="color:var(--text-muted);">qty: ${qty}</span>
+                <span style="font-size:10px;color:${typeColor};border:1px solid ${typeColor};padding:1px 6px;border-radius:8px;">${r.type}</span>
+            </div>
+        </div>`;
+    }).join('');
+    return `<details style="margin-bottom:15px;" open>
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--blue);padding:8px 0;">📋 Used in ${recipes.length} recipe${recipes.length!==1?'s':''}</summary>
+        <div class="card" style="padding:12px;margin-top:6px;">${rows}</div>
+    </details>`;
+};
+
 window.editInvItem = (id = null) => {
     const cleanId = id ? String(id).trim() : null;
     let found = cleanId ? window.inventoryItems.find(i => i.id === cleanId) : null;
@@ -1306,6 +1362,7 @@ window.editInvItem = (id = null) => {
             <div><label style="font-size:11px; color:var(--text-muted);">Weekend PAR</label><input type="number" step="0.1" id="iv-parwe" class="input-box" value="${pWe}"></div>
             <div><label style="font-size:11px; color:var(--text-muted);">Zone / Location</label>${window.buildZoneSelect(e.location, 'iv-loc')}</div>
         </div>
+        ${id ? window._renderWhereUsed(e.id) : ''}
         <div class="sticky-footer">
             <button onclick="window.subInvItem('${e.id}', true)" class="btn btn-blue" style="flex:1;">Save & Add Another</button>
             <button onclick="window.subInvItem('${e.id}', false)" class="btn btn-green" style="flex:1;">Save & Close</button>
@@ -1342,8 +1399,15 @@ window.subInvItem = (id, addAnother, isModal = false) => {
         archived: existingIdx >= 0 ? window.inventoryItems[existingIdx].archived : false,
         history: existingIdx >= 0 ? window.inventoryItems[existingIdx].history : []
     };
+    // Detect price/yield changes for recipe cost cascade
+    const oldItem = existingIdx >= 0 ? window.inventoryItems[existingIdx] : null;
+    const priceChanged = oldItem && (oldItem.price !== obj.price || oldItem.yield !== obj.yield);
     if (existingIdx >= 0) { window.inventoryItems[existingIdx] = obj; } else { window.inventoryItems.push(obj); }
     window.saveToDisk();
+    // Cascade recipe costs if price or yield changed
+    if (priceChanged && typeof window.cascadeRecipeCosts === 'function') {
+        window.cascadeRecipeCosts([id]);
+    }
     window.showToast(`${obj.name} saved.`);
     if (isModal) {
         window.closeModal();
@@ -1771,6 +1835,42 @@ window.viewPriceTrend = (id) => {
                 </tr>`;
             }).join('')}
         </table>`;
-    window.openModal(`📈 Price Trend: ${esc(item.name)}`, `<div style="max-height:400px; overflow-y:auto;">${historyHtml}</div><button onclick="window.closeModal()" class="btn btn-dark" style="width:100%; margin-top:20px;">Close</button>`);
+    // Price trend analysis
+    let trendHtml = '';
+    if (history.length >= 3) {
+        const prices = history.map(h => Number(h.price));
+        const recent = prices.slice(-Math.min(5, Math.floor(prices.length/2)));
+        const older = prices.slice(0, -recent.length);
+        if (older.length > 0) {
+            const recentAvg = recent.reduce((s,p)=>s+p,0)/recent.length;
+            const olderAvg = older.reduce((s,p)=>s+p,0)/older.length;
+            const trendPct = ((recentAvg - olderAvg) / olderAvg * 100).toFixed(1);
+            const isUp = trendPct > 0;
+            const trendColor = isUp ? 'var(--red)' : 'var(--green)';
+            // Mini sparkline SVG
+            const minP = Math.min(...prices), maxP = Math.max(...prices);
+            const range = maxP - minP || 1;
+            const svgW = 200, svgH = 40;
+            const points = prices.map((p,i) => `${(i/(prices.length-1))*svgW},${svgH - ((p-minP)/range)*svgH}`).join(' ');
+            const sparkline = `<svg width="${svgW}" height="${svgH}" style="display:block;margin:0 auto;"><polyline points="${points}" fill="none" stroke="${trendColor}" stroke-width="2"/></svg>`;
+            // Alert if latest price >10% above average
+            const latestPrice = prices[prices.length-1];
+            const allAvg = prices.reduce((s,p)=>s+p,0)/prices.length;
+            const alertPct = ((latestPrice - allAvg) / allAvg * 100).toFixed(1);
+            const alert = alertPct > 10 ? `<div style="background:rgba(239,68,68,0.1);border:1px solid var(--red);border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;color:var(--red);font-weight:600;">🚨 Current price is ${alertPct}% above average ($${allAvg.toFixed(2)})</div>` : '';
+            trendHtml = `<div class="card" style="padding:15px;margin-bottom:12px;border-top:3px solid ${trendColor};">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:13px;font-weight:600;">Price Trend</span>
+                    <span style="font-size:16px;font-weight:bold;color:${trendColor};">${isUp?'📈':'📉'} ${isUp?'+':''}${trendPct}%</span>
+                </div>
+                ${sparkline}
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:4px;">
+                    <span>$${minP.toFixed(2)} low</span><span>$${maxP.toFixed(2)} high</span>
+                </div>
+                ${alert}
+            </div>`;
+        }
+    }
+    window.openModal(`📈 Price Trend: ${esc(item.name)}`, `${trendHtml}<div style="max-height:350px; overflow-y:auto;">${historyHtml}</div><button onclick="window.closeModal()" class="btn btn-dark" style="width:100%; margin-top:20px;">Close</button>`);
 };
 

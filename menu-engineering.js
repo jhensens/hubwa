@@ -328,7 +328,7 @@ window._safeParseAiJson = (text) => {
 };
 
 window.runAiBatchLink = async () => {
-    console.log('[AI Batch Linker] v20260329e — batched mode');
+    // AI Batch Linker v20260329e — batched mode
     const statusDiv = document.getElementById('batch-link-status');
     const resultsDiv = document.getElementById('batch-link-results');
     statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:12px;color:var(--purple);font-weight:bold;">🤖 Scanning all raw ingredients (v2-batched)...</div>';
@@ -345,7 +345,7 @@ window.runAiBatchLink = async () => {
             rawIngredients.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, rawName: ing.name });
         });
     });
-    if (skippedNoise) console.log('[AI Batch Linker] Skipped ' + skippedNoise + ' noise ingredients (method steps, glass types, etc.)');
+    // Noise items filtered silently (method steps, glass types, etc.)
     if (rawIngredients.length === 0) {
         statusDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--green);padding:12px;color:var(--green);font-weight:bold;">✅ All ingredients linked!</div>';
         return;
@@ -403,11 +403,11 @@ Return JSON array: [{"idx":0,"matchId":"inv-id","confidence":"high"}]`;
             if (data.error) throw new Error(data.error.message);
             const rawText = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '[]';
             const batchMatches = window._safeParseAiJson(rawText);
-            console.log('[Batch ' + (b+1) + '] got ' + batchMatches.length + ' matches');
+            // Batch match count tracked internally
             batchMatches.forEach(m => { allMatches.push({ ...m, idx: m.idx + globalOffset }); });
             processedBatches++;
         } catch (batchErr) {
-            console.error('[Batch ' + (b+1) + '] failed:', batchErr.message);
+            // Batch error tracked in totalErrors count
             totalErrors++;
         }
     };
@@ -521,7 +521,10 @@ window.commitBatchLinks = () => {
         const ing=recipe.ingredients[item.ingIdx]; if(!ing||ing.type!=='raw') return;
         const inv=window.inventoryItems.find(i=>i.id===item.suggestedInvId); if(!inv) return;
         let origQty=ing.qty; let origUnit=ing.unit||'';
-        if(!origQty){ const parsed=window._parseIngredientLine(ing.name); origQty=parsed.qty||1; origUnit=origUnit||parsed.unit; }
+        // Always re-parse _rawName with improved parser for better qty extraction
+        const parsed=window._parseIngredientLine(ing.name);
+        if(!origQty || origQty===1){ origQty=parsed.qty||1; }
+        if(!origUnit){ origUnit=parsed.unit||''; }
         recipe.ingredients[item.ingIdx]={type:'inv',ref:inv.id,qty:origQty,unit:origUnit||inv.useUnit||'unit',name:inv.recipeName||inv.name,_rawName:ing.name};
         count++;
     });

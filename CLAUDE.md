@@ -20,19 +20,30 @@ A PWA for hospitality venue management. Two venues: **Bar Wa Izakaya** (BWI) and
 ## Key Files
 | File | Lines | Purpose |
 |------|-------|---------|
-| `core.js` | ~430 | Global state, utilities, 47 save keys, modals |
+| `core.js` | ~430 | Global state, utilities, 49 save keys, modals, confirmAction |
 | `storage.js` | ~190 | saveToDisk(), Firebase sync, backup, import/export |
-| `inventory.js` | ~1,700 | Stock, PAR levels, suppliers, recipeName field |
-| `recipes.js` | ~870 | Recipe costing, GP calc, ingredient linking |
-| `depletion.js` | ~1,500 | POS linking, wastage, BWI Smart Matcher |
-| `menu-engineering.js` | ~650 | AI recipe import (Gemini), batch linking |
-| `compliance.js` | ~950 | Rotational tasks, checklists, temp logging |
-| `dashboard.js` | ~1,170 | KPIs, covers tracker, handover/debrief |
+| `auth.js` | ~280 | PIN hashing (SHA-256), lock state, auto-lock, role-based access |
+| `nav.js` | ~265 | View routing (59 views), global search, ID generation |
+| `notifications.js` | ~260 | Audit logging, print reports, DOMContentLoaded init |
+| `venues.js` | ~190 | Multi-venue framework, venue switching, theming |
+| `inventory.js` | ~1,876 | Stock, PAR, suppliers, yield fixers, price trends, Where Used, 8 sort modes |
+| `recipes.js` | ~1,305 | Recipe costing, GP calc, ingredient linking (inv+batch), reordering, auto-reparse |
+| `depletion.js` | ~1,590 | POS linking, wastage, BWI Smart Matcher (177 aliases) |
+| `menu-engineering.js` | ~650 | AI recipe import (Gemini 2.5 Flash), batch linking |
+| `compliance.js` | ~1,010 | Rotational tasks, checklists, temp logging (freezer/fridge aware), overview widget |
+| `dashboard.js` | ~1,245 | KPIs, covers tracker, handover/debrief, version info |
 | `engagement.js` | ~1,690 | Roster, badges, announcements, staff hub |
-| `nav.js` | ~260 | View routing, global search, role-based access |
+| `analytics.js` | ~700 | Sales analytics, GP reports, weekly summaries |
+| `documents.js` | ~805 | Knowledge base (SOPs), digital safe |
+| `invoices.js` | ~800 | Invoice processing, supplier linking |
+| `ordering.js` | ~660 | PAR-based ordering, order history |
+| `stocktake.js` | ~730 | Stock count workflow, reconciliation |
+| `staff.js` | ~566 | Staff directory, qualifications, onboarding |
+| `tanda.js` | ~390 | Tanda roster sync, timesheet integration |
+| `sw.js` | ~102 | Service worker, app shell caching (31 files) |
 
 ## Data Model
-- `window.saveKeys` (core.js) — 56 arrays that get persisted
+- `window.saveKeys` (core.js) — 49 arrays that get persisted
 - Firebase doc: `venueData/{docId}` — one doc per venue, merge writes
 - Backups: `backups/{venueId}_{YYYY-MM-DD}` — daily, 7-day retention
 - Manual export: JSON download via sidebar button
@@ -46,9 +57,16 @@ A PWA for hospitality venue management. Two venues: **Bar Wa Izakaya** (BWI) and
 ## Recipe & Inventory System
 - Inventory items have a `recipeName` field — clean display name (e.g. "Unsalted Butter" vs "500gm Unsalted Butter-Dairy Farmers (12)")
 - Recipe ingredients link to inventory via `ing.type='inv'` + `ing.ref` (inventory item ID)
+- Ingredients can also link to batch recipes: `ing.type='batch'` + `ing.ref` (recipe ID)
+- Unlinked ingredients: `ing.type='raw'` — $0 cost, shows clickable link button
 - `ing.name` is frozen at link time — use live lookup `inv.recipeName||inv.name` for display
-- `ing._rawName` preserves original recipe text from before AI batch linking
+- `ing._rawName` preserves original recipe text from before AI batch linking — never delete
+- `ing._qtyConfirmed` flag marks ingredients where qty=1 is intentionally correct
 - `commitBatchLinks()` in menu-engineering.js handles bulk ingredient-to-inventory linking
+- `recalcAllCosts()` recalculates ALL recipe costs (batches first, then menus)
+- `cascadeRecipeCosts([invIds])` recalculates only recipes using specific inventory items
+- Cost formula: `ingredientCost = ing.qty * (inv.price / inv.yield)` — GP target: 67%
+- Batch recipes flow cost through: batch ingredients -> batch cost/yieldQty -> menu recipe cost
 
 ## POS Depletion System
 - 4-level cascade: posMappings → recipe.posAlias → recipe.name → direct inventory match

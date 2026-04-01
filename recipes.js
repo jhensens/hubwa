@@ -317,6 +317,7 @@ window.viewRecipe = (id) => {
                     ${r.category?`<span style="font-size:12px;color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:12px;">${E(r.category)}</span>`:''}
                     ${r.type==='Menu'&&r.gp?`<span style="font-size:12px;font-weight:bold;color:#fff;background:${gpColor};padding:3px 10px;border-radius:12px;">${r.gp}% GP</span>`:''}
                 </div>
+                ${r.createdAt||r.modifiedAt?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${r.createdAt?'Created: '+new Date(r.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):''}${r.createdAt&&r.modifiedAt?' · ':''}${r.modifiedAt?'Edited: '+new Date(r.modifiedAt).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+'':''}</div>`:''}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="window.duplicateRecipe('${r.id}')" class="btn btn-outline" style="font-size:12px;">📋 Duplicate</button>
@@ -619,7 +620,8 @@ window.editRecipeForm = (id = null) => {
     let r = cleanId ? window.recipes.find(x => x.id === cleanId) : null;
     if (!r) {
         r = { id: window.generateId('rec'), name:'', posAlias:'', type:'Menu', station:'Kitchen', status:'Active',
-              price:0, yieldQty:1, yieldUnit:'Portion', method:'', ingredients:[], allergens:[], cost:0, gp:0, photo:'', videoUrl:'' };
+              price:0, yieldQty:1, yieldUnit:'Portion', method:'', ingredients:[], allergens:[], cost:0, gp:0, photo:'', videoUrl:'',
+              createdAt: new Date().toISOString(), modifiedAt: null };
     }
     if (!window.tempRecipeId || window.tempRecipeId !== cleanId) {
         window.tempIngs = JSON.parse(JSON.stringify(r.ingredients||[]));
@@ -638,11 +640,16 @@ window.editRecipeForm = (id = null) => {
             const isRaw=ing.type==='raw';
             return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;gap:6px;">
                 <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-                    ${isRaw?`<span style="font-size:10px;color:var(--orange);border:1px solid var(--orange);padding:1px 5px;border-radius:8px;flex-shrink:0;">raw</span>`:`<input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx},this.value)" style="width:65px;margin:0;padding:4px;border-color:var(--blue);flex-shrink:0;">`}
+                    ${isRaw?`<span style="font-size:10px;color:var(--orange);border:1px solid var(--orange);padding:1px 5px;border-radius:8px;flex-shrink:0;cursor:pointer;" onclick="window._openManualLinkModal(${tIdx})" title="Click to link to inventory">raw</span>`:`<input type="number" step="0.001" class="input-box" value="${ing.qty}" onchange="window.updateIngQty(${tIdx},this.value)" style="width:65px;margin:0;padding:4px;border-color:var(--blue);flex-shrink:0;">`}
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><span style="color:var(--text-muted);">${esc(displayUnit)} </span><strong style="color:${isErr?'var(--red)':isRaw?'var(--text-muted)':'var(--text-main)'};">${esc(ing._displayName||ing.name)}${isErr?' ⚠️':''}</strong></span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    ${isRaw?`<button onclick="window._openManualLinkModal(${tIdx})" class="btn btn-outline" style="font-size:10px;padding:2px 6px;border-color:var(--blue);color:var(--blue);" title="Link to inventory item">🔗</button>`:''}
                     ${!isRaw&&itemCost>0?`<span style="color:var(--brand-accent);font-size:11px;">$${itemCost.toFixed(3)}</span>`:''}
+                    <span style="display:flex;flex-direction:column;gap:0;">
+                        <button onclick="window.moveIngUp(${tIdx})" style="border:none;background:none;cursor:pointer;font-size:9px;padding:0;line-height:1;color:var(--text-muted);${tIdx===0?'opacity:0.25;pointer-events:none;':''}" title="Move up">▲</button>
+                        <button onclick="window.moveIngDown(${tIdx})" style="border:none;background:none;cursor:pointer;font-size:9px;padding:0;line-height:1;color:var(--text-muted);${tIdx===window.tempIngs.length-1?'opacity:0.25;pointer-events:none;':''}" title="Move down">▼</button>
+                    </span>
                     <button onclick="window.rmIng(${tIdx})" style="color:var(--red);border:none;background:none;cursor:pointer;font-size:15px;padding:0;">&times;</button>
                 </div>
             </div>`;
@@ -801,10 +808,29 @@ window.updateUnitHint = () => {
     };
     window.updateIngQty = (idx,val) => { window.tempIngs[idx].qty=parseFloat(val)||0; window.refreshRB(); };
     window.rmIng = (tIdx) => { window.tempIngs.splice(tIdx,1); window.refreshRB(); };
+    window.moveIngUp = (idx) => { if(idx<=0)return; const a=window.tempIngs; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; window.refreshRB(); };
+    window.moveIngDown = (idx) => { const a=window.tempIngs; if(idx>=a.length-1)return; [a[idx],a[idx+1]]=[a[idx+1],a[idx]]; window.refreshRB(); };
     window.addIng = () => {
         const qty=parseFloat(document.getElementById('add-qty').value); const selVal=document.getElementById('add-sel').value;
         if (!qty||!selVal) return window.showToast("Select item and enter quantity.","error");
         const parts=selVal.split('_'); const type=parts[0]; const refId=selVal.replace(type+'_','');
+        // Duplicate detection
+        const existing = window.tempIngs.find(i => i.type===type && i.ref===refId);
+        if (existing) {
+            const displayName = type==='inv' ? (window.inventoryItems.find(i=>i.id===refId)||{}).recipeName||existing.name : existing.name;
+            window.confirmAction({
+                title: '⚠️ Duplicate Ingredient',
+                message: `"${displayName}" is already in this recipe (qty: ${existing.qty}). What would you like to do?`,
+                confirmLabel: 'Update Existing Qty', confirmColor: 'var(--blue)', tier: 'standard',
+                onConfirm: () => { existing.qty += qty; window.closeModal(); window.refreshRB(); window.showToast('Updated qty to ' + existing.qty); },
+                cancelLabel: 'Add Anyway',
+                onCancel: () => { window._addIngDirect(type, refId, qty); window.closeModal(); }
+            });
+            return;
+        }
+        window._addIngDirect(type, refId, qty);
+    };
+    window._addIngDirect = (type, refId, qty) => {
         if (type==='inv'){const inv=window.inventoryItems.find(i=>i.id===refId);if(!inv)return;window.tempIngs.push({type:'inv',ref:refId,qty,unit:inv.useUnit||'Unit',name:inv.recipeName||inv.name});}
         else {const b=window.recipes.find(x=>x.id===refId);if(!b)return;window.tempIngs.push({type:'batch',ref:refId,qty,unit:b.yieldUnit,name:b.name});}
         window.refreshRB();
@@ -868,7 +894,9 @@ window.subRecipe = (id, totalCost) => {
         price: type==='Menu'?(parseFloat(document.getElementById('r-p').value)||0):0,
         yieldQty: type==='Batch'?(parseFloat(document.getElementById('r-yq').value)||1):1,
         yieldUnit: type==='Batch'?document.getElementById('r-yu').value:'Portion',
-        gp: 0
+        gp: 0,
+        createdAt: oldRecipe.createdAt || new Date().toISOString(),
+        modifiedAt: new Date().toISOString()
     };
     if (type==='Menu'&&obj.price>0) obj.gp=parseFloat(((obj.price-totalCost)/obj.price*100).toFixed(1));
     if (existingIdx>=0) window.recipes[existingIdx]=obj; else window.recipes.push(obj);
@@ -884,13 +912,19 @@ window.openQtyFixModal = (recipeId) => {
         const inv = window.inventoryItems.find(i=>i.id===ing.ref);
         const displayName = inv?(inv.recipeName||inv.name):ing.name;
         const unit = inv?(inv.useUnit||''):'';
+        const invPrice = inv?(inv.price||0):0;
+        const invYield = inv?(inv.yield||1):1;
+        const unitCost = invPrice/invYield;
         return `<div style="display:grid;grid-template-columns:1fr 80px auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
             <div>
                 <div style="font-size:13px;font-weight:600;">${esc(displayName)}</div>
                 <div style="font-size:11px;color:var(--text-muted);">raw: "${esc(ing._rawName)}"</div>
                 <div style="font-size:11px;color:var(--blue);">Unit: ${esc(unit)}</div>
             </div>
-            <input type="number" step="0.001" min="0" class="input-box qtyfix-input" data-idx="${ing.idx}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <input type="number" step="0.001" min="0" class="input-box qtyfix-input" data-idx="${ing.idx}" data-inv-price="${invPrice}" data-inv-yield="${invYield}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;" oninput="window._qtyFixCostPreview(this)">
+                <span class="qf-cost" style="font-size:10px;color:var(--brand-accent);">$${unitCost.toFixed(3)}</span>
+            </div>
             <button onclick="window._confirmQty('${recipeId}',${ing.idx})" class="btn btn-outline" style="font-size:10px;padding:4px 8px;border-color:var(--green);color:var(--green);white-space:nowrap;" title="Confirm qty=1 is correct">✓ OK</button>
         </div>`;
     }).join('');
@@ -964,7 +998,10 @@ window.renderBatchQtyFixView = () => {
                     <div style="font-size:11px;color:var(--blue);cursor:pointer;" onclick="window.viewRecipe('${item.recipeId}')">${esc(item.recipeName)}</div>
                     <div style="font-size:10px;color:var(--text-muted);">Unit: ${esc(unit)}</div>
                 </div>
-                <input type="number" step="0.001" min="0" class="input-box bqf-input" tabindex="${tabIdx}" data-recipe-id="${item.recipeId}" data-ing-idx="${item.ingIdx}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                    <input type="number" step="0.001" min="0" class="input-box bqf-input" tabindex="${tabIdx}" data-recipe-id="${item.recipeId}" data-ing-idx="${item.ingIdx}" data-inv-price="${item.inv?(item.inv.price||0):0}" data-inv-yield="${item.inv?(item.inv.yield||1):1}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;" oninput="window._bqfCostPreview(this)">
+                    <span class="bqf-cost" style="font-size:10px;color:var(--brand-accent);">$${item.inv?((item.inv.price||0)/(item.inv.yield||1)).toFixed(3):'0.000'}</span>
+                </div>
                 <button onclick="window._confirmQty('${item.recipeId}',${item.ingIdx});window.showView('batch-qty-fix');" class="btn btn-outline" style="font-size:10px;padding:4px 8px;border-color:var(--green);color:var(--green);white-space:nowrap;" title="Confirm qty=1 is correct">✓ OK</button>
             </div>`;
         }).join('');
@@ -977,7 +1014,10 @@ window.renderBatchQtyFixView = () => {
                 <h2 style="margin:0;">🔧 Batch Qty Fix</h2>
                 <div style="color:var(--text-muted);font-size:13px;margin-top:4px;">${total} ingredients need quantity review across ${(window.recipes||[]).filter(r=>!r.archived&&(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed)).length} recipes</div>
             </div>
-            ${total>0?`<button onclick="window._saveBatchQtyFixes()" class="btn btn-green" style="font-size:13px;padding:8px 20px;">Save Page</button>`:''}
+            <div style="display:flex;gap:8px;">
+                ${total>0?`<button onclick="window._autoReparse()" class="btn btn-outline" style="font-size:12px;padding:8px 14px;border-color:var(--purple);color:var(--purple);" title="Run improved parser on all _rawName values to auto-fix quantities">🤖 Auto-Parse</button>`:''}
+                ${total>0?`<button onclick="window._saveBatchQtyFixes()" class="btn btn-green" style="font-size:13px;padding:8px 20px;">Save Page</button>`:''}
+            </div>
         </div>
         <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:grid;grid-template-columns:1.5fr 1fr 80px auto;gap:8px;padding:10px 12px;background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">
@@ -1012,6 +1052,88 @@ window._saveBatchQtyFixes = () => {
     window.showView('batch-qty-fix');
 };
 
+// =============================================================================
+// COST IMPACT PREVIEW — Live cost display as qty changes
+// =============================================================================
+window._bqfCostPreview = (input) => {
+    const qty = parseFloat(input.value) || 0;
+    const price = parseFloat(input.dataset.invPrice) || 0;
+    const yld = parseFloat(input.dataset.invYield) || 1;
+    const cost = qty * (price / yld);
+    const costEl = input.parentElement.querySelector('.bqf-cost');
+    if (costEl) costEl.textContent = '$' + cost.toFixed(3);
+};
+window._qtyFixCostPreview = (input) => {
+    const qty = parseFloat(input.value) || 0;
+    const price = parseFloat(input.dataset.invPrice) || 0;
+    const yld = parseFloat(input.dataset.invYield) || 1;
+    const cost = qty * (price / yld);
+    const costEl = input.parentElement.querySelector('.qf-cost');
+    if (costEl) costEl.textContent = '$' + cost.toFixed(3);
+};
+
+// =============================================================================
+// AUTO RE-PARSE — Run improved parser on all _rawName ingredients
+// =============================================================================
+window._autoReparse = () => {
+    const changes = [];
+    let skipped = 0;
+    (window.recipes||[]).filter(r=>!r.archived).forEach(r => {
+        (r.ingredients||[]).forEach(ing => {
+            if (ing.type!=='inv' || ing.qty!==1 || !ing._rawName || ing._qtyConfirmed) return;
+            const parsed = window._parseIngredientLine(ing._rawName);
+            if (parsed.qty && parsed.qty !== 1) {
+                changes.push({ recipe: r.name, recipeId: r.id, rawName: ing._rawName, newQty: parsed.qty, newUnit: parsed.unit || '', ing });
+            } else {
+                skipped++;
+            }
+        });
+    });
+    if (changes.length === 0) {
+        window.showToast(`🤖 No quantities could be auto-fixed. ${skipped} still need manual review.`);
+        return;
+    }
+    const rows = changes.slice(0, 30).map(c =>
+        `<tr style="border-bottom:1px solid var(--border);font-size:12px;">
+            <td style="padding:6px 8px;color:var(--blue);">${esc(c.recipe)}</td>
+            <td style="padding:6px 8px;color:var(--text-muted);">${esc(c.rawName)}</td>
+            <td style="padding:6px 8px;text-align:center;">1</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:bold;color:var(--green);">${c.newQty}${c.newUnit?' '+esc(c.newUnit):''}</td>
+        </tr>`
+    ).join('');
+    window.openModal('🤖 Auto-Parse Preview', `
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px;">Found <strong style="color:var(--green);">${changes.length}</strong> quantities that can be fixed. ${skipped} still need manual review.${changes.length>30?'<br>Showing first 30:':''}</p>
+        <div style="max-height:350px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;border-bottom:2px solid var(--border);">
+                    <th style="padding:6px 8px;text-align:left;">Recipe</th><th style="padding:6px 8px;text-align:left;">Raw Text</th><th style="padding:6px 8px;text-align:center;">Old</th><th style="padding:6px 8px;text-align:center;">New</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:15px;">
+            <button onclick="window._applyAutoReparse()" class="btn btn-green" style="flex:1;padding:10px;">✅ Apply All ${changes.length} Changes</button>
+            <button onclick="window.closeModal()" class="btn btn-outline" style="flex:1;padding:10px;">Cancel</button>
+        </div>
+    `);
+    // Store changes for apply
+    window._pendingReparse = changes;
+};
+
+window._applyAutoReparse = () => {
+    const changes = window._pendingReparse || [];
+    changes.forEach(c => {
+        c.ing.qty = c.newQty;
+        if (c.newUnit) c.ing.unit = c.newUnit;
+    });
+    window.recalcAllCosts();
+    window.saveToDisk();
+    window._pendingReparse = null;
+    window.closeModal();
+    window.showToast(`🤖 ${changes.length} quantities updated!`);
+    window.showView('batch-qty-fix');
+};
+
 window._confirmQty = (recipeId, ingIdx) => {
     const r = window.recipes.find(x=>x.id===recipeId);
     if (!r || !r.ingredients[ingIdx]) return;
@@ -1022,6 +1144,154 @@ window._confirmQty = (recipeId, ingIdx) => {
     const remaining = (r.ingredients||[]).filter(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed);
     if (remaining.length > 0) { window.openQtyFixModal(recipeId); }
     else { window.closeModal(); window.viewRecipe(recipeId); }
+};
+
+// =============================================================================
+// MANUAL INGREDIENT LINKING — Link raw ingredient to inventory from recipe editor
+// =============================================================================
+window._openManualLinkModal = (tIdx) => {
+    const ing = window.tempIngs[tIdx];
+    if (!ing || ing.type !== 'raw') return;
+    const parsed = window._parseIngredientLine(ing.name);
+    const ingNameLC = (parsed.name||ing.name).toLowerCase();
+    const invItems = (window.inventoryItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.recipeName||a.name).localeCompare(b.recipeName||b.name));
+    const batchItems = (window.recipes||[]).filter(r=>r.type==='Batch'&&!r.archived).sort((a,b)=>a.name.localeCompare(b.name));
+    const searchId = 'ml-search-' + tIdx;
+    const selectId = 'ml-select-' + tIdx;
+    const qtyId = 'ml-qty-' + tIdx;
+    const unitId = 'ml-unit-' + tIdx;
+
+    // Build options with both inventory and batch recipes
+    let opts = '';
+    if (batchItems.length > 0) {
+        opts += `<optgroup label="🍳 Prep Batches (in-house)">`;
+        opts += batchItems.map(b => {
+            const nameLC = b.name.toLowerCase();
+            const isMatch = nameLC.includes(ingNameLC) || ingNameLC.includes(nameLC);
+            const costPerUnit = b.yieldQty > 0 ? (b.cost / b.yieldQty) : 0;
+            return `<option value="batch_${b.id}" ${isMatch?'selected':''}>[Batch] ${esc(b.name)} (per ${esc(b.yieldUnit||'Unit')}) — $${costPerUnit.toFixed(2)}/unit</option>`;
+        }).join('');
+        opts += `</optgroup>`;
+    }
+    // Group inventory by category
+    const invCats = [...new Set(invItems.map(i=>i.category||'Other'))].sort();
+    let firstMatch = '';
+    invCats.forEach(cat => {
+        const catItems = invItems.filter(i=>(i.category||'Other')===cat);
+        opts += `<optgroup label="📦 ${esc(cat)}">`;
+        opts += catItems.map(inv => {
+            const displayName = inv.recipeName||inv.name;
+            const nameLC = displayName.toLowerCase();
+            const isMatch = nameLC.includes(ingNameLC) || ingNameLC.includes(nameLC);
+            if (isMatch && !firstMatch) firstMatch = 'inv_' + inv.id;
+            return `<option value="inv_${inv.id}" ${isMatch&&!firstMatch?'selected':''}>${esc(displayName)} (per ${esc(inv.useUnit||'Unit')}) — $${(inv.price||0).toFixed(2)}</option>`;
+        }).join('');
+        opts += `</optgroup>`;
+    });
+
+    window.openModal('🔗 Link Ingredient', `
+        <div style="margin-bottom:12px;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Original text:</div>
+            <div style="font-size:13px;font-weight:600;color:var(--orange);padding:8px 12px;background:rgba(245,158,11,0.08);border-radius:6px;">${esc(ing.name)}</div>
+            ${parsed.qty!==1||parsed.unit?`<div style="font-size:11px;color:var(--blue);margin-top:4px;">Parsed: qty=${parsed.qty}, unit="${parsed.unit}", name="${esc(parsed.name)}"</div>`:''}
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--text-muted);">Search inventory & batch recipes</label>
+            <input type="text" id="${searchId}" class="input-box" placeholder="Type to filter..." style="margin:0 0 6px 0;" oninput="window._filterManualLinkList('${selectId}',this.value)">
+            <select id="${selectId}" class="input-box" size="8" style="margin:0;font-size:12px;height:auto;" onchange="window._updateManualLinkUnit('${selectId}','${unitId}')">${opts}</select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <div>
+                <label style="font-size:11px;color:var(--text-muted);">Quantity</label>
+                <input type="number" step="0.001" id="${qtyId}" class="input-box" value="${parsed.qty||1}" style="margin:0;border-color:var(--blue);font-weight:bold;">
+            </div>
+            <div>
+                <label style="font-size:11px;color:var(--text-muted);">Unit</label>
+                <input type="text" id="${unitId}" class="input-box" value="${esc(parsed.unit||'')}" style="margin:0;" readonly>
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;">
+            <button onclick="window._commitManualLink(${tIdx},'${selectId}','${qtyId}')" class="btn btn-green" style="flex:1;padding:10px;">🔗 Link</button>
+            <button onclick="window.closeModal()" class="btn btn-outline" style="flex:1;padding:10px;">Cancel</button>
+        </div>
+    `);
+    // Auto-update unit for initial selection
+    setTimeout(() => window._updateManualLinkUnit(selectId, unitId), 50);
+};
+
+window._filterManualLinkList = (selectId, query) => {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const q = query.toLowerCase();
+    const invItems = (window.inventoryItems||[]).filter(i=>!i.archived);
+    const batchItems = (window.recipes||[]).filter(r=>r.type==='Batch'&&!r.archived);
+    const filteredInv = q ? invItems.filter(inv => ((inv.recipeName||inv.name).toLowerCase().includes(q) || inv.name.toLowerCase().includes(q))) : invItems;
+    const filteredBatch = q ? batchItems.filter(b => b.name.toLowerCase().includes(q)) : batchItems;
+    let html = '';
+    if (filteredBatch.length > 0) {
+        html += `<optgroup label="🍳 Prep Batches (in-house)">`;
+        html += filteredBatch.sort((a,b)=>a.name.localeCompare(b.name))
+            .map(b => { const cpu = b.yieldQty>0?(b.cost/b.yieldQty):0; return `<option value="batch_${b.id}">[Batch] ${esc(b.name)} (per ${esc(b.yieldUnit||'Unit')}) — $${cpu.toFixed(2)}/unit</option>`; }).join('');
+        html += `</optgroup>`;
+    }
+    const cats = [...new Set(filteredInv.map(i=>i.category||'Other'))].sort();
+    cats.forEach(cat => {
+        const catItems = filteredInv.filter(i=>(i.category||'Other')===cat).sort((a,b)=>(a.recipeName||a.name).localeCompare(b.recipeName||b.name));
+        html += `<optgroup label="📦 ${esc(cat)}">`;
+        html += catItems.map(inv => `<option value="inv_${inv.id}">${esc(inv.recipeName||inv.name)} (per ${esc(inv.useUnit||'Unit')}) — $${(inv.price||0).toFixed(2)}</option>`).join('');
+        html += `</optgroup>`;
+    });
+    sel.innerHTML = html;
+};
+
+window._updateManualLinkUnit = (selectId, unitId) => {
+    const sel = document.getElementById(selectId);
+    const unitEl = document.getElementById(unitId);
+    if (!sel || !unitEl || !sel.value) return;
+    const val = sel.value;
+    if (val.startsWith('batch_')) {
+        const b = (window.recipes||[]).find(r=>r.id===val.replace('batch_',''));
+        if (b) unitEl.value = b.yieldUnit || 'Unit';
+    } else if (val.startsWith('inv_')) {
+        const inv = (window.inventoryItems||[]).find(i=>i.id===val.replace('inv_',''));
+        if (inv) unitEl.value = inv.useUnit || 'Unit';
+    }
+};
+
+window._commitManualLink = (tIdx, selectId, qtyId) => {
+    const sel = document.getElementById(selectId);
+    const qtyEl = document.getElementById(qtyId);
+    if (!sel || !sel.value) return window.showToast('Select an item to link.', 'error');
+    const qty = parseFloat(qtyEl.value) || 1;
+    const oldName = window.tempIngs[tIdx].name;
+    const val = sel.value;
+
+    if (val.startsWith('batch_')) {
+        const batchId = val.replace('batch_','');
+        const b = (window.recipes||[]).find(r=>r.id===batchId);
+        if (!b) return window.showToast('Batch recipe not found.', 'error');
+        window.tempIngs[tIdx] = {
+            type: 'batch', ref: batchId, qty: qty,
+            unit: b.yieldUnit || 'unit',
+            name: b.name,
+            _rawName: oldName
+        };
+        window.closeModal();
+        window.showToast(`✅ Linked to batch: ${b.name}`);
+    } else {
+        const invId = val.replace('inv_','');
+        const inv = (window.inventoryItems||[]).find(i=>i.id===invId);
+        if (!inv) return window.showToast('Item not found.', 'error');
+        window.tempIngs[tIdx] = {
+            type: 'inv', ref: invId, qty: qty,
+            unit: inv.useUnit || 'unit',
+            name: inv.recipeName || inv.name,
+            _rawName: oldName
+        };
+        window.closeModal();
+        window.showToast(`✅ Linked to ${inv.recipeName||inv.name}`);
+    }
+    window.refreshRB();
 };
 
 window.delRecipe = (id) => {

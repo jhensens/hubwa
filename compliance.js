@@ -464,6 +464,43 @@ window.renderComplianceView = function() {
         </div>`);
     }
 
+    // --- Manager Overview Widget ---
+    const _today = new Date().toLocaleDateString();
+    const _freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
+    const _allTasks = window.rotationalTasks || [];
+    let _overdue = 0, _dueToday = 0;
+    _allTasks.forEach(t => {
+        if (!t.lastDone) { _overdue++; return; }
+        const interval = _freqMap[t.freq] || 7;
+        const days = Math.floor((Date.now() - new Date(t.lastDone).getTime()) / 86400000);
+        if (days > interval) _overdue++;
+        else if (days >= interval) _dueToday++;
+    });
+    const _todayTemps = (window.tempLogs || []).filter(t => t.time && t.time.startsWith(_today));
+    const _tempsDone = _todayTemps.length > 0;
+    const _lastSignOff = (window.complianceLogs || []).slice(-1)[0];
+    const _lastSignText = _lastSignOff ? `${E(_lastSignOff.staff || '?')} — ${E(_lastSignOff.time || '')}` : 'None';
+
+    const overviewWidget = `<div class="card" style="padding:14px 18px;margin-bottom:18px;border-top:4px solid var(--blue);display:flex;flex-wrap:wrap;gap:18px;align-items:center;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-muted);margin-right:auto;">📊 Overview</div>
+        <div style="text-align:center;min-width:80px;">
+            <div style="font-size:22px;font-weight:800;color:${_overdue>0?'var(--red)':'var(--green)'};">${_overdue}</div>
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Overdue</div>
+        </div>
+        <div style="text-align:center;min-width:80px;">
+            <div style="font-size:22px;font-weight:800;color:${_dueToday>0?'var(--orange)':'var(--green)'};">${_dueToday}</div>
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Due Today</div>
+        </div>
+        <div style="text-align:center;min-width:80px;">
+            <div style="font-size:22px;font-weight:800;color:${_tempsDone?'var(--green)':'var(--red)'};">${_tempsDone?'✅':'❌'}</div>
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Temps Today</div>
+        </div>
+        <div style="text-align:center;min-width:120px;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-main);white-space:nowrap;">${_lastSignText}</div>
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Last Sign-off</div>
+        </div>
+    </div>`;
+
     return `<div style="max-width:900px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
             <div>
@@ -471,6 +508,7 @@ window.renderComplianceView = function() {
                 <div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Temperature logs, shift checklists, and custom audits</div>
             </div>
         </div>
+        ${overviewWidget}
         <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
         ${content}
     </div>`;
@@ -508,7 +546,26 @@ window.showTempHistory = () => {
     window.openModal('🌡️ Temperature Log History (' + filtered.length + ' entries)', html);
 };
 
-window.checkT = (i) => { document.getElementById(`t-warn-${i}`).style.display = parseFloat(document.getElementById(`t-val-${i}`).value) > 5 ? 'block' : 'none'; };
+window.checkT = (i) => {
+    const val = parseFloat(document.getElementById(`t-val-${i}`).value);
+    const warnEl = document.getElementById(`t-warn-${i}`);
+    if (!warnEl || isNaN(val)) return;
+    const unitName = ((window.fridgeUnits||[])[i] || '').toLowerCase();
+    const isFreezer = unitName.includes('freezer') || unitName.includes('freeze');
+    let warning = '';
+    if (isFreezer) {
+        // Freezer: should be -18°C or below
+        if (val > -15) warning = `⚠️ ${val}°C — Freezer should be -18°C or below! Corrective action required.`;
+    } else {
+        // Fridge: 0-5°C
+        if (val > 5) warning = `⚠️ ${val}°C — Above 5°C! Check fridge and take corrective action.`;
+        else if (val < 0) warning = `⚠️ ${val}°C — Below 0°C! Risk of freezing damage.`;
+    }
+    // Extreme bounds
+    if (val < -30 || val > 300) warning = `⚠️ ${val}°C seems unusual (-30 to 300 range expected).`;
+    warnEl.style.display = warning ? 'block' : 'none';
+    if (warning) warnEl.innerHTML = '<span style="color:var(--red);font-weight:bold;">' + warning + '</span>';
+};
 window.logAllTemps = () => { 
     const staff = document.getElementById('t-staff').value;
     if(!staff) return window.showToast("Please enter your name.", "error"); 

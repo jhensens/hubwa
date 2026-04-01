@@ -1,6 +1,39 @@
 // --- HOBART HUB: Dashboard Module ---
 // Covers, food/bev split, cross-venue dashboard, prime cost, manager hub, handover/debrief
 
+// =============================================================================
+// VERSION INFO — Shows build version and update details
+// =============================================================================
+window._hubBuildDate = '1 Apr 2026, 3:30 PM';
+window._hubBuildId = '20260401h';
+
+window._showVersionInfo = () => {
+    // Try to get SW cache version
+    let swVersion = 'N/A';
+    const showModal = (sv) => {
+        window.openModal('ℹ️ Hobart Hub Version', `
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 15px;font-size:13px;">
+                <span style="color:var(--text-muted);">Build:</span><strong>${window._hubBuildId}</strong>
+                <span style="color:var(--text-muted);">Last Update:</span><strong>${window._hubBuildDate}</strong>
+                <span style="color:var(--text-muted);">SW Cache:</span><strong>${sv}</strong>
+                <span style="color:var(--text-muted);">Recipes:</span><strong>${(window.recipes||[]).length}</strong>
+                <span style="color:var(--text-muted);">Inventory:</span><strong>${(window.inventoryItems||[]).length}</strong>
+                <span style="color:var(--text-muted);">Venue:</span><strong>${(window._venues||[]).find(v=>v.id===window.getDeviceVenue())?((window._venues.find(v=>v.id===window.getDeviceVenue())).emoji+' '+(window._venues.find(v=>v.id===window.getDeviceVenue())).name):'Unknown'}</strong>
+            </div>
+            <div style="margin-top:15px;font-size:11px;color:var(--text-muted);">
+                Today's updates: Where Used on inventory, sort options, recipe timestamps, duplicate detection, manual batch linking, cost cascade fixes, auto-reparse, match rate dashboard, costing health widget.
+            </div>
+        `);
+    };
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        const mc = new MessageChannel();
+        mc.port1.onmessage = (e) => showModal(e.data.version || 'Unknown');
+        navigator.serviceWorker.controller.postMessage({type:'GET_VERSION'}, [mc.port2]);
+        setTimeout(() => showModal('N/A (timeout)'), 1000);
+    } else {
+        showModal('No SW active');
+    }
+};
 
 window.printWeeklySummary = () => {
     const text = window._weeklySummaryText || '';
@@ -616,6 +649,7 @@ window.renderManagerHub = () => {
     html += '<span style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue);border:1px solid rgba(59,130,246,0.2);">' + (isWeekend?'Weekend':'Weekday') + ' PAR</span>';
     html += '<span style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(139,92,246,0.1);color:var(--purple);border:1px solid rgba(139,92,246,0.2);">' + ({opening:'Morning',preservice:'Pre-Service',closing:'Closing'}[shiftType]) + ' Shift</span>';
     html += '<span id="pulse-weather" style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue);border:1px solid rgba(59,130,246,0.2);">--°C</span>';
+    html += '<span id="pulse-version" style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,0.1);color:var(--green);border:1px solid rgba(16,185,129,0.2);cursor:pointer;" onclick="window._showVersionInfo()" title="Click for version details">🔄 ' + window._hubBuildId + '</span>';
     html += '</div></div>';
     // Right: health score ring
     html += '<div style="text-align:center;position:relative;width:110px;height:110px;flex-shrink:0;">';
