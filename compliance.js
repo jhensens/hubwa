@@ -743,6 +743,56 @@ window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = n
 
 
 // =============================================================================
+// SERVICE CALENDAR — Equipment service due dates from asset register
+// =============================================================================
+window.renderServiceCalendar = () => {
+    const E = window.esc;
+    const equipment = window.equipmentData || [];
+    const today = new Date();
+
+    // Calculate next service date for each asset
+    const serviceItems = equipment.filter(eq => eq.serviceInterval && eq.lastService).map(eq => {
+        const lastService = new Date(eq.lastService);
+        const nextService = new Date(lastService);
+        nextService.setMonth(nextService.getMonth() + Number(eq.serviceInterval));
+        const daysUntil = Math.round((nextService - today) / 86400000);
+        return { ...eq, nextService, daysUntil };
+    }).sort((a, b) => a.daysUntil - b.daysUntil);
+
+    const overdue = serviceItems.filter(s => s.daysUntil < 0);
+    const dueSoon = serviceItems.filter(s => s.daysUntil >= 0 && s.daysUntil <= 30);
+    const upcoming = serviceItems.filter(s => s.daysUntil > 30 && s.daysUntil <= 90);
+
+    if (serviceItems.length === 0) {
+        return '<div style="text-align:center;padding:40px;color:var(--text-muted);">' +
+            '<div style="font-size:32px;margin-bottom:8px;">📅</div>' +
+            '<div style="font-size:14px;font-weight:600;color:var(--text-main);">No service schedules</div>' +
+            '<div style="font-size:12px;margin-top:4px;">Add equipment with service intervals in the Assets tab</div></div>';
+    }
+
+    const renderGroup = (title, items, borderColor) => {
+        if (items.length === 0) return '';
+        let h = '<div style="margin-bottom:16px;"><div style="font-size:12px;font-weight:700;color:' + borderColor + ';text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">' + title + '</div>';
+        items.forEach(s => {
+            const statusColor = s.daysUntil < 0 ? 'var(--red)' : s.daysUntil <= 14 ? 'var(--orange)' : 'var(--green)';
+            const statusText = s.daysUntil < 0 ? Math.abs(s.daysUntil) + 'd overdue' : s.daysUntil === 0 ? 'Due today' : s.daysUntil + 'd away';
+            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);border-left:3px solid ' + statusColor + ';">';
+            h += '<div><strong style="font-size:13px;">' + E(s.name) + '</strong>';
+            if (s.serialCode) h += ' <span style="font-size:11px;color:var(--text-muted);">[' + E(s.serialCode) + ']</span>';
+            h += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Last: ' + new Date(s.lastService).toLocaleDateString('en-AU') + ' · Every ' + s.serviceInterval + ' months</div></div>';
+            h += '<span style="font-size:12px;font-weight:700;color:' + statusColor + ';">' + statusText + '</span>';
+            h += '</div>';
+        });
+        h += '</div>';
+        return h;
+    };
+
+    return renderGroup('Overdue', overdue, 'var(--red)') +
+           renderGroup('Due Within 30 Days', dueSoon, 'var(--orange)') +
+           renderGroup('Upcoming (30-90 Days)', upcoming, 'var(--green)');
+};
+
+// =============================================================================
 // TASK ZONE EDITOR — Manage customisable zone categories
 // =============================================================================
 window.editTaskZones = () => {

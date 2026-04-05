@@ -199,6 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Run init callbacks (e.g., restore active stocktake)
     (window._hubInitCallbacks || []).forEach(function(fn) { try { fn(); } catch(e) { console.error('Init callback error:', e); } });
 
+    // Show setup wizard in nav only if data is sparse (first-time setup)
+    const _wizEl = document.getElementById('nav-setup-wizard');
+    if (_wizEl && (window.inventoryItems||[]).length < 10 && (window.rotationalTasks||[]).length < 3) {
+        _wizEl.style.display = '';
+    }
+
     // Render immediately from localStorage
     window.checkLockState();
     window.updateVenueBadge();

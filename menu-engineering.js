@@ -589,7 +589,7 @@ window.getMenuAiAdvice = async () => {
     container.innerHTML = '<div class="card" style="border-left:4px solid var(--purple);padding:16px;"><div style="display:flex;align-items:center;gap:10px;"><div class="loading-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span style="color:var(--purple);font-weight:600;">Analysing your menu...</span></div></div>';
 
     const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active'&&!r.archived);
-    const GP_TARGET = window.GP_TARGET || 70;
+    const GP_TARGET = window.GP_TARGET || 67;
 
     // Recalculate costs
     menuRecipes.forEach(r => {

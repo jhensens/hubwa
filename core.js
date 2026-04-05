@@ -36,6 +36,7 @@ window.suppliers = [
 ];
 window.salesData = [];
 window.salesTargets = { wageTarget: 30 };
+window.GP_TARGET = 67; // Gross Profit target % — used across recipes, menu engineering, stocktake
 window.orientationLogs = [];
 window.rotationalTasks = [];
 window.taskHistory = [];

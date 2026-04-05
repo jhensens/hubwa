@@ -504,45 +504,96 @@ window.toggleKBPin = (i) => {
     window.showView('knowledge');
 };
 
+window._kbSearch = '';
+window._kbSearchDebounce = null;
+window._kbDoSearch = (val) => {
+    clearTimeout(window._kbSearchDebounce);
+    window._kbSearchDebounce = setTimeout(() => {
+        window._kbSearch = val;
+        const container = document.getElementById('kb-results');
+        if (!container) return;
+        container.innerHTML = window._renderKbCards();
+    }, 200);
+};
+
+window._renderKbCards = () => {
+    const kb = window.knowledgeBase || [];
+    const activeTab = window._kbActiveTab || 'all';
+    const search = (window._kbSearch || '').toLowerCase().trim();
+
+    let filtered = activeTab === 'all' ? kb.map((k,i) => ({...k, idx:i}))
+        : kb.map((k,i) => ({...k, idx:i})).filter(k => k.category === activeTab);
+
+    // Full-text search across title + content + category
+    if (search) {
+        const terms = search.split(/\s+/);
+        filtered = filtered.filter(k => {
+            const haystack = ((k.title||'') + ' ' + (k.content||'') + ' ' + (k.category||'')).toLowerCase();
+            return terms.every(t => haystack.includes(t));
+        });
+    }
+
+    if (filtered.length === 0 && search) {
+        return '<div style="text-align:center;padding:32px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">🔍</div><div style="font-size:14px;">No SOPs match "<strong>' + esc(search) + '</strong>"</div><div style="font-size:12px;margin-top:4px;">Try different keywords or check other categories</div></div>';
+    }
+
+    if (filtered.length === 0) {
+        return '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No SOPs added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create standard operating procedures so everyone knows the playbook</div><button onclick="window.seedKnowledgeBase()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>';
+    }
+
+    // Highlight search terms in results
+    const highlight = (text, maxLen) => {
+        let t = esc(text.substring(0, maxLen)) + (text.length > maxLen ? '...' : '');
+        if (search) {
+            search.split(/\s+/).forEach(term => {
+                if (term.length < 2) return;
+                const re = new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+                t = t.replace(re, '<mark style="background:rgba(59,130,246,0.2);color:var(--text-main);padding:0 2px;border-radius:2px;">$1</mark>');
+            });
+        }
+        return t;
+    };
+
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">' + filtered.map(k =>
+        '<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(' + k.idx + ')" onmouseover="this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.transform=\'translateY(0)\'">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
+                '<h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">' + highlight(k.title, 100) + '</h4>' +
+                (k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : '') +
+            '</div>' +
+            '<span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">' + esc(k.category || 'General') + '</span>' +
+            (k.content ? '<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">' + highlight(k.content, 120) + '</p>' : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>') +
+        '</div>'
+    ).join('') + '</div>';
+};
+
 window.renderKnowledgeView = () => {
     const kb = window.knowledgeBase || [];
     const cats = window.kbCategories || [...new Set(kb.map(k => k.category).filter(Boolean))];
     const activeTab = window._kbActiveTab || 'all';
-
-    const filtered = activeTab === 'all' ? kb.map((k,i) => ({...k, idx:i}))
-        : kb.map((k,i) => ({...k, idx:i})).filter(k => k.category === activeTab);
+    const search = window._kbSearch || '';
 
     const tabPills = [
-        `<span class="tag-pill ${activeTab==='all'?'active':''}" onclick="window._kbActiveTab='all';window.showView('knowledge');">All (${kb.length})</span>`
+        '<span class="tag-pill ' + (activeTab==='all'?'active':'') + '" onclick="window._kbActiveTab=\'all\';window._kbSearch=\'\';window.showView(\'knowledge\');">All (' + kb.length + ')</span>'
     ].concat(cats.map(c => {
         const count = kb.filter(k => k.category === c).length;
-        return `<span class="tag-pill ${activeTab===c?'active':''}" onclick="window._kbActiveTab='${c.replace(/'/g,"\\'")}';window.showView('knowledge');">${esc(c)} (${count})</span>`;
+        return '<span class="tag-pill ' + (activeTab===c?'active':'') + '" onclick="window._kbActiveTab=\'' + c.replace(/'/g,"\\'") + '\';window.showView(\'knowledge\');">' + esc(c) + ' (' + count + ')</span>';
     })).join('');
 
-    const cardsHtml = filtered.length === 0
-        ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">📚</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No SOPs added</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Create standard operating procedures so everyone knows the playbook</div><button onclick="window.seedKnowledgeBase()" class="btn btn-blue" style="margin-top:15px;">🏮 Load BWI Defaults</button></div>'
-        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filtered.map(k =>
-            `<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(${k.idx})" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-                    <h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">${esc(k.title)}</h4>
-                    ${k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : ''}
-                </div>
-                <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">${esc(k.category || 'General')}</span>
-                ${k.content ? `<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">${esc(k.content.substring(0,80))}${k.content.length>80?'...':''}</p>` : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>'}
-            </div>`
-        ).join('')}</div>`;
-
-    return `<div style="max-width:1000px;margin:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
-            <div><h2 style="margin:0">📚 Knowledge Base</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">SOPs, training manuals, and operational procedures</div></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button onclick="window.newSOPForm()" class="btn btn-blue">+ New SOP</button>
-                <button onclick="window.editKbCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>
-            </div>
-        </div>
-        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
-        ${cardsHtml}
-    </div>`;
+    return '<div style="max-width:1000px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0">📚 Knowledge Base</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px">SOPs, training manuals, and operational procedures</div></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button onclick="window.newSOPForm()" class="btn btn-blue">+ New SOP</button>' +
+                '<button onclick="window.editKbCategories()" class="btn btn-outline" style="font-size:12px;">⚙️ Categories</button>' +
+            '</div>' +
+        '</div>' +
+        // Search bar
+        '<div style="margin-bottom:15px;">' +
+            '<input type="text" class="input-box" placeholder="🔍 Search SOPs... e.g. \'close bar\' or \'food safety\'" value="' + esc(search) + '" oninput="window._kbDoSearch(this.value)" style="margin:0;font-size:14px;">' +
+        '</div>' +
+        '<div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">' + tabPills + '</div>' +
+        '<div id="kb-results">' + window._renderKbCards() + '</div>' +
+    '</div>';
 };
 
 window.editKbCategories = () => {

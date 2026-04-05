@@ -625,6 +625,7 @@ window._marginsTabBar = function(activeView) {
 window._orderTabBar = function(activeView) {
     const tabs = [
         { id: 'prep-list', label: '📝 Order List', view: 'prep-list' },
+        { id: 'prep-gen', label: '🍳 Prep List', view: 'prep-gen' },
         { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' },
         { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' }
     ];
@@ -1319,7 +1320,7 @@ window.editInvItem = (id = null) => {
         location:'', gstFree:false, buyUnit:'Unit', yield:1, useUnit:'Unit',
         stock:0, parWeekday:0, parWeekend:0, archived: false, history:[]
     };
-    if (cleanId && !found) console.warn('editInvItem: no item found for id:', cleanId, '| available ids:', window.inventoryItems.slice(0,3).map(i=>i.id));
+    // Item not found is handled gracefully — form renders with defaults
     let supplierOpts = (window.suppliers || []).map(s =>
         `<option value="${esc(s.name)}" ${e.supplier === s.name ? 'selected' : ''}>${esc(s.name)}</option>`
     ).join('');
@@ -1812,7 +1813,7 @@ window.archiveInv = (id) => {
 window.viewPriceTrend = (id) => {
     const cleanId = String(id).trim();
     const item = window.inventoryItems.find(i => i.id === cleanId);
-    if (!item) { console.warn('viewPriceTrend: no item for id:', cleanId); return window.showToast('Item not found.', 'error'); }
+    if (!item) return window.showToast('Item not found.', 'error');
     const history = item.history || [];
     let historyHtml = history.length === 0
         ? '<p style="padding:20px; color:var(--text-muted);">No history found. History is built automatically when invoices are processed through Invoice Ripper.</p>'

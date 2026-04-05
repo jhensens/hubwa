@@ -638,6 +638,215 @@ window.renderPrepListView = () => {
     </div>`;
 };
 
+// =============================================================================
+// PREP LIST GENERATOR
+// Calculates batch prep quantities based on estimated covers + recipe usage
+// =============================================================================
+window._prepCovers = 0;
+window._prepStation = 'All';
+
+window.renderPrepGenView = () => {
+    const E = window.esc;
+    const covers = window._prepCovers || 0;
+    const stationFilter = window._prepStation || 'All';
+
+    // Get batch recipes (prep items)
+    const batchRecipes = (window.recipes || []).filter(r => r.type === 'Batch' && !r.archived && r.yieldQty > 0);
+    // Get menu recipes that use batch ingredients
+    const menuRecipes = (window.recipes || []).filter(r => r.type === 'Menu' && !r.archived && (r.status || 'Active') === 'Active');
+
+    // Get available stations from batch recipes
+    const stations = [...new Set(batchRecipes.map(r => r.station || 'Prep').filter(Boolean))];
+
+    // Calculate how much of each batch recipe is needed per cover
+    // Walk through all menu recipes, find batch ingredient usage, aggregate
+    const batchUsage = {}; // batchId -> { name, totalQtyPerCover, yieldQty, unit, station, usedBy: [] }
+
+    // Estimate covers from recent data if user hasn't set
+    const salesData = window.salesData || [];
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const isWeekend = [0, 5, 6].includes(dayOfWeek);
+    const dayName = today.toLocaleDateString('en-AU', { weekday: 'long' });
+
+    // Get average covers for this day of week from last 4 weeks
+    let avgCoversForDay = 0;
+    let dayCount = 0;
+    for (let w = 1; w <= 4; w++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - (w * 7));
+        const fmtDate = d.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const sale = salesData.find(s => s.date === fmtDate);
+        if (sale && sale.covers > 0) { avgCoversForDay += Number(sale.covers); dayCount++; }
+    }
+    avgCoversForDay = dayCount > 0 ? Math.round(avgCoversForDay / dayCount) : 0;
+    const suggestedCovers = covers || avgCoversForDay;
+
+    // Calculate batch usage across all menu recipes
+    menuRecipes.forEach(menu => {
+        (menu.ingredients || []).forEach(ing => {
+            if (ing.type !== 'batch') return;
+            const batch = batchRecipes.find(b => b.id === ing.ref);
+            if (!batch) return;
+            const qtyPerServe = Number(ing.qty) || 0;
+            const batchYield = Number(batch.yieldQty) || 1;
+            if (!batchUsage[batch.id]) {
+                batchUsage[batch.id] = {
+                    name: batch.name,
+                    totalQtyPerCover: 0,
+                    yieldQty: batchYield,
+                    yieldUnit: batch.yieldUnit || 'portions',
+                    station: batch.station || 'Prep',
+                    cost: batch.cost || 0,
+                    usedBy: []
+                };
+            }
+            batchUsage[batch.id].totalQtyPerCover += qtyPerServe;
+            batchUsage[batch.id].usedBy.push(menu.name);
+        });
+    });
+
+    // Calculate prep quantities for the target covers
+    const prepItems = Object.entries(batchUsage)
+        .map(([id, b]) => {
+            const totalNeeded = b.totalQtyPerCover * suggestedCovers;
+            const batchesNeeded = Math.ceil(totalNeeded / b.yieldQty);
+            return {
+                id, name: b.name, station: b.station,
+                totalNeeded: totalNeeded.toFixed(1),
+                batchesNeeded,
+                yieldQty: b.yieldQty,
+                yieldUnit: b.yieldUnit,
+                cost: b.cost,
+                totalCost: (b.cost * batchesNeeded).toFixed(2),
+                usedBy: [...new Set(b.usedBy)]
+            };
+        })
+        .filter(p => stationFilter === 'All' || p.station === stationFilter)
+        .sort((a, b) => b.batchesNeeded - a.batchesNeeded);
+
+    const totalPrepCost = prepItems.reduce((s, p) => s + parseFloat(p.totalCost), 0);
+
+    let html = '<div style="max-width:900px;margin:auto;">';
+    html += window._orderTabBar('prep-gen');
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">';
+    html += '<div><h2 style="margin:0;">🍳 Prep List Generator</h2>';
+    html += '<div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Calculate batch prep quantities based on expected covers</div></div>';
+    html += '</div>';
+
+    // Controls
+    html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">';
+
+    // Covers input
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Expected Covers</label>';
+    html += '<input type="number" id="prep-covers" class="input-box" value="' + suggestedCovers + '" placeholder="e.g. 80" style="margin:0;" onchange="window._prepCovers=parseInt(this.value)||0;window.showView(\'prep-gen\')">';
+    html += '</div>';
+
+    // Day context
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Day</label>';
+    html += '<div style="font-size:14px;font-weight:600;padding:10px;background:var(--bg-main);border-radius:6px;border:1px solid var(--border);">' + dayName + (isWeekend ? ' <span style="color:var(--orange);font-size:11px;">(Weekend)</span>' : '') + '</div>';
+    html += '</div>';
+
+    // Station filter
+    html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Station</label>';
+    html += '<select class="input-box" style="margin:0;" onchange="window._prepStation=this.value;window.showView(\'prep-gen\')">';
+    html += '<option value="All"' + (stationFilter === 'All' ? ' selected' : '') + '>All Stations</option>';
+    stations.forEach(s => { html += '<option value="' + E(s) + '"' + (stationFilter === s ? ' selected' : '') + '>' + E(s) + '</option>'; });
+    html += '</select></div>';
+
+    // Print button
+    html += '<button onclick="window._printPrepList()" class="btn btn-blue" style="padding:10px 16px;">🖨️ Print</button>';
+    html += '</div>';
+
+    // Average covers hint
+    if (avgCoversForDay > 0) {
+        html += '<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">📊 Average for ' + dayName + ': <strong>' + avgCoversForDay + ' covers</strong> (last 4 weeks)</div>';
+    }
+    html += '</div>';
+
+    // Results
+    if (suggestedCovers === 0) {
+        html += '<div class="card" style="text-align:center;padding:32px;color:var(--text-muted);">';
+        html += '<div style="font-size:28px;margin-bottom:8px;">🍳</div>';
+        html += '<div style="font-size:14px;">Enter expected covers to generate prep quantities</div></div>';
+    } else if (prepItems.length === 0) {
+        html += '<div class="card" style="text-align:center;padding:32px;color:var(--text-muted);">';
+        html += '<div style="font-size:28px;margin-bottom:8px;">✅</div>';
+        html += '<div style="font-size:14px;">No batch recipes linked to menu items' + (stationFilter !== 'All' ? ' for ' + E(stationFilter) : '') + '</div>';
+        html += '<div style="font-size:12px;margin-top:4px;">Link batch recipes as ingredients in your menu recipes for prep list generation</div></div>';
+    } else {
+        // Summary KPIs
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+        html += '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--blue);"><div style="font-size:24px;font-weight:800;color:var(--blue);">' + suggestedCovers + '</div><div style="font-size:11px;color:var(--text-muted);">Covers</div></div>';
+        html += '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--orange);"><div style="font-size:24px;font-weight:800;color:var(--orange);">' + prepItems.length + '</div><div style="font-size:11px;color:var(--text-muted);">Prep Items</div></div>';
+        html += '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--green);"><div style="font-size:24px;font-weight:800;color:var(--green);">$' + totalPrepCost.toFixed(0) + '</div><div style="font-size:11px;color:var(--text-muted);">Est. Cost</div></div>';
+        html += '</div>';
+
+        // Prep table
+        html += '<div class="card" style="padding:0;overflow:hidden;">';
+        html += '<table style="width:100%;border-collapse:collapse;">';
+        html += '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">';
+        html += '<th style="padding:10px 12px;text-align:left;">Prep Item</th>';
+        html += '<th style="padding:10px 12px;text-align:center;">Batches</th>';
+        html += '<th style="padding:10px 12px;text-align:center;">Yield</th>';
+        html += '<th style="padding:10px 12px;text-align:right;">Cost</th>';
+        html += '<th style="padding:10px 12px;text-align:left;">Used By</th>';
+        html += '</tr></thead><tbody>';
+
+        prepItems.forEach(p => {
+            const urgency = p.batchesNeeded >= 3 ? 'var(--red)' : p.batchesNeeded >= 2 ? 'var(--orange)' : 'var(--text-main)';
+            html += '<tr style="border-bottom:1px solid var(--border);">';
+            html += '<td style="padding:10px 12px;"><strong style="font-size:13px;">' + E(p.name) + '</strong>';
+            if (p.station) html += ' <span style="font-size:10px;background:var(--bg-main);padding:1px 6px;border-radius:8px;border:1px solid var(--border);color:var(--text-muted);">' + E(p.station) + '</span>';
+            html += '</td>';
+            html += '<td style="padding:10px 12px;text-align:center;font-size:20px;font-weight:800;color:' + urgency + ';">' + p.batchesNeeded + 'x</td>';
+            html += '<td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--text-muted);">' + p.yieldQty + ' ' + E(p.yieldUnit) + '</td>';
+            html += '<td style="padding:10px 12px;text-align:right;font-size:12px;color:var(--text-muted);">$' + p.totalCost + '</td>';
+            html += '<td style="padding:10px 12px;font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + E(p.usedBy.join(', ')) + '">' + E(p.usedBy.slice(0, 3).join(', ')) + (p.usedBy.length > 3 ? ' +' + (p.usedBy.length - 3) : '') + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+    }
+    html += '</div>';
+    return html;
+};
+
+window._printPrepList = () => {
+    const covers = window._prepCovers || 0;
+    const stationFilter = window._prepStation || 'All';
+    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const dayName = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Recalculate prep items
+    const batchRecipes = (window.recipes || []).filter(r => r.type === 'Batch' && !r.archived && r.yieldQty > 0);
+    const menuRecipes = (window.recipes || []).filter(r => r.type === 'Menu' && !r.archived && (r.status || 'Active') === 'Active');
+    const batchUsage = {};
+    menuRecipes.forEach(menu => {
+        (menu.ingredients || []).forEach(ing => {
+            if (ing.type !== 'batch') return;
+            const batch = batchRecipes.find(b => b.id === ing.ref);
+            if (!batch) return;
+            if (!batchUsage[batch.id]) batchUsage[batch.id] = { name: batch.name, totalQtyPerCover: 0, yieldQty: Number(batch.yieldQty) || 1, yieldUnit: batch.yieldUnit || 'portions', station: batch.station || 'Prep' };
+            batchUsage[batch.id].totalQtyPerCover += Number(ing.qty) || 0;
+        });
+    });
+    const prepItems = Object.entries(batchUsage)
+        .map(([id, b]) => ({ name: b.name, station: b.station, batchesNeeded: Math.ceil((b.totalQtyPerCover * covers) / b.yieldQty), yieldQty: b.yieldQty, yieldUnit: b.yieldUnit }))
+        .filter(p => stationFilter === 'All' || p.station === stationFilter)
+        .sort((a, b) => b.batchesNeeded - a.batchesNeeded);
+
+    let text = venue + ' — Prep List\n' + dayName + ' · ' + covers + ' covers' + (stationFilter !== 'All' ? ' · ' + stationFilter : '') + '\n\n';
+    prepItems.forEach(p => {
+        text += p.batchesNeeded + 'x  ' + p.name + '  (' + p.yieldQty + ' ' + p.yieldUnit + ' per batch)\n';
+    });
+
+    const win = window.open('', '_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Prep List</title><style>body{font-family:monospace;font-size:14px;max-width:600px;margin:30px auto;line-height:1.8;}@media print{body{margin:15px;}}</style></head><body><pre>' + text.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre><script>window.onload=()=>{window.print();}<\/script></body></html>');
+    win.document.close();
+};
+
 window.copyOrderText = (supName, estSpend) => {
     const isWeekend = [0, 5, 6].includes(new Date().getDay());
     const items = (window.inventoryItems || []).filter(i => i.supplier === supName && !i.archived && i.stock < (isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0)));
@@ -649,7 +858,8 @@ window.copyOrderText = (supName, estSpend) => {
         text += `- ${qty}x ${i.buyUnit || 'Unit'} of ${i.name} ${i.sku ? `[${i.sku}]` : ''}\n`;
         orderItems.push({ name: i.name, sku: i.sku||'', qty, unit: i.buyUnit||'Unit', price: i.price||0 });
     });
-    text += `\nThanks,\nBar Wa Izakaya`;
+    const _venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    text += '\nThanks,\n' + _venueName;
     if (!window.orderHistory) window.orderHistory = [];
     window.orderHistory.push({ date: new Date().toLocaleDateString('en-AU'), supplier: supName, estSpend, items: orderItems });
     window.saveToDisk();

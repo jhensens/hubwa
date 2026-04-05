@@ -7,7 +7,7 @@
 // Margin Health view, 67% GP threshold
 // =============================================================================
 
-const GP_TARGET = 67;
+const GP_TARGET = window.GP_TARGET || 67;
 
 window.recFilters = window.recFilters || { search: '', filter: 'All', station: 'All', status: 'Active' };
 // -----------------------------------------------------------------------
@@ -526,7 +526,8 @@ window.openCostingReport = () => {
         });
     });
     win.document.write('<!DOCTYPE html><html><head><title>Recipe Costing Report</title><style>body{font-family:sans-serif;font-size:13px;max-width:900px;margin:30px auto;}h1{font-size:22px;margin-bottom:4px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.stats{display:flex;gap:20px;margin-bottom:25px;}.stat{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center;}.stat-val{font-size:24px;font-weight:bold;}.stat-lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;}table{width:100%;border-collapse:collapse;}th{padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:2px solid #e5e7eb;background:#f9fafb;}th:nth-child(n+2),td:nth-child(n+2){text-align:right;}tr:nth-child(even)td{background:#fafafa;}@media print{body{margin:15px;max-width:none;}}</style></head><body>');
-    win.document.write('<h1>📊 Recipe Costing Report — Bar Wa Izakaya</h1><div class="meta">GP Target: '+GP_TARGET+'% · Generated '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div>');
+    const _vName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    win.document.write('<h1>📊 Recipe Costing Report — '+_vName+'</h1><div class="meta">GP Target: '+GP_TARGET+'% · Generated '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div>');
     win.document.write('<div class="stats"><div class="stat"><div class="stat-val">'+menuRecipes.length+'</div><div class="stat-lbl">Recipes</div></div><div class="stat"><div class="stat-val" style="color:'+(avgGp>=GP_TARGET?'#16a34a':'#dc2626')+';">'+avgGp+'%</div><div class="stat-lbl">Avg GP</div></div><div class="stat"><div class="stat-val" style="color:#dc2626;">'+below+'</div><div class="stat-lbl">Below '+GP_TARGET+'%</div></div><div class="stat"><div class="stat-val" style="color:#16a34a;">'+(menuRecipes.length-below)+'</div><div class="stat-lbl">On Target</div></div></div>');
     win.document.write('<table><thead><tr><th>Recipe</th><th>Cost</th><th>Sell</th><th>GP%</th><th>Bar</th></tr></thead><tbody>'+rows+'</tbody></table>');
     win.document.write('<div style="margin-top:15px;font-size:11px;color:#aaa;">⚠️ = has unlinked ingredients</div>');

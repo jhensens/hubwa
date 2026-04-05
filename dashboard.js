@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '1 Apr 2026, 3:30 PM';
-window._hubBuildId = '20260401h';
+window._hubBuildDate = '5 Apr 2026, 10:00 AM';
+window._hubBuildId = '20260405a';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -21,7 +21,7 @@ window._showVersionInfo = () => {
                 <span style="color:var(--text-muted);">Venue:</span><strong>${(window._venues||[]).find(v=>v.id===window.getDeviceVenue())?((window._venues.find(v=>v.id===window.getDeviceVenue())).emoji+' '+(window._venues.find(v=>v.id===window.getDeviceVenue())).name):'Unknown'}</strong>
             </div>
             <div style="margin-top:15px;font-size:11px;color:var(--text-muted);">
-                Today's updates: Where Used on inventory, sort options, recipe timestamps, duplicate detection, manual batch linking, cost cascade fixes, auto-reparse, match rate dashboard, costing health widget.
+                Today's updates: Clickable health score breakdown, margin fix actions (instant sell price update), supplier cutoff alerts, prep list generator, KB full-text search, service calendar, GP_TARGET consolidation.
             </div>
         `);
     };
@@ -552,6 +552,52 @@ window.renderManagerHub = () => {
     const scoreColor = healthScore >= 80 ? 'var(--green)' : healthScore >= 50 ? 'var(--orange)' : 'var(--red)';
     const scoreLabel = healthScore >= 80 ? 'Running Smoothly' : healthScore >= 50 ? 'Needs Attention' : 'Issues Detected';
 
+    // --- HEALTH SCORE BREAKDOWN (clickable) ---
+    const _hsBreakdown = [];
+    _hsBreakdown.push({ label: 'Revenue logged', points: hasTodayData ? 0 : -15, max: 15, status: hasTodayData ? 'ok' : 'issue', fix: 'Log takings', view: 'sales', action: 'window.manualTakingsForm()' });
+    const _labPenalty = (laborPct && laborPct > wageTarget) ? Math.min(15, Math.round((laborPct - wageTarget) / 2)) : 0;
+    _hsBreakdown.push({ label: 'Labor within target', points: -_labPenalty, max: 15, status: _labPenalty === 0 ? 'ok' : 'issue', fix: 'Review staffing', view: 'sales' });
+    const _stockPenalty = Math.round((1 - stockHealthPct/100) * 20);
+    _hsBreakdown.push({ label: 'Stock at PAR (' + stockHealthPct + '%)', points: -_stockPenalty, max: 20, status: _stockPenalty === 0 ? 'ok' : _stockPenalty <= 5 ? 'warn' : 'issue', fix: lowStock.length + ' items below PAR', view: 'inventory' });
+    const _breachPenalty = breaches.length > 0 ? Math.min(15, breaches.length * 5) : 0;
+    _hsBreakdown.push({ label: 'Temp compliance', points: -_breachPenalty, max: 15, status: _breachPenalty === 0 ? 'ok' : 'issue', fix: breaches.length + ' breach(es)', view: 'compliance' });
+    const _checkPenalty = checkPct < 100 ? Math.round((1 - checkPct/100) * 10) : 0;
+    _hsBreakdown.push({ label: 'Shift checklist (' + checkPct + '%)', points: -_checkPenalty, max: 10, status: _checkPenalty === 0 ? 'ok' : 'warn', fix: 'Complete checklist', view: 'compliance' });
+    const _fridgePenalty = (fridgeCoverage < 100 && allFridgeUnits.length > 0) ? Math.round((1 - fridgeCoverage/100) * 8) : 0;
+    _hsBreakdown.push({ label: 'Fridge coverage (' + loggedUnitsToday.length + '/' + allFridgeUnits.length + ')', points: -_fridgePenalty, max: 8, status: _fridgePenalty === 0 ? 'ok' : 'warn', fix: 'Log temps for ' + unloggedFridges.length + ' units', view: 'compliance' });
+    const _taskPenalty = Math.min(15, overdueTasks.length * 3);
+    _hsBreakdown.push({ label: 'Tasks current', points: -_taskPenalty, max: 15, status: _taskPenalty === 0 ? 'ok' : 'issue', fix: overdueTasks.length + ' overdue', view: 'tasks' });
+    const _ticketPenalty = Math.min(10, openTickets.length * 2);
+    _hsBreakdown.push({ label: 'Maintenance tickets', points: -_ticketPenalty, max: 10, status: _ticketPenalty === 0 ? 'ok' : 'warn', fix: openTickets.length + ' open', view: 'maintenance' });
+
+    window._showHealthBreakdown = () => {
+        const statusIcon = { ok: '✅', warn: '⚠️', issue: '❌' };
+        const statusColor = { ok: 'var(--green)', warn: 'var(--orange)', issue: 'var(--red)' };
+        let bHtml = '<div style="margin-bottom:16px;text-align:center;">';
+        bHtml += '<div style="font-size:48px;font-weight:800;color:' + scoreColor + ';">' + healthScore + '<span style="font-size:18px;color:var(--text-muted);"> / 100</span></div>';
+        bHtml += '<div style="font-size:13px;color:' + scoreColor + ';">' + scoreLabel + '</div></div>';
+        bHtml += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Score Breakdown</div>';
+        _hsBreakdown.forEach(b => {
+            const ptsStr = b.points === 0 ? '<span style="color:var(--green);">+0</span>' : '<span style="color:var(--red);">' + b.points + '</span>';
+            bHtml += '<div onclick="window.closeModal();window.showView(\'' + b.view + '\')" style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">';
+            bHtml += '<span style="font-size:16px;">' + statusIcon[b.status] + '</span>';
+            bHtml += '<span style="flex:1;font-size:13px;">' + b.label + '</span>';
+            bHtml += '<span style="font-size:13px;font-weight:700;min-width:40px;text-align:right;">' + ptsStr + '</span>';
+            bHtml += '</div>';
+        });
+        const issueItems = _hsBreakdown.filter(b => b.points < 0);
+        if (issueItems.length > 0) {
+            bHtml += '<div style="margin-top:14px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Quick Fixes</div>';
+            issueItems.forEach(b => {
+                const click = b.action ? b.action : "window.closeModal();window.showView('" + b.view + "')";
+                bHtml += '<button onclick="' + click + '" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;margin-bottom:4px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:var(--text-main);cursor:pointer;font-size:12px;text-align:left;">';
+                bHtml += '<span style="color:' + statusColor[b.status] + ';font-weight:600;">' + b.fix + '</span>';
+                bHtml += '<span style="margin-left:auto;color:var(--text-muted);font-size:10px;">→</span></button>';
+            });
+        }
+        window.openModal('📊 Health Score Breakdown', bHtml);
+    };
+
     // --- SVG HELPERS ---
     const sparkline = (data, w, h, color) => {
         if (!data.length || data.every(d => d === 0)) return '';
@@ -600,6 +646,24 @@ window.renderManagerHub = () => {
     openTickets.slice(0,2).forEach(t => focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:E(t.item)+' — open ticket', view:'maintenance'}));
     expiringQuals.slice(0,2).forEach(q => focusItems.push({pri:5, icon:'🎓', color:q.status==='expired'?'var(--red)':'var(--orange)', text:E(q.staff)+' — '+E(q.qual)+(q.status==='expired'?' EXPIRED':' expires in '+q.days+'d'), view:'orientation'}));
     marginAlerts.slice(0,2).forEach(a => focusItems.push({pri:6, icon:'📉', color:'var(--red)', text:E(a.name)+' margin: '+a.currentGp+'%', view:'margins'}));
+    // Supplier cutoff alerts — warn if items below PAR and cutoff approaching
+    const _nowHour = today.getHours();
+    const _todayDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][today.getDay()];
+    const _tomorrowDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][(today.getDay()+1)%7];
+    (window.suppliers||[]).forEach(s => {
+        if (!s.cutoff || !s.deliveryDays) return;
+        const deliversTomorrow = s.deliveryDays.includes(_tomorrowDay);
+        if (!deliversTomorrow) return;
+        const cutoffParts = s.cutoff.match(/(\d{1,2}):(\d{2})/);
+        if (!cutoffParts) return;
+        const cutoffHour = parseInt(cutoffParts[1]);
+        const hoursUntil = cutoffHour - _nowHour;
+        if (hoursUntil > 3 || hoursUntil < 0) return; // only warn within 3 hours
+        const supItems = lowStock.filter(i => i.supplier === s.name);
+        if (supItems.length === 0) return;
+        focusItems.push({pri:0, icon:'🚚', color:'var(--red)', text:E(s.name)+' cutoff '+E(s.cutoff)+' — '+supItems.length+' item'+(supItems.length===1?'':'s')+' below PAR', view:'prep-list'});
+    });
+
     // Tanda leave alerts
     if (window._tandaData && window._tandaData.upcomingLeave) {
         var _todayStr = new Date().toISOString().split('T')[0];
@@ -651,8 +715,8 @@ window.renderManagerHub = () => {
     html += '<span id="pulse-weather" style="font-size:12px;padding:3px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue);border:1px solid rgba(59,130,246,0.2);">--°C</span>';
     html += '<span id="pulse-version" style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,0.1);color:var(--green);border:1px solid rgba(16,185,129,0.2);cursor:pointer;" onclick="window._showVersionInfo()" title="Click for version details">🔄 ' + window._hubBuildId + '</span>';
     html += '</div></div>';
-    // Right: health score ring
-    html += '<div style="text-align:center;position:relative;width:110px;height:110px;flex-shrink:0;">';
+    // Right: health score ring (clickable)
+    html += '<div onclick="window._showHealthBreakdown()" style="text-align:center;position:relative;width:110px;height:110px;flex-shrink:0;cursor:pointer;" title="Click for score breakdown">';
     html += scoreRing(healthScore, 110, 8, scoreColor);
     html += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(0deg);text-align:center;">';
     html += '<div style="font-size:28px;font-weight:800;color:'+scoreColor+';line-height:1;">'+healthScore+'</div>';
@@ -899,17 +963,50 @@ window.renderManagerHub = () => {
         html += '</div>';
     }
 
-    // --- MARGIN ALERTS ---
+    // --- MARGIN ALERTS with Fix Actions ---
     if (_showFinancials && marginAlerts.length > 0) {
         html += '<div class="card" style="padding:16px;margin-bottom:14px;border-left:3px solid var(--purple);">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
         html += '<div style="font-size:13px;font-weight:700;">📉 Margin Alerts <span style="font-size:11px;background:var(--purple);color:#fff;padding:1px 8px;border-radius:10px;margin-left:6px;">'+marginAlerts.length+'</span></div>';
         html += '<button onclick="window.showView(\'margins\')" class="btn btn-outline" style="font-size:11px;padding:4px 12px;">View All →</button></div>';
-        marginAlerts.slice(0,4).forEach(a => {
-            html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;"><span style="color:var(--red);">'+E(a.name)+'</span><span><strong>'+a.currentGp+'%</strong> GP</span></div>';
+        const _gpTarget = window.GP_TARGET || 67;
+        marginAlerts.slice(0,5).forEach(a => {
+            const suggestedPrice = a.cost > 0 ? (parseFloat(a.cost) / (1 - _gpTarget/100)).toFixed(0) : null;
+            const recipe = (window.recipes||[]).find(r=>r.name===a.name);
+            const currentPrice = recipe ? recipe.price : 0;
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;gap:8px;">';
+            html += '<span style="color:var(--red);flex:1;">'+E(a.name)+'</span>';
+            html += '<span style="font-size:12px;color:var(--text-muted);">$'+a.cost+' cost</span>';
+            html += '<span style="font-weight:700;color:var(--red);min-width:50px;text-align:right;">'+a.currentGp+'%</span>';
+            if (suggestedPrice && recipe && Number(suggestedPrice) > currentPrice) {
+                html += '<button onclick="window._quickFixPrice(\''+recipe.id+'\','+suggestedPrice+')" class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:var(--green);border-color:var(--green);white-space:nowrap;" title="Update sell price to $'+suggestedPrice+' for '+_gpTarget+'% GP">Fix → $'+suggestedPrice+'</button>';
+            }
+            html += '</div>';
         });
+        if (marginAlerts.length > 5) html += '<div style="font-size:11px;color:var(--text-muted);padding-top:6px;">+' + (marginAlerts.length-5) + ' more below target</div>';
         html += '</div>';
     }
+
+    // Quick-fix sell price from margin alert
+    window._quickFixPrice = (recipeId, newPrice) => {
+        const recipe = (window.recipes||[]).find(r=>r.id===recipeId);
+        if (!recipe) return;
+        const oldPrice = recipe.price;
+        window.confirmAction({
+            title: '💰 Update Sell Price',
+            message: '<strong>'+window.esc(recipe.name)+'</strong><br><br>Current: $'+oldPrice+' → New: <strong style="color:var(--green);">$'+newPrice+'</strong><br><br>This will achieve '+(window.GP_TARGET||67)+'% GP based on current costs ($'+recipe.cost?.toFixed(2)+').',
+            confirmLabel: 'Update Price',
+            tier: 'standard',
+            onConfirm: () => {
+                recipe.price = Number(newPrice);
+                recipe.gp = parseFloat(((recipe.price - recipe.cost) / recipe.price * 100).toFixed(1));
+                recipe.modifiedAt = new Date().toISOString();
+                window.saveToDisk();
+                window.showToast(recipe.name + ' price updated to $' + newPrice);
+                window.showView('dashboard');
+            }
+        });
+    };
 
     // --- RECIPE COSTING HEALTH WIDGET ---
     if (_showFinancials && _totalIngs > 0) {
