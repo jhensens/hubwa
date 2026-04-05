@@ -534,47 +534,256 @@ window.commitBatchLinks = () => {
 // =============================================================================
 // MENU ENGINEERING MATRIX
 // =============================================================================
+
+// Aggregate sales volumes from depletion logs (non-reversed) into weekly averages
+window._calcPosCovers = () => {
+    const logs = (window.depletionLogs||[]).filter(d => !d.reversed && d.itemsSold && d.itemsSold.length > 0);
+    if (logs.length === 0) return {};
+    // Find date range to calculate weeks
+    const dates = logs.map(d => {
+        if (d.ts) return new Date(d.ts);
+        if (d.date) { const p = d.date.split('/'); return new Date(p[2], p[1]-1, p[0]); }
+        return null;
+    }).filter(Boolean).sort((a,b) => a-b);
+    const firstDate = dates[0], lastDate = dates[dates.length-1];
+    const weeks = Math.max(1, (lastDate - firstDate) / (7*24*60*60*1000));
+    // Aggregate total qty per recipe name
+    const totals = {};
+    logs.forEach(d => {
+        (d.itemsSold||[]).forEach(item => {
+            const key = (item.recipeName||'').toLowerCase().trim();
+            if (!key) return;
+            totals[key] = (totals[key]||0) + (item.qtySold||0);
+        });
+    });
+    // Convert to weekly average
+    const weekly = {};
+    Object.keys(totals).forEach(k => { weekly[k] = Math.round(totals[k] / weeks * 10) / 10; });
+    return weekly;
+};
+
+// Sync POS covers into recipe.coversPerWeek — matches by name/posAlias
+window._syncPosCovers = () => {
+    const posCovers = window._calcPosCovers();
+    if (Object.keys(posCovers).length === 0) { window.showToast('No depletion data found. Run POS depletion first.', 'error'); return 0; }
+    let synced = 0;
+    (window.recipes||[]).forEach(r => {
+        if (r.type !== 'Menu' || r.archived) return;
+        const nameKey = (r.name||'').toLowerCase().trim();
+        const aliasKey = (r.posAlias||'').toLowerCase().trim();
+        const covers = posCovers[nameKey] || posCovers[aliasKey] || 0;
+        if (covers > 0) { r.coversPerWeek = covers; synced++; }
+    });
+    if (synced > 0) window.saveToDisk();
+    return synced;
+};
+
 window.renderMenuEngineeringView = () => {
+    const E = window.esc;
+    const GP_TARGET = window.GP_TARGET || 67;
     const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active'&&!r.archived);
+
+    // Recalculate costs
     menuRecipes.forEach(r => {
         let cost=0;
-        (r.ingredients||[]).forEach(ing=>{ if(ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));} else if(ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}});
+        (r.ingredients||[]).forEach(ing=>{
+            if(ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
+            else if(ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
+        });
         r.cost=cost; r.gp=r.price>0?parseFloat(((r.price-cost)/r.price*100).toFixed(1)):0;
     });
+
     const avgGp=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length:GP_TARGET;
     const avgCovers=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+(r.coversPerWeek||0),0)/menuRecipes.length:0;
     const classify = r => { const hi=r.gp>=avgGp,hv=(r.coversPerWeek||0)>=avgCovers; return hi&&hv?'star':hi&&!hv?'puzzle':!hi&&hv?'plowhorse':'dog'; };
-    const cats = { star:{label:'⭐ Star',color:'var(--green)',bg:'rgba(16,185,129,0.08)',desc:'High GP + high volume. Protect.'}, puzzle:{label:'🧩 Puzzle',color:'var(--blue)',bg:'rgba(59,130,246,0.08)',desc:'High GP, low volume. Promote.'}, plowhorse:{label:'🐴 Plow Horse',color:'var(--orange)',bg:'rgba(245,158,11,0.08)',desc:'High volume, low GP. Reprice.'}, dog:{label:'🐶 Dog',color:'var(--red)',bg:'rgba(239,68,68,0.08)',desc:'Low GP + low volume. Review.'} };
+
+    const cats = {
+        star:{label:'⭐ Stars',color:'#10b981',css:'var(--green)',bg:'rgba(16,185,129,0.08)',desc:'High GP + high volume. Protect these items.',action:'Keep prominent on menu. Don\'t change pricing.'},
+        puzzle:{label:'🧩 Puzzles',color:'#3b82f6',css:'var(--blue)',bg:'rgba(59,130,246,0.08)',desc:'High GP, low volume. Hidden gems.',action:'Promote: feature on specials, train staff to upsell.'},
+        plowhorse:{label:'🐴 Plow Horses',color:'#f59e0b',css:'var(--orange)',bg:'rgba(245,158,11,0.08)',desc:'High volume, low GP. Popular but expensive.',action:'Reprice: increase sell price or reduce portion/ingredients.'},
+        dog:{label:'🐶 Dogs',color:'#ef4444',css:'var(--red)',bg:'rgba(239,68,68,0.08)',desc:'Low GP + low volume. Underperformers.',action:'Review: consider removing, replacing, or complete rework.'}
+    };
     const sc={Kitchen:'var(--orange)',Bar:'var(--blue)',Prep:'var(--purple)'};
-    const nw=menuRecipes.filter(r=>!r.coversPerWeek||r.coversPerWeek===0).length;
-    const warnHtml=nw>0?'<div class="card" style="border-left:4px solid var(--orange);padding:12px;margin-bottom:20px;font-size:13px;"><strong style="color:var(--orange);">⚠️ '+nw+' recipes have no covers/week set.</strong> Edit each recipe to add covers, or use the Sell Price Editor.</div>':'';
+
+    // Classify and calculate contribution margin
+    const classified = menuRecipes.map(r => {
+        const cat = classify(r);
+        const margin = r.price - (r.cost||0);
+        const weeklyProfit = margin * (r.coversPerWeek||0);
+        const weeklyRevenue = r.price * (r.coversPerWeek||0);
+        return { ...r, _cat: cat, _margin: margin, _weeklyProfit: weeklyProfit, _weeklyRevenue: weeklyRevenue };
+    });
+
     const counts={star:0,puzzle:0,plowhorse:0,dog:0};
-    menuRecipes.forEach(r=>counts[classify(r)]++);
-    const quadHtml=['star','puzzle','plowhorse','dog'].map(key=>{
-        const cat=cats[key]; const items=menuRecipes.filter(r=>classify(r)===key);
-        const rows=items.map(r=>{
-            const gc=r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--orange)':'var(--red)';
-            return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 12px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.editRecipeForm(this.dataset.id)" data-id="'+r.id+'">'+esc(r.name)+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td><td style="padding:10px 12px;color:'+gc+';font-weight:bold;">'+r.gp+'%</td><td style="padding:10px 12px;color:var(--brand-accent);">$'+Number(r.price||0).toFixed(2)+'</td><td style="padding:10px 12px;font-weight:bold;">'+(r.coversPerWeek||0)+'/wk</td></tr>';
+    classified.forEach(r=>counts[r._cat]++);
+
+    // Revenue/profit by quadrant
+    const quadStats={star:{rev:0,profit:0},puzzle:{rev:0,profit:0},plowhorse:{rev:0,profit:0},dog:{rev:0,profit:0}};
+    classified.forEach(r=>{ quadStats[r._cat].rev+=r._weeklyRevenue; quadStats[r._cat].profit+=r._weeklyProfit; });
+    const totalWeeklyProfit = classified.reduce((s,r)=>s+r._weeklyProfit,0);
+    const totalWeeklyRevenue = classified.reduce((s,r)=>s+r._weeklyRevenue,0);
+
+    // Check for POS data availability
+    const posCovers = window._calcPosCovers();
+    const hasPosData = Object.keys(posCovers).length > 0;
+    const nw = menuRecipes.filter(r=>!r.coversPerWeek||r.coversPerWeek===0).length;
+
+    // Data source banner
+    let dataBanner = '';
+    if (nw > 0 && hasPosData) {
+        dataBanner = '<div class="card" style="border-left:4px solid var(--blue);padding:12px;margin-bottom:20px;font-size:13px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+            '<div><strong style="color:var(--blue);">📡 POS data available!</strong> '+nw+' recipes still have no covers/week. Sync from depletion history to auto-fill.</div>' +
+            '<button onclick="window._syncAndRefreshMatrix()" class="btn btn-blue" style="font-size:12px;padding:6px 14px;">Sync from POS</button></div>';
+    } else if (nw > 0) {
+        dataBanner = '<div class="card" style="border-left:4px solid var(--orange);padding:12px;margin-bottom:20px;font-size:13px;">' +
+            '<strong style="color:var(--orange);">⚠️ '+nw+' recipes have no covers/week.</strong> Run POS depletion to generate sales data, or set covers manually in the Sell Price Editor.</div>';
+    }
+
+    // --- SVG SCATTER PLOT ---
+    const plotW=580, plotH=340, pad={t:25,r:25,b:45,l:55};
+    const chartW=plotW-pad.l-pad.r, chartH=plotH-pad.t-pad.b;
+    const maxCovers = Math.max(10, ...classified.map(r=>r.coversPerWeek||0)) * 1.15;
+    const maxGp = Math.min(100, Math.max(GP_TARGET+15, ...classified.map(r=>r.gp)) * 1.1);
+    const minGp = Math.max(0, Math.min(avgGp-20, ...classified.map(r=>r.gp).filter(g=>g>0)) - 5);
+    const gpRange = maxGp - minGp;
+    const xScale = v => pad.l + (v / maxCovers) * chartW;
+    const yScale = v => pad.t + chartH - ((v - minGp) / gpRange) * chartH;
+
+    const avgX = xScale(avgCovers), avgY = yScale(avgGp);
+
+    let dots = '';
+    classified.forEach(r => {
+        const cx = xScale(r.coversPerWeek||0), cy = yScale(r.gp);
+        const col = cats[r._cat].color;
+        const radius = Math.max(5, Math.min(14, 4 + (r._weeklyProfit / Math.max(1, totalWeeklyProfit)) * 80));
+        dots += '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="'+col+'" fill-opacity="0.7" stroke="'+col+'" stroke-width="1.5" style="cursor:pointer;" ' +
+            'onmouseover="this.setAttribute(\'r\','+(radius+3)+');document.getElementById(\'me-tip\').innerHTML=\''+E(r.name)+' — GP '+r.gp+'%, '+((r.coversPerWeek||0))+'/wk, $'+r._margin.toFixed(2)+' margin\'" ' +
+            'onmouseout="this.setAttribute(\'r\','+radius+');document.getElementById(\'me-tip\').innerHTML=\'Hover a dot for details\'" ' +
+            'onclick="window.editRecipeForm(\''+r.id+'\')" />';
+    });
+
+    // Grid lines
+    let gridLines = '';
+    for (let g = Math.ceil(minGp/10)*10; g <= maxGp; g += 10) {
+        const y = yScale(g);
+        gridLines += '<line x1="'+pad.l+'" y1="'+y+'" x2="'+(plotW-pad.r)+'" y2="'+y+'" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>';
+        gridLines += '<text x="'+(pad.l-8)+'" y="'+(y+4)+'" text-anchor="end" fill="rgba(255,255,255,0.4)" font-size="10">'+g+'%</text>';
+    }
+    const xSteps = Math.max(1, Math.round(maxCovers / 5));
+    for (let c = 0; c <= maxCovers; c += xSteps) {
+        const x = xScale(c);
+        gridLines += '<line x1="'+x+'" y1="'+pad.t+'" x2="'+x+'" y2="'+(plotH-pad.b)+'" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>';
+        gridLines += '<text x="'+x+'" y="'+(plotH-pad.b+16)+'" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="10">'+Math.round(c)+'</text>';
+    }
+
+    // Quadrant labels
+    const qLabels = '<text x="'+(pad.l+8)+'" y="'+(pad.t+14)+'" fill="rgba(59,130,246,0.3)" font-size="11" font-weight="bold">PUZZLES</text>' +
+        '<text x="'+(plotW-pad.r-8)+'" y="'+(pad.t+14)+'" text-anchor="end" fill="rgba(16,185,129,0.3)" font-size="11" font-weight="bold">STARS</text>' +
+        '<text x="'+(pad.l+8)+'" y="'+(plotH-pad.b-8)+'" fill="rgba(239,68,68,0.3)" font-size="11" font-weight="bold">DOGS</text>' +
+        '<text x="'+(plotW-pad.r-8)+'" y="'+(plotH-pad.b-8)+'" text-anchor="end" fill="rgba(245,158,11,0.3)" font-size="11" font-weight="bold">PLOW HORSES</text>';
+
+    const scatterSvg = '<svg viewBox="0 0 '+plotW+' '+plotH+'" style="width:100%;max-width:'+plotW+'px;height:auto;">' +
+        // Background
+        '<rect x="'+pad.l+'" y="'+pad.t+'" width="'+chartW+'" height="'+chartH+'" fill="rgba(0,0,0,0.15)" rx="4"/>' +
+        gridLines + qLabels +
+        // Average crosshairs
+        '<line x1="'+avgX+'" y1="'+pad.t+'" x2="'+avgX+'" y2="'+(plotH-pad.b)+'" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4,4"/>' +
+        '<line x1="'+pad.l+'" y1="'+avgY+'" x2="'+(plotW-pad.r)+'" y2="'+avgY+'" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4,4"/>' +
+        // GP target line
+        (GP_TARGET >= minGp && GP_TARGET <= maxGp ?
+            '<line x1="'+pad.l+'" y1="'+yScale(GP_TARGET)+'" x2="'+(plotW-pad.r)+'" y2="'+yScale(GP_TARGET)+'" stroke="rgba(16,185,129,0.4)" stroke-width="1.5" stroke-dasharray="6,3"/>' +
+            '<text x="'+(plotW-pad.r-4)+'" y="'+(yScale(GP_TARGET)-5)+'" text-anchor="end" fill="rgba(16,185,129,0.5)" font-size="9">'+GP_TARGET+'% target</text>' : '') +
+        // Dots
+        dots +
+        // Axis labels
+        '<text x="'+(plotW/2)+'" y="'+(plotH-4)+'" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11">Covers / Week</text>' +
+        '<text x="14" y="'+(plotH/2)+'" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" transform="rotate(-90,14,'+(plotH/2)+')">GP %</text>' +
+        '</svg>';
+
+    // --- QUADRANT CARDS ---
+    const quadHtml = ['star','puzzle','plowhorse','dog'].map(key => {
+        const cat = cats[key];
+        const items = classified.filter(r=>r._cat===key).sort((a,b)=>b._weeklyProfit-a._weeklyProfit);
+        const qProfit = quadStats[key].profit;
+        const profitPct = totalWeeklyProfit > 0 ? (qProfit / totalWeeklyProfit * 100).toFixed(0) : 0;
+
+        const rows = items.map(r => {
+            const gc = r.gp>=GP_TARGET?'var(--green)':r.gp>0?'var(--orange)':'var(--red)';
+            const suggestedPrice = r.gp < GP_TARGET && r.cost > 0 ? (r.cost / (1 - GP_TARGET/100)).toFixed(2) : null;
+            const fixBtn = suggestedPrice ? ' <button onclick="window._quickFixPrice(\''+r.id+'\','+suggestedPrice+')" class="btn btn-outline" style="font-size:10px;padding:2px 6px;color:var(--green);border-color:var(--green);" title="Set to $'+suggestedPrice+' for '+GP_TARGET+'% GP">Fix</button>' : '';
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:8px 10px;"><strong style="cursor:pointer;color:var(--blue);font-size:13px;" onclick="window.editRecipeForm(\''+r.id+'\')">'+E(r.name)+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td>' +
+                '<td style="padding:8px 10px;color:'+gc+';font-weight:bold;font-size:13px;">'+r.gp+'%'+fixBtn+'</td>' +
+                '<td style="padding:8px 10px;font-size:12px;">$'+Number(r.price||0).toFixed(2)+'<br><small style="color:var(--text-muted);">cost $'+Number(r.cost||0).toFixed(2)+'</small></td>' +
+                '<td style="padding:8px 10px;font-weight:bold;font-size:13px;">'+(r.coversPerWeek||0)+'</td>' +
+                '<td style="padding:8px 10px;text-align:right;font-size:12px;"><strong style="color:'+(r._weeklyProfit>=0?'var(--green)':'var(--red)')+';">$'+r._weeklyProfit.toFixed(0)+'</strong><br><small style="color:var(--text-muted);">/wk</small></td>' +
+            '</tr>';
         }).join('');
-        return '<div class="card" style="padding:0;overflow:hidden;border-top:4px solid '+cat.color+';background:'+cat.bg+';">' +
-            '<div style="padding:15px 20px;border-bottom:1px solid var(--border);"><h3 style="margin:0;color:'+cat.color+';">'+cat.label+' <span style="font-size:13px;background:'+cat.color+';color:white;padding:2px 8px;border-radius:10px;font-weight:normal;">'+items.length+'</span></h3><p style="margin:4px 0 0 0;font-size:12px;color:var(--text-muted);">'+cat.desc+'</p></div>' +
-            (items.length===0?'<p style="padding:15px 20px;color:var(--text-muted);font-size:13px;margin:0;">No items.</p>':'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);"><th style="padding:8px 12px;text-align:left;">Recipe</th><th style="padding:8px 12px;">GP%</th><th style="padding:8px 12px;">Sell</th><th style="padding:8px 12px;">Covers</th></tr></thead><tbody>'+rows+'</tbody></table></div>') +
+
+        return '<div class="card" style="padding:0;overflow:hidden;border-top:4px solid '+cat.css+';">' +
+            '<div style="padding:12px 16px;background:'+cat.bg+';border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+                '<div><h3 style="margin:0;color:'+cat.css+';font-size:15px;">'+cat.label+' <span style="font-size:12px;background:'+cat.css+';color:white;padding:1px 7px;border-radius:10px;font-weight:normal;">'+items.length+'</span></h3>' +
+                '<p style="margin:3px 0 0;font-size:11px;color:var(--text-muted);">'+cat.action+'</p></div>' +
+                '<div style="text-align:right;"><div style="font-size:16px;font-weight:bold;color:'+cat.css+';">$'+qProfit.toFixed(0)+'<small style="font-size:10px;font-weight:normal;">/wk</small></div>' +
+                '<div style="font-size:10px;color:var(--text-muted);">'+profitPct+'% of profit</div></div>' +
+            '</div>' +
+            (items.length===0?'<p style="padding:15px;color:var(--text-muted);font-size:13px;margin:0;">No items.</p>' :
+            '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);">' +
+                '<th style="padding:6px 10px;text-align:left;">Recipe</th><th style="padding:6px 10px;">GP%</th><th style="padding:6px 10px;">Price</th><th style="padding:6px 10px;">Covers</th><th style="padding:6px 10px;text-align:right;">Profit</th></tr></thead>' +
+                '<tbody>'+rows+'</tbody></table></div>') +
         '</div>';
     }).join('');
+
+    // --- ASSEMBLE ---
     return '<div style="max-width:1100px;margin:auto;">' +
         window._marginsTabBar('menu-engineering') +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-        '<div><h2 style="margin:0;">🎯 Menu Engineering Matrix</h2><small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+' covers/wk · '+menuRecipes.length+' active items</small></div>' +
-        '<button onclick="window.getMenuAiAdvice()" class="btn btn-purple" style="padding:10px 18px;font-size:13px;">🤖 AI Menu Advisor</button>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
+            '<div><h2 style="margin:0;">🎯 Menu Engineering Matrix</h2>' +
+            '<small style="color:var(--text-muted);">Avg GP: '+avgGp.toFixed(1)+'% · Avg Volume: '+avgCovers.toFixed(0)+'/wk · '+menuRecipes.length+' active items</small></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                (hasPosData ? '<button onclick="window._syncAndRefreshMatrix()" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">📡 Sync POS</button>' : '') +
+                '<button onclick="window.getMenuAiAdvice()" class="btn btn-purple" style="padding:8px 16px;font-size:12px;">🤖 AI Advisor</button>' +
+            '</div>' +
         '</div>' +
         '<div id="ai-menu-advice"></div>' +
-        warnHtml +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:25px;">' +
-        '<div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">'+counts.star+'</div><div style="font-size:12px;color:var(--text-muted);">⭐ Stars</div></div>' +
-        '<div class="card" style="text-align:center;border-top:4px solid var(--blue);"><div style="font-size:34px;font-weight:bold;color:var(--blue);">'+counts.puzzle+'</div><div style="font-size:12px;color:var(--text-muted);">🧩 Puzzles</div></div>' +
-        '<div class="card" style="text-align:center;border-top:4px solid var(--orange);"><div style="font-size:34px;font-weight:bold;color:var(--orange);">'+counts.plowhorse+'</div><div style="font-size:12px;color:var(--text-muted);">🐴 Plow Horses</div></div>' +
-        '<div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">'+counts.dog+'</div><div style="font-size:12px;color:var(--text-muted);">🐶 Dogs</div></div></div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;">'+quadHtml+'</div></div>';
+        dataBanner +
+
+        // KPI row
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--green);"><div style="font-size:28px;font-weight:bold;color:var(--green);">'+counts.star+'</div><div style="font-size:11px;color:var(--text-muted);">Stars</div></div>' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--blue);"><div style="font-size:28px;font-weight:bold;color:var(--blue);">'+counts.puzzle+'</div><div style="font-size:11px;color:var(--text-muted);">Puzzles</div></div>' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--orange);"><div style="font-size:28px;font-weight:bold;color:var(--orange);">'+counts.plowhorse+'</div><div style="font-size:11px;color:var(--text-muted);">Plow Horses</div></div>' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--red);"><div style="font-size:28px;font-weight:bold;color:var(--red);">'+counts.dog+'</div><div style="font-size:11px;color:var(--text-muted);">Dogs</div></div>' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--brand-accent);"><div style="font-size:22px;font-weight:bold;color:var(--brand-accent);">$'+totalWeeklyProfit.toFixed(0)+'</div><div style="font-size:11px;color:var(--text-muted);">Profit/wk</div></div>' +
+            '<div class="card" style="text-align:center;padding:12px;border-top:3px solid var(--text-muted);"><div style="font-size:22px;font-weight:bold;">$'+totalWeeklyRevenue.toFixed(0)+'</div><div style="font-size:11px;color:var(--text-muted);">Revenue/wk</div></div>' +
+        '</div>' +
+
+        // Scatter plot
+        '<div class="card" style="padding:16px;margin-bottom:20px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+                '<h3 style="margin:0;font-size:14px;">Quadrant Map</h3>' +
+                '<div style="display:flex;gap:12px;font-size:11px;">' +
+                    '<span style="color:#10b981;">● Stars</span><span style="color:#3b82f6;">● Puzzles</span>' +
+                    '<span style="color:#f59e0b;">● Plow Horses</span><span style="color:#ef4444;">● Dogs</span>' +
+                '</div>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:center;">'+scatterSvg+'</div>' +
+            '<div id="me-tip" style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:8px;min-height:18px;">Hover a dot for details</div>' +
+        '</div>' +
+
+        // Quadrant cards
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:16px;">' + quadHtml + '</div>' +
+    '</div>';
+};
+
+// Sync POS data and refresh the matrix view
+window._syncAndRefreshMatrix = () => {
+    const synced = window._syncPosCovers();
+    if (synced > 0) {
+        window.showToast(synced + ' recipes synced with POS data.');
+        window.showView('menu-engineering');
+    }
 };
 
 // =============================================================================
