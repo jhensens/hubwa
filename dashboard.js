@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '5 Apr 2026, 2:00 PM';
-window._hubBuildId = '20260405b';
+window._hubBuildDate = '5 Apr 2026, 4:00 PM';
+window._hubBuildId = '20260405c';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version

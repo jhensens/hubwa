@@ -55,6 +55,7 @@ window.showView = (view) => {
         else if (view === 'prime-cost') { window._analyticsTab = 'primecost'; content.innerHTML = window.renderAnalyticsHub(); }
         else if (view === 'variance') { window._analyticsTab = 'variance'; content.innerHTML = window.renderAnalyticsHub(); }
         else if (view === 'forecast') { window._analyticsTab = 'forecast'; content.innerHTML = window.renderAnalyticsHub(); }
+        else if (view === 'supplier-spend') { window._analyticsTab = 'supplier-spend'; content.innerHTML = window.renderAnalyticsHub(); }
         // --- ORDER HUB (invoice now has tab bar) ---
         else if ((view === 'prep-list' || view === 'preplist') && window.renderPrepListView) content.innerHTML = window.renderPrepListView();
         else if (view === 'prep-gen' && window.renderPrepGenView) content.innerHTML = window.renderPrepGenView();

@@ -446,6 +446,13 @@ window._generateHandoverPrefill = () => {
             // Temp breaches
             const breaches = (window.tempLogs || []).filter(t => t.time && t.time.includes(todayStr) && parseFloat(t.value) > 5);
             if (breaches.length > 0) parts.push('Temp breaches: ' + breaches.map(t => (t.unit || 'Unit') + ' ' + t.value + '°C').join(', '));
+            // Compliance temp completion
+            const fridgeCount = (window.fridgeUnits || []).length;
+            if (fridgeCount > 0) {
+                const todayTemps = (window.tempLogs || []).filter(t => t.time && t.time.includes(todayStr));
+                const unitsLogged = new Set(todayTemps.map(t => t.unit)).size;
+                parts.push('Temps: ' + unitsLogged + '/' + fridgeCount + ' units logged' + (unitsLogged >= fridgeCount ? ' ✓' : ''));
+            }
             prefills[sec] = parts.length > 0 ? parts.join('\n') : '';
         }
 
@@ -460,6 +467,17 @@ window._generateHandoverPrefill = () => {
             const todayWaste = (window.wastageLogs || []).filter(w => w.time && w.time.includes(todayStr));
             const wasteTotal = todayWaste.reduce((s, w) => s + Number(w.value || 0), 0);
             if (wasteTotal > 0) parts.push('Wastage: $' + wasteTotal.toFixed(2));
+            // Top sellers from latest depletion run
+            const latestDep = (window.depletionLogs || []).filter(d => !d.reversed && d.itemsSold && d.itemsSold.length > 0).slice(-1)[0];
+            if (latestDep && latestDep.itemsSold.length > 0) {
+                const topSellers = latestDep.itemsSold.slice().sort((a, b) => b.qtySold - a.qtySold).slice(0, 5);
+                parts.push('Top sellers: ' + topSellers.map(s => s.recipeName + ' (' + s.qtySold + ')').join(', '));
+            }
+            // Tanda roster info
+            if (window._tandaData) {
+                const td = window._tandaData;
+                parts.push('Roster: ' + (td.staffCount || '?') + ' staff, ' + (td.rosteredHours || '?') + 'h, est wages $' + (td.estimatedWageCost || '?'));
+            }
             prefills[sec] = parts.length > 0 ? parts.join(' · ') : '';
         }
 
@@ -470,6 +488,29 @@ window._generateHandoverPrefill = () => {
                 return false;
             }).map(t => t.name);
             if (overdue.length > 0) prefills[sec] = 'Tasks due: ' + overdue.join(', ');
+            // Supplier deliveries tomorrow
+            const tomorrow = new Date(now.getTime() + 86400000);
+            const tomorrowDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][tomorrow.getDay()];
+            const deliveringTomorrow = (window.suppliers || []).filter(s => s.deliveryDays && s.deliveryDays.includes(tomorrowDay));
+            if (deliveringTomorrow.length > 0) {
+                const deliveryLine = 'Deliveries tomorrow (' + tomorrowDay + '): ' + deliveringTomorrow.map(s => s.name + (s.cutoff ? ' (cutoff ' + s.cutoff + ')' : '')).join(', ');
+                prefills[sec] = prefills[sec] ? prefills[sec] + '\n' + deliveryLine : deliveryLine;
+            }
+            // Order cutoffs today — items below PAR whose supplier delivers tomorrow
+            const urgentOrders = [];
+            (window.inventoryItems || []).filter(i => !i.archived).forEach(i => {
+                const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+                if (par > 0 && (i.stock||0) < par && i.supplier) {
+                    const sup = (window.suppliers || []).find(s => s.name === i.supplier);
+                    if (sup && sup.cutoff && sup.deliveryDays && sup.deliveryDays.includes(tomorrowDay)) {
+                        urgentOrders.push((i.recipeName||i.name) + ' (' + sup.name + ', cutoff ' + sup.cutoff + ')');
+                    }
+                }
+            });
+            if (urgentOrders.length > 0) {
+                const cutoffLine = 'Order cutoffs today: ' + urgentOrders.slice(0, 8).join(', ');
+                prefills[sec] = prefills[sec] ? prefills[sec] + '\n' + cutoffLine : cutoffLine;
+            }
         }
     });
     return prefills;
