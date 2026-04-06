@@ -1578,10 +1578,10 @@ window.printCountSheet = () => {
         'th:last-child{text-align:right;}' +
         '@media print{body{margin:10px;max-width:none;}@page{margin:10mm;size:A4;}}' +
         '</style></head><body>');
-    win.document.write('<h1>📦 Stock Count Sheet — ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + '</h1>');
+    win.document.write('<h1>📦 Stock Count Sheet — ' + window._getVenueName() + '</h1>');
     win.document.write('<div class="meta"><span>Grouped by: '+( groupBy==='zone'?'Zone':'Category')+'</span><span>Date: _____________ &nbsp;&nbsp; Staff: _____________</span></div>');
     win.document.write('<table><thead><tr><th>Item</th><th>Unit</th><th>PAR</th><th style="text-align:right;">Count</th></tr></thead><tbody>'+tableHtml+'</tbody></table>');
-    win.document.write('<div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">'+items.length+' items · ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + ' · Hobart Hub</div>');
+    win.document.write('<div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">'+items.length+' items · ' + window._getVenueName() + ' · Hobart Hub</div>');
     win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
     win.document.close();
     window.closeModal();
@@ -1598,7 +1598,7 @@ window.renderQuickStockCount = () => {
         return '<div style="max-width:900px;margin:auto;"><div class="card" style="text-align:center;padding:40px;"><h3 style="color:var(--text-muted);">No inventory items yet.</h3><button onclick="window.showView(\'inventory\')" class="btn btn-blue" style="margin-top:10px;">Go to Inventory</button></div></div>';
     }
     const isWeekend = [0,5,6].includes(new Date().getDay());
-    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    const venueName = window._getVenueName();
     
     // Group by zone (walking order)
     const grouped = {};

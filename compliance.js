@@ -324,7 +324,7 @@ window.signOffShiftCheck = (type, label, stateKey) => {
     if (!staff) return window.showToast('Enter staff initial to sign off.','error');
     const saved = JSON.parse(localStorage.getItem(stateKey) || '[]');
     const total = (window.shiftChecklistItems || {})[type] ? window.shiftChecklistItems[type].length : 0;
-    window.complianceLogs.push({ type: label + ' Checklist', staff, time: new Date().toLocaleString(), pct: total > 0 ? Math.round(saved.length/total*100) : 0 });
+    window.complianceLogs.push({ type: label + ' Checklist', staff, time: window._isoNow(), pct: total > 0 ? Math.round(saved.length/total*100) : 0 });
     window.saveToDisk();
     window.showToast(label + ' checklist signed off!');
     window.showView('compliance');
@@ -465,7 +465,6 @@ window.renderComplianceView = function() {
     }
 
     // --- Manager Overview Widget ---
-    const _today = new Date().toLocaleDateString();
     const _freqMap = { 'Weekly': 7, 'Fortnightly': 14, 'Monthly': 30, 'Quarterly': 90 };
     const _allTasks = window.rotationalTasks || [];
     let _overdue = 0, _dueToday = 0;
@@ -476,7 +475,7 @@ window.renderComplianceView = function() {
         if (days > interval) _overdue++;
         else if (days >= interval) _dueToday++;
     });
-    const _todayTemps = (window.tempLogs || []).filter(t => t.time && t.time.startsWith(_today));
+    const _todayTemps = (window.tempLogs || []).filter(t => window._isToday(t.time));
     const _tempsDone = _todayTemps.length > 0;
     const _lastSignOff = (window.complianceLogs || []).slice(-1)[0];
     const _lastSignText = _lastSignOff ? `${E(_lastSignOff.staff || '?')} — ${E(_lastSignOff.time || '')}` : 'None';
@@ -583,7 +582,7 @@ window.logAllTemps = () => {
 window.signCheck = (l) => {
     const staffEl = document.getElementById('s-' + l.replace(/\s/g,''));
     if (!staffEl || !staffEl.value) return window.showToast('Please sign name', 'error');
-    window.complianceLogs.push({ type: l, staff: staffEl.value, time: new Date().toLocaleString() });
+    window.complianceLogs.push({ type: l, staff: staffEl.value, time: window._isoNow() });
     window.saveToDisk(); window.showToast(l + ' Signed Off'); window.showView('compliance');
 };
 
@@ -707,8 +706,8 @@ window.renderFixItBoard = () => {
     ${closedTickets.length > 0 ? `<h3 style="margin-top:20px;margin-bottom:10px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Recently Resolved</h3>
     ${closedTickets.slice(-5).reverse().map(d => `<div style="background:var(--bg-main);padding:10px;border-radius:6px;margin-bottom:6px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="color:var(--green);">✓ ${E(d.item)}</strong> - <span style="font-size:13px;color:var(--text-muted);">${E(d.desc)}</span></div>${d.cost>0?`<strong style="color:var(--red);font-size:14px;">$${d.cost.toFixed(2)}</strong>`:''}</div>`).join('')}` : ''}`;
 };
-window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: new Date().toLocaleDateString() }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
-window.resolveDefect = (index) => { const costInput = document.getElementById(`def-cost-${index}`).value; window.defectLogs[index].status = 'Resolved'; window.defectLogs[index].cost = costInput ? parseFloat(costInput) : 0; window.defectLogs[index].resolvedDate = new Date().toLocaleDateString(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Resolved!"); };
+window.submitDefect = () => { const item = document.getElementById('def-item').value; const desc = document.getElementById('def-desc').value; if(!item || !desc) return window.showToast("Item and Description required.", "error"); window.defectLogs.push({ originalIndex: window.defectLogs.length, item, desc, tradie: document.getElementById('def-tradie').value, urgent: document.getElementById('def-urgent').checked, status: 'Open', date: window._isoDate() }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Submitted!"); };
+window.resolveDefect = (index) => { const costInput = document.getElementById(`def-cost-${index}`).value; window.defectLogs[index].status = 'Resolved'; window.defectLogs[index].cost = costInput ? parseFloat(costInput) : 0; window.defectLogs[index].resolvedDate = window._isoDate(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('fixit'); window.showToast("Ticket Resolved!"); };
 
 window.renderAssetRegister = () => { return (window.equipmentData || []).length === 0 ? '<p style="color:var(--text-muted);">No assets tracked yet.</p>' : window.equipmentData.map((e, idx) => `<div class="card" style="border-left:3px solid var(--blue); padding:12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; align-items:center;flex-wrap:wrap;gap:8px;"><div><strong style="font-size:14px;">${esc(e.name)}</strong> <span style="color:var(--text-muted); font-size:13px; margin-left:10px;">[Code: ${esc(e.code)}]</span><br><small style="color:var(--brand-accent); display:block; margin-top:5px;">Service Interval: ${e.interval} months | Last Service: <strong style="color:white;">${e.lastService}</strong></small></div><div style="display:flex; gap:10px;"><button onclick="window.editEq(${idx})" class="btn btn-outline">Edit</button><button onclick="window.logEq(${idx})" class="btn btn-green">Log Service Today</button><button onclick="window.delEq(${idx})" style="background:none; color:var(--red); border:none; cursor:pointer; font-size:18px;">&times;</button></div></div></div>`).join(''); };
 
@@ -738,8 +737,8 @@ window.showContractorForm = () => {
     let html = `<input type="text" id="con-name" class="input-box" placeholder="Contractor Name (e.g., John Smith)" required><input type="text" id="con-company" class="input-box" placeholder="Company (e.g., Bob's Plumbing)" required><input type="text" id="con-reason" class="input-box" placeholder="Reason for visit (e.g., Fix grease trap)" style="margin-bottom:20px;" required><button onclick="window.submitContractor()" class="btn btn-green" style="width:100%;">Sign In</button>`;
     window.openModal("📋 Contractor Sign-In", html); 
 }
-window.submitContractor = () => { const name = document.getElementById('con-name').value; const company = document.getElementById('con-company').value; const reason = document.getElementById('con-reason').value; if(!name || !company) return window.showToast("Required details missing.", "error"); const now = new Date(); window.contractorLogs.push({ date: now.toLocaleDateString(), timeIn: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), timeOut: null, name, company, reason }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed In!"); }
-window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
+window.submitContractor = () => { const name = document.getElementById('con-name').value; const company = document.getElementById('con-company').value; const reason = document.getElementById('con-reason').value; if(!name || !company) return window.showToast("Required details missing.", "error"); window.contractorLogs.push({ date: window._isoDate(), timeIn: window._isoTime(), timeOut: null, name, company, reason }); window.saveToDisk(); window.closeModal(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed In!"); }
+window.signOutContractor = (index) => { window.contractorLogs[index].timeOut = window._isoTime(); window.saveToDisk(); document.getElementById('mainContent').innerHTML = window.renderMaintenanceView('contractors'); window.showToast("Contractor Signed Out!"); }
 
 
 // =============================================================================

@@ -22,7 +22,7 @@ window.logAudit = function(collection, action, itemId, details) {
 // Reusable print template: opens new window with venue branding + auto-triggers print
 window.printReport = function(title, contentHtml, options) {
     options = options || {};
-    var venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    var venue = window._getVenueName();
     var dateStr = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
     var win = window.open('', '_blank');
     if (!win) return window.showToast('Pop-up blocked. Allow pop-ups for printing.', 'error');
@@ -105,7 +105,7 @@ window.getNotifications = function() {
 
     // HACCP breaches today
     (window.tempLogs || []).forEach(t => {
-        if (t.time && t.time.includes && t.time.includes(todayStr) && parseFloat(t.value) > 5) {
+        if (window._isToday(t.time) && parseFloat(t.value) > 5) {
             notifs.push({type:'haccp', icon:'🌡️', text: (t.unit||'Unit') + ' temp breach: ' + t.value + '°C', view:'compliance', priority:0});
         }
     });

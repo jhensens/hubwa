@@ -157,7 +157,7 @@ window.printDocRegister = function() {
         const st = window._safeGetStatus(d);
         return `<tr><td style="padding:6px 10px;border:1px solid #ddd;">${E(d.name)}</td><td style="padding:6px 10px;border:1px solid #ddd;">${E(d.category||'General')}</td><td style="padding:6px 10px;border:1px solid #ddd;">${d.expiry||'N/A'}</td><td style="padding:6px 10px;border:1px solid #ddd;color:${st.label==='EXPIRED'?'red':st.label==='Expiring'?'orange':'green'}">${st.label}</td><td style="padding:6px 10px;border:1px solid #ddd;font-size:11px;">${E(d.notes||'')}</td></tr>`;
     }).join('');
-    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const venueName = window._getVenueName();
     const html = `<html><head><title>Document Register</title></head><body style="font-family:Arial,sans-serif;padding:30px;color:#000;">
         <h2 style="margin-bottom:4px;">${E(venueName)} — Document Register</h2>
         <p style="color:#666;font-size:12px;">Printed: ${new Date().toLocaleDateString('en-AU')} | ${docs.length} documents</p>

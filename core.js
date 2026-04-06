@@ -1,6 +1,42 @@
 // --- HOBART HUB: Core Module ---
 // Global state initialization, HTML escape utilities, UI utilities, modal system, keyboard shortcuts
 
+// --- SHARED HELPERS ---
+window._getVenueName = () => window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+window._getVenueId = () => window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+window._isoNow = () => new Date().toISOString();          // "2026-04-05T14:32:15.123Z"
+window._isoDate = () => new Date().toISOString().split('T')[0]; // "2026-04-05"
+window._isoTime = () => new Date().toTimeString().slice(0,5);   // "14:32"
+// Check if a stored timestamp (ISO or legacy locale) is from today
+window._isToday = (ts) => {
+    if (!ts) return false;
+    const today = window._isoDate();
+    if (ts.startsWith(today)) return true; // ISO format match
+    // Legacy locale format fallback (DD/MM/YYYY or similar)
+    try { const d = new Date(ts); return !isNaN(d) && d.toISOString().split('T')[0] === today; } catch(e) { return false; }
+};
+// Shared recipe cost calculation — single source of truth
+// Returns cost for one ingredient based on type (inv or batch)
+window._ingCost = (ing) => {
+    if (ing.type === 'inv') {
+        const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
+        return inv ? Number(ing.qty) * ((Number(inv.price)||0) / (Number(inv.yield)||1)) : 0;
+    }
+    if (ing.type === 'batch') {
+        const b = (window.recipes||[]).find(x => x.id === ing.ref);
+        return b ? Number(ing.qty) * ((Number(b.cost)||0) / (Number(b.yieldQty)||1)) : 0;
+    }
+    return 0;
+};
+// Total cost for a recipe's ingredients
+window._recipeCost = (recipe) => (recipe.ingredients||[]).reduce((s, ing) => s + window._ingCost(ing), 0);
+// Recalculate cost + GP on a recipe object in place, returns the cost
+window._recalcRecipe = (r) => {
+    r.cost = window._recipeCost(r);
+    r.gp = r.price > 0 ? parseFloat(((r.price - r.cost) / r.price * 100).toFixed(1)) : 0;
+    return r.cost;
+};
+
 // --- 1. GLOBAL STATE INITIALIZATION ---
 window.inventoryItems = [];
 window.recipes = [];

@@ -225,7 +225,7 @@ window.handleStaffUpload = async (index, taskId, category, inputElem) => {
         window.orientationLogs[index].tasks[taskId] = true; window.saveToDisk(); window.showView('orientation'); window.showToast("Document Uploaded & Saved to Safe!");
     } catch (error) { window.showToast("Upload failed.", "error"); btn.innerText = originalText; btn.disabled = false; }
 };
-window.signOrientation = (index) => { const sigName = document.getElementById(`sig-${index}`).value; if(!sigName) return window.showToast("Please type your name.", "error"); window.orientationLogs[index].signature = sigName; window.orientationLogs[index].signDate = new Date().toLocaleString(); window.saveToDisk(); window.showView('orientation'); };
+window.signOrientation = (index) => { const sigName = document.getElementById(`sig-${index}`).value; if(!sigName) return window.showToast("Please type your name.", "error"); window.orientationLogs[index].signature = sigName; window.orientationLogs[index].signDate = window._isoNow(); window.saveToDisk(); window.showView('orientation'); };
 window.completeOrientation = (index) => { window.orientationLogs[index].status = 'Completed'; window.saveToDisk(); window.showView('orientation'); window.showToast("Staff Fully Trained!"); };
 window.deleteOrientation = (index) => { window.confirmAction({ title:'Remove Training Record', message:'Remove this staff member\'s training record? This cannot be undone.', confirmLabel:'Remove', tier:'standard', onConfirm:() => { window.orientationLogs.splice(index, 1); window.saveToDisk(); window.showView('orientation'); } }); };
 
@@ -449,7 +449,7 @@ window.saveIncident = function() {
     const desc = document.getElementById('inc-desc').value;
     const type = document.getElementById('inc-type') ? document.getElementById('inc-type').value : '';
     if (!staff || !desc) return window.showToast('Staff name and description required.', 'error');
-    window.incidentLogs.push({ staff, desc, type, time: new Date().toLocaleString() });
+    window.incidentLogs.push({ staff, desc, type, time: window._isoNow() });
     window.saveToDisk(); window.showToast('Incident Logged', 'error'); window.showView('incidents');
 };
 
@@ -486,7 +486,7 @@ window.runIncidentExport = (format) => {
     }
     const win = window.open('', '_blank');
     win.document.write('<!DOCTYPE html><html><head><title>Incident Log</title><style>body{font-family:sans-serif;font-size:13px;max-width:750px;margin:30px auto;}.h{font-size:20px;font-weight:bold;border-bottom:3px solid #dc2626;padding-bottom:8px;margin-bottom:5px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.inc{border-left:4px solid #dc2626;padding:12px 15px;margin-bottom:12px;background:#fff5f5;border-radius:0 6px 6px 0;}.row{display:flex;justify-content:space-between;margin-bottom:6px;}.name{font-weight:bold;}.time{color:#888;font-size:11px;}.type{font-size:11px;background:#fca5a5;color:#dc2626;padding:2px 8px;border-radius:8px;margin-left:8px;}.desc{white-space:pre-wrap;line-height:1.6;}@media print{body{margin:15px;}}</style></head><body>');
-    win.document.write('<div class="h">⚠️ Incident Log — ' + (window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya') + '</div><div class="meta">Period: ' + periodLabel + ' · ' + logs.length + ' incident(s) · Printed ' + new Date().toLocaleDateString('en-AU') + '</div>');
+    win.document.write('<div class="h">⚠️ Incident Log — ' + window._getVenueName() + '</div><div class="meta">Period: ' + periodLabel + ' · ' + logs.length + ' incident(s) · Printed ' + new Date().toLocaleDateString('en-AU') + '</div>');
     logs.forEach(l => { win.document.write('<div class="inc"><div class="row"><span><span class="name">' + esc(l.staff) + '</span>' + (l.type ? '<span class="type">' + esc(l.type) + '</span>' : '') + '</span><span class="time">' + esc(l.time) + '</span></div><div class="desc">' + esc(l.desc) + '</div></div>'); });
     win.document.write('<script>window.onload=()=>{window.print();}<\/script></body></html>');
     win.document.close(); window.closeModal();

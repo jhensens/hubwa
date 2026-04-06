@@ -160,7 +160,7 @@ window._commitRosterUpload = async () => {
     window.showToast("Uploading roster, please wait... ⏳");
     try {
         const fileRef = storage.ref().child('rosters/' + Date.now() + '_' + file.name); await fileRef.put(file); const downloadURL = await fileRef.getDownloadURL();
-        window.shiftRosters.push({ name: weekName, date: new Date().toLocaleDateString(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster uploaded!");
+        window.shiftRosters.push({ name: weekName, date: window._isoDate(), data: downloadURL }); window.saveToDisk(); window.showView('rosters'); window.showToast("Roster uploaded!");
     } catch(err) { window.showToast("Upload failed.", "error"); }
 };
 window.deleteRoster = (i) => { window.confirmAction({ title:'🗓️ Delete Roster', message:'Delete this roster?', confirmLabel:'Delete', tier:'standard', onConfirm:() => { window.shiftRosters.splice(i,1); window.saveToDisk(); window.showView('rosters'); } }); };
@@ -441,15 +441,15 @@ window._generateHandoverPrefill = () => {
             const openTickets = (window.defectLogs || []).filter(d => d.status !== 'Resolved');
             if (openTickets.length > 0) parts.push('Open maintenance: ' + openTickets.map(d => d.item || d.description || 'Ticket').join(', '));
             // Today's incidents
-            const todayIncidents = (window.incidentLogs || []).filter(i => i.time && i.time.includes(todayStr));
+            const todayIncidents = (window.incidentLogs || []).filter(i => window._isToday(i.time));
             if (todayIncidents.length > 0) parts.push('Incidents today: ' + todayIncidents.length);
             // Temp breaches
-            const breaches = (window.tempLogs || []).filter(t => t.time && t.time.includes(todayStr) && parseFloat(t.value) > 5);
+            const breaches = (window.tempLogs || []).filter(t => window._isToday(t.time) && parseFloat(t.value) > 5);
             if (breaches.length > 0) parts.push('Temp breaches: ' + breaches.map(t => (t.unit || 'Unit') + ' ' + t.value + '°C').join(', '));
             // Compliance temp completion
             const fridgeCount = (window.fridgeUnits || []).length;
             if (fridgeCount > 0) {
-                const todayTemps = (window.tempLogs || []).filter(t => t.time && t.time.includes(todayStr));
+                const todayTemps = (window.tempLogs || []).filter(t => window._isToday(t.time));
                 const unitsLogged = new Set(todayTemps.map(t => t.unit)).size;
                 parts.push('Temps: ' + unitsLogged + '/' + fridgeCount + ' units logged' + (unitsLogged >= fridgeCount ? ' ✓' : ''));
             }
@@ -464,7 +464,7 @@ window._generateHandoverPrefill = () => {
                 if (todaySales.covers) parts.push('Covers: ' + todaySales.covers);
             }
             // Today's wastage
-            const todayWaste = (window.wastageLogs || []).filter(w => w.time && w.time.includes(todayStr));
+            const todayWaste = (window.wastageLogs || []).filter(w => window._isToday(w.time));
             const wasteTotal = todayWaste.reduce((s, w) => s + Number(w.value || 0), 0);
             if (wasteTotal > 0) parts.push('Wastage: $' + wasteTotal.toFixed(2));
             // Top sellers from latest depletion run
@@ -541,7 +541,7 @@ window._collectBriefingContext = () => {
     const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
     const isWeekend = [0,5,6].includes(now.getDay());
     const dayName = now.toLocaleDateString('en-AU',{weekday:'long'});
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+    const venue = window._getVenueName();
 
     // Yesterday's sales
     const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
@@ -678,7 +678,7 @@ window.generateEodSummary = async () => {
     const todayStr = now.toLocaleDateString();
     const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
     const isWeekend = [0,5,6].includes(now.getDay());
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+    const venue = window._getVenueName();
 
     // Today's data
     const todaySales = (window.salesData||[]).find(s => s.date === fmtDate(now));
@@ -688,15 +688,15 @@ window.generateEodSummary = async () => {
     const laborPct = todayRev > 0 ? ((todayWages/todayRev)*100).toFixed(1) : '—';
 
     // Wastage
-    const todayWaste = (window.wastageLogs||[]).filter(w => w.time && w.time.includes(todayStr));
+    const todayWaste = (window.wastageLogs||[]).filter(w => window._isToday(w.time));
     const wasteTotal = todayWaste.reduce((s,w) => s + Number(w.value||0), 0);
 
     // Compliance
-    const todayTemps = (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr));
+    const todayTemps = (window.tempLogs||[]).filter(t => window._isToday(t.time));
     const breaches = todayTemps.filter(t => parseFloat(t.value) > 5);
 
     // Incidents
-    const todayIncidents = (window.incidentLogs||[]).filter(i => i.time && i.time.includes(todayStr));
+    const todayIncidents = (window.incidentLogs||[]).filter(i => window._isToday(i.time));
 
     // Stock status
     const lowStock = (window.inventoryItems||[]).filter(i => {
@@ -810,7 +810,7 @@ window.runAnomalyDetection = async () => {
 
     const now = new Date();
     const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+    const venue = window._getVenueName();
 
     // Collect 14 days of sales
     const salesHistory = [];
@@ -956,7 +956,7 @@ window.askHub = async () => {
     const now = new Date();
     const fmtDate = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
     const isWeekend = [0,5,6].includes(now.getDay());
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+    const venue = window._getVenueName();
 
     // Sales (last 7 days)
     const salesSnap = [];

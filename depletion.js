@@ -223,7 +223,7 @@ window.logWastage = () => {
         deductedBuyUnits: deductBuyUnits, value: dollarVal,
         reason: document.getElementById('w-rsn').value,
         staff: document.getElementById('w-staff').value,
-        time: new Date().toLocaleString()
+        time: window._isoNow()
     });
     window.saveToDisk();
     const remainStock = invMatch.stock;

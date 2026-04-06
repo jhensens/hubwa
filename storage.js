@@ -3,7 +3,21 @@
 
 // --- LOG TRIMMING (prevent unbounded growth) ---
 window._trimLogs = () => {
-    const caps = { stockMovements: 500, depletionLogs: 200, wastageLogs: 200 };
+    const caps = {
+        stockMovements: 500,
+        depletionLogs: 200,
+        wastageLogs: 200,
+        tempLogs: 2000,           // ~3-4 months at 20/day
+        complianceLogs: 1000,     // ~2 years of daily sign-offs
+        auditLog: 1000,           // ~2 years
+        taskHistory: 1000,        // ~3 months of daily tasks
+        handoverLogs: 400,        // ~13 months
+        incidentLogs: 300,
+        defectLogs: 300,
+        contractorLogs: 200,
+        orientationLogs: 200,
+        lsImportLog: 100
+    };
     Object.keys(caps).forEach(k => {
         if (window[k] && Array.isArray(window[k]) && window[k].length > caps[k]) {
             window[k] = window[k].slice(-caps[k]);
@@ -28,7 +42,8 @@ window.checkStorageHealth = () => {
 };
 
 // --- AUTO-BACKUP TO FIREBASE ---
-window._lastBackupDate = localStorage.getItem('lastBackupDate') || '';
+window._getBackupKey = () => (window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi') + '_lastBackupDate';
+window._lastBackupDate = localStorage.getItem(window._getBackupKey()) || '';
 window._runDailyBackup = () => {
     var today = new Date().toISOString().split('T')[0];
     if (window._lastBackupDate === today) return;
@@ -39,7 +54,7 @@ window._runDailyBackup = () => {
     db.collection('backups').doc(vid + '_' + today).set(payload)
         .then(() => {
             window._lastBackupDate = today;
-            localStorage.setItem('lastBackupDate', today);
+            localStorage.setItem(window._getBackupKey(), today);
             // Clean old backups (keep 7 days)
             var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
             var cutoffStr = cutoff.toISOString().split('T')[0];
@@ -50,6 +65,7 @@ window._runDailyBackup = () => {
 
 // Debounced Firebase write — max once every 4 seconds
 window._saveTimer = null;
+window._retryTimer = null; // Separate timer for retries — won't be clobbered by new saves
 window._lastFirebaseSave = 0;
 window._firebaseRetryCount = 0;
 
@@ -96,7 +112,8 @@ window.saveToDisk = () => {
                 if (window._firebaseRetryCount <= 3) {
                     if (syncLabel) { syncLabel.innerHTML = '🔄 Retrying sync (' + window._firebaseRetryCount + '/3)...'; syncLabel.style.color = 'var(--orange)'; }
                     if (window.showToast && window._firebaseRetryCount === 1) window.showToast('Sync failed — retrying...', 'error');
-                    setTimeout(() => { window._lastFirebaseSave = 0; window.saveToDisk(); }, 10000);
+                    if (window._retryTimer) clearTimeout(window._retryTimer);
+                    window._retryTimer = setTimeout(() => { window._lastFirebaseSave = 0; window.saveToDisk(); }, 10000);
                 } else {
                     if (syncLabel) { syncLabel.innerHTML = '❌ Sync Failed — <span onclick="window._firebaseRetryCount=0;window.saveToDisk()" style="cursor:pointer;text-decoration:underline;">Retry</span>'; syncLabel.style.color = 'var(--red)'; }
                     if (window.showToast) window.showToast('Data not synced to cloud. Check your connection.', 'error');

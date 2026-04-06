@@ -816,7 +816,7 @@ window.renderPrepGenView = () => {
 window._printPrepList = () => {
     const covers = window._prepCovers || 0;
     const stationFilter = window._prepStation || 'All';
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const venue = window._getVenueName();
     const dayName = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     // Recalculate prep items
@@ -858,7 +858,7 @@ window.copyOrderText = (supName, estSpend) => {
         text += `- ${qty}x ${i.buyUnit || 'Unit'} of ${i.name} ${i.sku ? `[${i.sku}]` : ''}\n`;
         orderItems.push({ name: i.name, sku: i.sku||'', qty, unit: i.buyUnit||'Unit', price: i.price||0 });
     });
-    const _venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    const _venueName = window._getVenueName();
     text += '\nThanks,\n' + _venueName;
     if (!window.orderHistory) window.orderHistory = [];
     window.orderHistory.push({ date: new Date().toLocaleDateString('en-AU'), supplier: supName, estSpend, items: orderItems });

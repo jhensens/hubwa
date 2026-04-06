@@ -245,17 +245,14 @@ Booking data: ${rawText}`;
 
 window.checkRecipeMargins = () => {
     let alerts = [];
+    let changed = false;
     (window.recipes || []).filter(r => r.type === 'Menu' && !r.archived).forEach(recipe => {
-        let currentCost = 0;
-        (recipe.ingredients || []).forEach(ing => {
-            if (ing.type === 'inv') { let inv = window.inventoryItems.find(i => i.id === ing.ref); if (inv) currentCost += Number(ing.qty) * (Number(inv.price) / Number(inv.yield || 1)); }
-            else if (ing.type === 'batch') { let b = window.recipes.find(r => r.id === ing.ref); if (b) currentCost += Number(ing.qty) * (Number(b.cost) / Number(b.yieldQty || 1)); }
-        });
-        const newGp = recipe.price > 0 ? ((recipe.price - currentCost) / recipe.price * 100).toFixed(1) : 0;
-        if (Number(newGp) < GP_TARGET) alerts.push({ name: recipe.name, currentGp: newGp, cost: currentCost.toFixed(2) });
-        recipe.cost = currentCost;
-        recipe.gp = parseFloat(newGp);
+        const prevCost = recipe.cost;
+        window._recalcRecipe(recipe);
+        if (recipe.cost !== prevCost) changed = true;
+        if (recipe.price > 0 && recipe.gp < GP_TARGET) alerts.push({ name: recipe.name, currentGp: recipe.gp, cost: recipe.cost.toFixed(2) });
     });
+    if (changed) window.saveToDisk();
     return alerts;
 };
 

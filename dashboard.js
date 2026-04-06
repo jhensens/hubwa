@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '5 Apr 2026, 4:00 PM';
-window._hubBuildId = '20260405c';
+window._hubBuildDate = '5 Apr 2026, 11:00 PM';
+window._hubBuildId = '20260405d';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -176,13 +176,13 @@ function renderCrossContent(venueData, venues) {
         const inv = data.inventoryItems || [];
         const lowStock = inv.filter(i => !i.archived && i.stock < (isWeekend?(i.parWeekend||i.par||0):(i.parWeekday||i.par||0)));
         const defects = (data.defectLogs||[]).filter(d=>d.status==='Open');
-        const incidents = (data.incidentLogs||[]).filter(i=>i.time&&i.time.includes(todayStr));
+        const incidents = (data.incidentLogs||[]).filter(i=>window._isToday(i.time));
         const freqMap = {'Weekly':7,'Fortnightly':14,'Monthly':30,'Quarterly':90};
         const overdueTasks = (data.rotationalTasks||[]).filter(t=>{
             if(!t.lastLogIso) return true;
             return ((today-new Date(t.lastLogIso))/(1000*3600*24))>=(freqMap[t.freq]||7);
         });
-        const tempLogs = (data.tempLogs||[]).filter(t=>t.time&&t.time.includes(today.toLocaleDateString()));
+        const tempLogs = (data.tempLogs||[]).filter(t=>window._isToday(t.time));
         const weekStart = new Date(today); weekStart.setDate(weekStart.getDate()-today.getDay()+1); weekStart.setHours(0,0,0,0);
         const weekSales = sales.filter(s=>{const d=parseDate(s.date);return d&&d>=weekStart&&d<=today;});
         const weekRevenue = weekSales.reduce((s,d)=>s+Number(d.total||0),0);
@@ -466,7 +466,7 @@ window.renderManagerHub = () => {
     const stockHealthPct = itemsWithPar.length > 0 ? Math.round((1 - lowStock.length / itemsWithPar.length) * 100) : 100;
 
     // --- COMPLIANCE ---
-    const todayTemps = (window.tempLogs||[]).filter(t => t.time && t.time.includes(todayStr));
+    const todayTemps = (window.tempLogs||[]).filter(t => window._isToday(t.time));
     const breaches = todayTemps.filter(t => parseFloat(t.value) > 5);
     const shiftType = hour < 14 ? 'opening' : hour < 20 ? 'preservice' : 'closing';
     const activeList = ((window.shiftChecklistItems||{})[shiftType]) || [];
@@ -525,7 +525,7 @@ window.renderManagerHub = () => {
     const _top5Unlinked = _activeRecipes.map(r => ({ id:r.id, name:r.name, rawCount:(r.ingredients||[]).filter(i => i.type==='raw').length })).filter(r => r.rawCount > 0).sort((a,b) => b.rawCount - a.rawCount).slice(0, 5);
 
     // --- COGS (from today's wastage + depletion) ---
-    const todayWastage = (window.wastageLogs||[]).filter(w => w.time && w.time.includes(todayStr)).reduce((s,w)=>s+(w.value||0), 0);
+    const todayWastage = (window.wastageLogs||[]).filter(w => window._isToday(w.time)).reduce((s,w)=>s+(w.value||0), 0);
 
     // --- LABOR % ---
     const laborPct = hasTodayData && todayWages > 0 ? (todayWages / todayRev * 100) : null;
@@ -1253,9 +1253,9 @@ window.saveAndGenerateDebrief = async () => {
     const todaySales = (window.salesData||[]).find(s => s.date === today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/'));
     const todayRevenue = todaySales ? Number(todaySales.total||0) : null;
     const openTickets = (window.defectLogs||[]).filter(d=>d.status==='Open');
-    const todayWasteLogs = (window.wastageLogs||[]).filter(l=>l.time&&l.time.includes(today.toLocaleDateString()));
+    const todayWasteLogs = (window.wastageLogs||[]).filter(l=>window._isToday(l.time));
     const wasteTotal = todayWasteLogs.reduce((s,w) => s + Number(w.value||0), 0);
-    const todayIncidents = (window.incidentLogs||[]).filter(i=>i.time&&i.time.includes(today.toLocaleDateString()));
+    const todayIncidents = (window.incidentLogs||[]).filter(i=>window._isToday(i.time));
     const isWeekend = [0,5,6].includes(today.getDay());
     const belowPar = (window.inventoryItems||[]).filter(i => {
         if (i.archived) return false;
@@ -1263,11 +1263,11 @@ window.saveAndGenerateDebrief = async () => {
         return i.stock < par;
     });
     const topBelowPar = belowPar.slice(0,5).map(i=>i.name).join(', ');
-    const todayTemps = (window.tempLogs||[]).filter(t=>t.time&&t.time.includes(today.toLocaleDateString()));
+    const todayTemps = (window.tempLogs||[]).filter(t=>window._isToday(t.time));
     const tempBreaches = todayTemps.filter(t=>parseFloat(t.value) > 5);
-    const newTicketsToday = openTickets.filter(t=>t.date&&t.date.includes(today.toLocaleDateString()));
+    const newTicketsToday = openTickets.filter(t=>window._isToday(t.date));
 
-    const prompt = `You are writing an end-of-shift debrief for a hospitality venue called ${window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue'}.
+    const prompt = `You are writing an end-of-shift debrief for a hospitality venue called ${window._getVenueName()}.
 
 The manager (${mgr}) has provided the following shift notes:
 "${combinedNotes}"
@@ -1332,7 +1332,7 @@ Write a clear, friendly shift debrief that the opening team and management will 
 window.copyDebrief = (idx) => {
     const h = (window.handoverLogs||[])[idx];
     if (!h) return;
-    const venueName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Venue';
+    const venueName = window._getVenueName();
     const text = `${venueName} — Shift Debrief\n${h.shift} · ${h.date} · ${h.manager}\n\n${h.debrief||h.notes}${h.urgent ? '\n\n⚠️ URGENT: ' + h.urgent : ''}\n\nClosed: ${h.closeTime||'—'} · Out: ${h.outTime||'—'} · KH: ${h.khTime||'—'}`;
     navigator.clipboard.writeText(text).then(() => window.showToast('Copied to clipboard!')).catch(() => window.showToast('Copy failed — try manually.', 'error'));
 };

@@ -270,7 +270,7 @@ window.viewRecipe = (id) => {
         const name = inv?E(inv.recipeName||inv.name):batch?E(batch.name):E(ing.name||'Unknown');
         const qty = ing.qty||'';
         const unit = inv?(inv.useUnit||''):batch?(batch.yieldUnit||''):'';
-        const cost = inv?(ing.qty*((inv.price||0)/(inv.yield||1))).toFixed(2):batch?(ing.qty*((batch.cost||0)/(batch.yieldQty||1))).toFixed(2):'—';
+        const cost = (inv||batch)?window._ingCost(ing).toFixed(2):'—';
         const source = ing.type==='inv'?'Inventory':ing.type==='batch'?'Batch':'<span style="color:var(--orange);">Unlinked</span>';
         const needsQtyFix = ing.type==='inv'&&ing.qty===1&&ing._rawName&&!ing._qtyConfirmed;
         const qtyConfirmed = ing.type==='inv'&&ing.qty===1&&ing._rawName&&ing._qtyConfirmed;
@@ -375,22 +375,15 @@ window.cascadeRecipeCosts = (changedInvIds) => {
     const batchRecipes = (window.recipes || []).filter(r => r.type === 'Batch' && !r.archived);
     batchRecipes.forEach(batch => {
         if ((batch.ingredients||[]).some(ing => ing.type==='inv' && changedInvIds.includes(ing.ref))) {
-            let cost = 0;
-            (batch.ingredients||[]).forEach(ing => { if (ing.type==='inv') { const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref); if(inv) cost+=ing.qty*((inv.price||0)/(inv.yield||1)); }});
-            batch.cost = cost; updatedBatches++;
+            batch.cost = window._recipeCost(batch); updatedBatches++;
         }
     });
     const updatedBatchIds = batchRecipes.filter(b => (b.ingredients||[]).some(ing=>ing.type==='inv'&&changedInvIds.includes(ing.ref))).map(b=>b.id);
     const gpAlerts = [];
     (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived).forEach(menu => {
         if ((menu.ingredients||[]).some(ing=>(ing.type==='inv'&&changedInvIds.includes(ing.ref))||(ing.type==='batch'&&updatedBatchIds.includes(ing.ref)))) {
-            let cost = 0;
-            (menu.ingredients||[]).forEach(ing => {
-                if (ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
-                else if (ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
-            });
-            menu.cost=cost; menu.gp=menu.price>0?parseFloat(((menu.price-cost)/menu.price*100).toFixed(1)):0;
-            if (menu.price>0 && menu.gp<GP_TARGET) gpAlerts.push({name:menu.name,gp:menu.gp,cost:cost.toFixed(2)});
+            window._recalcRecipe(menu);
+            if (menu.price>0 && menu.gp<GP_TARGET) gpAlerts.push({name:menu.name,gp:menu.gp,cost:menu.cost.toFixed(2)});
             updatedMenus++;
         }
     });
@@ -402,29 +395,11 @@ window.cascadeRecipeCosts = (changedInvIds) => {
 window.recalcAllCosts = () => {
     let count = 0;
     (window.recipes||[]).filter(r => r.type === 'Batch').forEach(r => {
-        let cost = 0;
-        (r.ingredients||[]).forEach(ing => {
-            if (ing.type === 'inv') {
-                const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
-                if (inv) cost += ing.qty * ((inv.price||0) / (inv.yield||1));
-            }
-        });
-        r.cost = cost;
+        r.cost = window._recipeCost(r);
         count++;
     });
     (window.recipes||[]).filter(r => r.type === 'Menu').forEach(r => {
-        let cost = 0;
-        (r.ingredients||[]).forEach(ing => {
-            if (ing.type === 'inv') {
-                const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
-                if (inv) cost += ing.qty * ((inv.price||0) / (inv.yield||1));
-            } else if (ing.type === 'batch') {
-                const b = (window.recipes||[]).find(x => x.id === ing.ref);
-                if (b) cost += ing.qty * ((b.cost||0) / (b.yieldQty||1));
-            }
-        });
-        r.cost = cost;
-        r.gp = r.price > 0 ? parseFloat(((r.price - cost) / r.price * 100).toFixed(1)) : 0;
+        window._recalcRecipe(r);
         count++;
     });
     window.saveToDisk();
@@ -526,7 +501,7 @@ window.openCostingReport = () => {
         });
     });
     win.document.write('<!DOCTYPE html><html><head><title>Recipe Costing Report</title><style>body{font-family:sans-serif;font-size:13px;max-width:900px;margin:30px auto;}h1{font-size:22px;margin-bottom:4px;}.meta{color:#888;font-size:12px;margin-bottom:20px;}.stats{display:flex;gap:20px;margin-bottom:25px;}.stat{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center;}.stat-val{font-size:24px;font-weight:bold;}.stat-lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;}table{width:100%;border-collapse:collapse;}th{padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:2px solid #e5e7eb;background:#f9fafb;}th:nth-child(n+2),td:nth-child(n+2){text-align:right;}tr:nth-child(even)td{background:#fafafa;}@media print{body{margin:15px;max-width:none;}}</style></head><body>');
-    const _vName = window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya';
+    const _vName = window._getVenueName();
     win.document.write('<h1>📊 Recipe Costing Report — '+_vName+'</h1><div class="meta">GP Target: '+GP_TARGET+'% · Generated '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div>');
     win.document.write('<div class="stats"><div class="stat"><div class="stat-val">'+menuRecipes.length+'</div><div class="stat-lbl">Recipes</div></div><div class="stat"><div class="stat-val" style="color:'+(avgGp>=GP_TARGET?'#16a34a':'#dc2626')+';">'+avgGp+'%</div><div class="stat-lbl">Avg GP</div></div><div class="stat"><div class="stat-val" style="color:#dc2626;">'+below+'</div><div class="stat-lbl">Below '+GP_TARGET+'%</div></div><div class="stat"><div class="stat-val" style="color:#16a34a;">'+(menuRecipes.length-below)+'</div><div class="stat-lbl">On Target</div></div></div>');
     win.document.write('<table><thead><tr><th>Recipe</th><th>Cost</th><th>Sell</th><th>GP%</th><th>Bar</th></tr></thead><tbody>'+rows+'</tbody></table>');
@@ -597,7 +572,7 @@ window.printRecipe = (id) => {
     <h2>Ingredients</h2><ul>${ingText||'<li>No ingredients listed</li>'}</ul>
     <h2>Method</h2><div class="method">${esc(r.method||'No method written.')}</div>
     ${r.allergens&&r.allergens.length>0?`<div class="allergens"><strong>⚠️ Allergens:</strong> ${r.allergens.map(a=>esc(a)).join(', ')}</div>`:''}
-    <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">${window.getCurrentVenue ? window.getCurrentVenue().name : 'Bar Wa Izakaya'} · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
+    <div style="margin-top:20px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">${window._getVenueName()} · Hobart Hub · Printed ${new Date().toLocaleDateString('en-AU')}</div>
     <script>window.onload=()=>{window.print();}<\/script></body></html>`);
     win.document.close();
 };

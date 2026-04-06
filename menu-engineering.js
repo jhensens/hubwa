@@ -105,14 +105,7 @@ window.renderPriceAlertsView = () => {
 // =============================================================================
 window.renderMarginView = () => {
     const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active');
-    menuRecipes.forEach(recipe => {
-        let cost=0;
-        (recipe.ingredients||[]).forEach(ing=>{
-            if(ing.type==='inv'){const inv=window.inventoryItems.find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
-            else if(ing.type==='batch'){const b=window.recipes.find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
-        });
-        recipe.cost=cost; recipe.gp=recipe.price>0?parseFloat(((recipe.price-cost)/recipe.price*100).toFixed(1)):0;
-    });
+    menuRecipes.forEach(recipe => window._recalcRecipe(recipe));
     const sorted=[...menuRecipes].sort((a,b)=>a.gp-b.gp);
     const below=sorted.filter(r=>r.gp<GP_TARGET);
     const above=sorted.filter(r=>r.gp>=GP_TARGET);
@@ -584,14 +577,7 @@ window.renderMenuEngineeringView = () => {
     const menuRecipes = (window.recipes||[]).filter(r=>r.type==='Menu'&&r.price>0&&(r.status||'Active')==='Active'&&!r.archived);
 
     // Recalculate costs
-    menuRecipes.forEach(r => {
-        let cost=0;
-        (r.ingredients||[]).forEach(ing=>{
-            if(ing.type==='inv'){const inv=(window.inventoryItems||[]).find(i=>i.id===ing.ref);if(inv)cost+=ing.qty*((inv.price||0)/(inv.yield||1));}
-            else if(ing.type==='batch'){const b=(window.recipes||[]).find(x=>x.id===ing.ref);if(b)cost+=ing.qty*((b.cost||0)/(b.yieldQty||1));}
-        });
-        r.cost=cost; r.gp=r.price>0?parseFloat(((r.price-cost)/r.price*100).toFixed(1)):0;
-    });
+    menuRecipes.forEach(r => window._recalcRecipe(r));
 
     const avgGp=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length:GP_TARGET;
     const avgCovers=menuRecipes.length>0?menuRecipes.reduce((s,r)=>s+(r.coversPerWeek||0),0)/menuRecipes.length:0;
@@ -801,14 +787,7 @@ window.getMenuAiAdvice = async () => {
     const GP_TARGET = window.GP_TARGET || 67;
 
     // Recalculate costs
-    menuRecipes.forEach(r => {
-        let cost = 0;
-        (r.ingredients||[]).forEach(ing => {
-            if (ing.type === 'inv') { const inv = (window.inventoryItems||[]).find(i=>i.id===ing.ref); if (inv) cost += ing.qty * ((inv.price||0)/(inv.yield||1)); }
-            else if (ing.type === 'batch') { const b = (window.recipes||[]).find(x=>x.id===ing.ref); if (b) cost += ing.qty * ((b.cost||0)/(b.yieldQty||1)); }
-        });
-        r.cost = cost; r.gp = r.price > 0 ? parseFloat(((r.price - cost) / r.price * 100).toFixed(1)) : 0;
-    });
+    menuRecipes.forEach(r => window._recalcRecipe(r));
 
     const avgGp = menuRecipes.length > 0 ? menuRecipes.reduce((s,r) => s + r.gp, 0) / menuRecipes.length : 0;
     const avgCovers = menuRecipes.length > 0 ? menuRecipes.reduce((s,r) => s + (r.coversPerWeek||0), 0) / menuRecipes.length : 0;
@@ -816,7 +795,7 @@ window.getMenuAiAdvice = async () => {
 
     const itemData = menuRecipes.map(r => `${r.name}: sell $${Number(r.price).toFixed(2)}, cost $${Number(r.cost).toFixed(2)}, GP ${r.gp}%, ${r.coversPerWeek||0} covers/wk, station: ${r.station||'Kitchen'}, category: ${classify(r)}`).join('\n');
 
-    const venue = window.getCurrentVenue ? window.getCurrentVenue().name : 'the venue';
+    const venue = window._getVenueName();
 
     const prompt = `You are a hospitality menu engineering consultant analysing the menu for ${venue}, an Asian restaurant.
 
