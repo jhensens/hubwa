@@ -272,7 +272,7 @@ window.renderShiftChecklists = () => {
     if (!window.shiftChecklistItems) window.shiftChecklistItems = defaultLists;
 
     const activeList = allLists[shiftType] || [];
-    const stateKey = 'shiftCheck_' + new Date().toLocaleDateString() + '_' + shiftType;
+    const stateKey = 'shiftCheck_' + window._isoDate() + '_' + shiftType;
     window._scStateKey = stateKey;
     window._scType = shiftType;
     window._scLabel = shiftLabel;
@@ -568,7 +568,7 @@ window.checkT = (i) => {
 window.logAllTemps = () => { 
     const staff = document.getElementById('t-staff').value;
     if(!staff) return window.showToast("Please enter your name.", "error"); 
-    let logsToAdd = []; const timeNow = new Date().toLocaleString();
+    let logsToAdd = []; const timeNow = window._isoNow();
     for(let i = 0; i < (window.fridgeUnits || []).length; i++) {
         const valStr = document.getElementById(`t-val-${i}`).value;
         if(!valStr) continue; 

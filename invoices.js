@@ -210,6 +210,7 @@ Be thorough. Extract every product line. Use 0 for missing prices. Use empty str
         });
         const data = await response.json();
         if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.pendingInvoiceData = JSON.parse(rawJson);
         statusEl.innerHTML = `<span style="color:var(--green);">✓ AI extracted ${window.pendingInvoiceData.items.length} line items. Review below.</span>`;
@@ -259,6 +260,7 @@ ${rawText}`;
         });
         const data = await response.json();
         if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.pendingInvoiceData = JSON.parse(rawJson);
         statusEl.innerHTML = `<span style="color:var(--green);">✓ AI extracted ${window.pendingInvoiceData.items.length} line items. Review below.</span>`;
@@ -345,7 +347,7 @@ window._renderInvoiceReviewUI = () => {
         autoMatched.forEach(s => {
             const inv = window.inventoryItems.find(i => i.id === s.matchedInvId);
             const priceChange = inv && inv.price !== s.aiItem.unitPrice && s.aiItem.unitPrice > 0;
-            const pctChange = inv && priceChange ? (((s.aiItem.unitPrice - inv.price) / inv.price) * 100).toFixed(1) : null;
+            const pctChange = inv && priceChange && inv.price ? (((s.aiItem.unitPrice - inv.price) / inv.price) * 100).toFixed(1) : null;
             html += `
             <div id="ir-row-${s.index}" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:6px; border-left:3px solid var(--green);">
                 <div style="flex:2;">
@@ -485,7 +487,7 @@ window._irSaveNewItem = (newId, index) => {
         stock: Number(aiItem.quantity) || 0,
         parWeekday: 0, parWeekend: 0, par: 0,
         archived: false,
-        history: [{ date: window.pendingInvoiceData.date || new Date().toLocaleDateString('en-AU'), supplier: supplierName, invoiceNo: window.pendingInvoiceData.invoiceNumber||'', qty: aiItem.quantity, price: parseFloat(document.getElementById('iq-p').value)||0, prevPrice: 0 }]
+        history: [{ date: window.pendingInvoiceData.date || window._isoDate(), supplier: supplierName, invoiceNo: window.pendingInvoiceData.invoiceNumber||'', qty: aiItem.quantity, price: parseFloat(document.getElementById('iq-p').value)||0, prevPrice: 0 }]
     };
     // Auto-add supplier if not known
     if (supplierName && !window.suppliers.find(s => s.name === supplierName)) {
@@ -559,7 +561,7 @@ window._doCommitInvoice = (ai, state, isHistorical) => {
             const inv = window.inventoryItems[invIdx];
             const prevPrice = inv.price || 0;
             if (!inv.history) inv.history = [];
-            inv.history.push({ date: ai.date||new Date().toLocaleDateString('en-AU'), supplier: ai.supplier||'', invoiceNo: ai.invoiceNumber||'', qty, price: unitPrice, prevPrice });
+            inv.history.push({ date: ai.date||window._isoDate(), supplier: ai.supplier||'', invoiceNo: ai.invoiceNumber||'', qty, price: unitPrice, prevPrice });
             if (unitPrice > 0) { inv.price = unitPrice; if (unitPrice !== prevPrice) changedInvIds.push(inv.id); }
             inv.supplier = ai.supplier || inv.supplier;
             if (!isHistorical) { window.logStockMovement(inv.id, qty, 'invoice', { sourceRef: ai.invoiceNumber || '', notes: ai.supplier || '' }); inv.stock = (inv.stock||0) + qty; }

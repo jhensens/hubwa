@@ -184,6 +184,7 @@ Recipes: ${JSON.stringify(recipeData)}`;
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
         });
         const data = await response.json(); if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         const aiResult = JSON.parse(rawJson);
         (aiResult.results || []).forEach(res => {
@@ -236,6 +237,7 @@ Booking data: ${rawText}`;
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const data = await response.json(); if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         const text = data.candidates[0].content.parts[0].text;
         outputDiv.innerHTML = text.replace(/^```html/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.hideLoadingOverlay();

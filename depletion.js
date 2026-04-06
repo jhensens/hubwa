@@ -267,6 +267,7 @@ window.runAiDepletion = async () => {
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
         });
         const data = await response.json(); if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         let rawJson = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         const aiResult = JSON.parse(rawJson);
         window.pendingMap = { known: [], unknown: [] };
@@ -302,7 +303,7 @@ window.showDepletionConfirmation = function(salesItems, source) {
     window._pendingDepletionData = { salesItems: salesItems, source: source, preview: preview };
 
     // Check for same-day duplicate
-    var today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    var today = window._isoDate();
     var existingRuns = (window.depletionLogs || []).filter(function(d) {
         return d.date === today && d.source === source && !d.reversed;
     });
@@ -403,7 +404,7 @@ window.executeUnifiedDepletion = function() {
     var source = data.source;
 
     // Handle duplicate replacement
-    var today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    var today = window._isoDate();
     var existingRuns = (window.depletionLogs || []).filter(function(d) {
         return d.date === today && d.source === source && !d.reversed;
     });

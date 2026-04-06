@@ -671,7 +671,7 @@ window.saveSOP = async () => {
     if (!window.kbCategories) window.kbCategories = [];
     if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
 
-    window.knowledgeBase.push({ title, category: cat, content, fileUrl, lastModified: new Date().toLocaleDateString('en-AU') });
+    window.knowledgeBase.push({ title, category: cat, content, fileUrl, lastModified: window._isoDate() });
     window.saveToDisk();
     window.closeModal();
     window.showView('knowledge');
@@ -745,7 +745,7 @@ window.updateSOP = async (i) => {
     }
     if (!window.kbCategories) window.kbCategories = [];
     if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
-    window.knowledgeBase[i] = { ...window.knowledgeBase[i], title, category: cat, content, fileUrl, lastModified: new Date().toLocaleDateString('en-AU') };
+    window.knowledgeBase[i] = { ...window.knowledgeBase[i], title, category: cat, content, fileUrl, lastModified: window._isoDate() };
     window.saveToDisk(); window.closeModal(); window.viewSOP(i); window.showToast('SOP Updated!');
 };
 
@@ -785,7 +785,7 @@ window.seedKnowledgeBase = () => {
 window._doSeedKB = () => {
     // Seed categories first
     window.seedKBCategories();
-    const today = new Date().toLocaleDateString('en-AU');
+    const today = window._isoDate();
 
     const sops = [
         {

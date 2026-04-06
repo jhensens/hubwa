@@ -248,6 +248,7 @@ Recipe: ${rawText}`;
         const apiKey=window.getApiKey(); if(!apiKey) { window.hideLoadingOverlay(); return; }
         const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:"application/json"}})});
         const data=await response.json(); if(data.error) throw new Error(data.error.message);
+        if(!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         let rawJson=data.candidates[0].content.parts[0].text.replace(/^```json/g,'').replace(/^```/g,'').replace(/```$/g,'').trim();
         const aiResult=JSON.parse(rawJson);
         window.tempIngs=aiResult.ingredients.map(ing=>{
@@ -628,9 +629,11 @@ window.renderMenuEngineeringView = () => {
     // --- SVG SCATTER PLOT ---
     const plotW=580, plotH=340, pad={t:25,r:25,b:45,l:55};
     const chartW=plotW-pad.l-pad.r, chartH=plotH-pad.t-pad.b;
+    const _gps = classified.map(r=>r.gp);
+    const _gpsPos = _gps.filter(g=>g>0);
     const maxCovers = Math.max(10, ...classified.map(r=>r.coversPerWeek||0)) * 1.15;
-    const maxGp = Math.min(100, Math.max(GP_TARGET+15, ...classified.map(r=>r.gp)) * 1.1);
-    const minGp = Math.max(0, Math.min(avgGp-20, ...classified.map(r=>r.gp).filter(g=>g>0)) - 5);
+    const maxGp = Math.min(100, Math.max(GP_TARGET+15, ...(_gps.length?_gps:[GP_TARGET])) * 1.1);
+    const minGp = Math.max(0, (_gpsPos.length ? Math.min(avgGp-20, ..._gpsPos) : avgGp-20) - 5);
     const gpRange = maxGp - minGp;
     const xScale = v => pad.l + (v / maxCovers) * chartW;
     const yScale = v => pad.t + chartH - ((v - minGp) / gpRange) * chartH;

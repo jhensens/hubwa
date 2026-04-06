@@ -100,6 +100,7 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
         });
         const data = await response.json();
         if (data.error) throw new Error(data.error.message);
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error('Empty API response');
         const suggestions = JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim());
 
         window._aiOrderSuggestions = suggestions;
@@ -156,7 +157,7 @@ window.generateAiOrderEmail = (supName) => {
     // Log the order
     if (!window.orderHistory) window.orderHistory = [];
     window.orderHistory.push({
-        date: new Date().toLocaleDateString('en-AU'),
+        date: window._isoDate(),
         supplier: supName,
         estSpend: suggestions.reduce((sum,s)=>sum+(Number(s.suggestedOrder)*((window.inventoryItems||[]).find(i=>i.name===s.itemName)?.price||0)),0),
         items: suggestions.map(s=>({ name:s.itemName, qty:s.suggestedOrder, unit:s.unit, price:(window.inventoryItems||[]).find(i=>i.name===s.itemName)?.price||0 })),
@@ -861,7 +862,7 @@ window.copyOrderText = (supName, estSpend) => {
     const _venueName = window._getVenueName();
     text += '\nThanks,\n' + _venueName;
     if (!window.orderHistory) window.orderHistory = [];
-    window.orderHistory.push({ date: new Date().toLocaleDateString('en-AU'), supplier: supName, estSpend, items: orderItems });
+    window.orderHistory.push({ date: window._isoDate(), supplier: supName, estSpend, items: orderItems });
     window.saveToDisk();
     navigator.clipboard.writeText(text).then(() => window.showToast(`Order copied & logged for ${supName}!`));
 };

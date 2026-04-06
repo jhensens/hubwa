@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '5 Apr 2026, 11:00 PM';
-window._hubBuildId = '20260405d';
+window._hubBuildDate = '7 Apr 2026';
+window._hubBuildId = '20260407a';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -419,7 +419,7 @@ window.renderManagerHub = () => {
         }).catch(() => {});
 
     const today = new Date();
-    const todayStr = today.toLocaleDateString();
+    const todayStr = window._isoDate();
     const isWeekend = [0, 5, 6].includes(today.getDay());
     const hour = today.getHours();
     const E = window.esc;

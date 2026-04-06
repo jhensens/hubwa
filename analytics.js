@@ -105,7 +105,8 @@ window.renderForecastView = () => {
     const weekTotals = weeks.map(w => w.reduce((a,b)=>a+b,0));
 
     // 7-day chart
-    const maxForecast = Math.max(...next7.map(d=>d.high));
+    const _forecastHighs = next7.map(d=>d.high);
+    const maxForecast = _forecastHighs.length > 0 ? Math.max(..._forecastHighs) : 0;
     const barHtml = next7.map(d => {
         const barPct = maxForecast > 0 ? (d.forecast/maxForecast*100) : 0;
         const isWeekend = d.dow === 0 || d.dow === 5 || d.dow === 6;
@@ -167,13 +168,13 @@ window.renderForecastView = () => {
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Best Day (7d)</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--green);">$' + Math.round(Math.max(...next7.map(d=>d.forecast))).toLocaleString() + '</div>' +
-                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.reduce((best,d)=>d.forecast>best.forecast?d:best,next7[0])||{}).dayName + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--green);">$' + (next7.length>0?Math.round(Math.max(...next7.map(d=>d.forecast))).toLocaleString():'0') + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.length>0?(next7.reduce((best,d)=>d.forecast>best.forecast?d:best,next7[0])||{}).dayName:'—') + '</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Quietest Day (7d)</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">$' + Math.round(Math.min(...next7.map(d=>d.forecast))).toLocaleString() + '</div>' +
-                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.reduce((worst,d)=>d.forecast<worst.forecast?d:worst,next7[0])||{}).dayName + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">$' + (next7.length>0?Math.round(Math.min(...next7.map(d=>d.forecast))).toLocaleString():'0') + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);">' + (next7.length>0?(next7.reduce((worst,d)=>d.forecast<worst.forecast?d:worst,next7[0])||{}).dayName:'—') + '</div>' +
             '</div>' +
         '</div>' +
         // 7-day bar chart
