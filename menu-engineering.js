@@ -671,7 +671,7 @@ window.renderMenuEngineeringView = () => {
         '<text x="'+(pad.l+8)+'" y="'+(plotH-pad.b-8)+'" fill="rgba(239,68,68,0.3)" font-size="11" font-weight="bold">DOGS</text>' +
         '<text x="'+(plotW-pad.r-8)+'" y="'+(plotH-pad.b-8)+'" text-anchor="end" fill="rgba(245,158,11,0.3)" font-size="11" font-weight="bold">PLOW HORSES</text>';
 
-    const scatterSvg = '<svg viewBox="0 0 '+plotW+' '+plotH+'" style="width:100%;max-width:'+plotW+'px;height:auto;">' +
+    const scatterSvg = '<svg viewBox="0 0 '+plotW+' '+plotH+'" style="width:100%;height:auto;">' +
         // Background
         '<rect x="'+pad.l+'" y="'+pad.t+'" width="'+chartW+'" height="'+chartH+'" fill="rgba(0,0,0,0.15)" rx="4"/>' +
         gridLines + qLabels +
@@ -762,7 +762,7 @@ window.renderMenuEngineeringView = () => {
         '</div>' +
 
         // Quadrant cards
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:16px;">' + quadHtml + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(450px,100%),1fr));gap:16px;">' + quadHtml + '</div>' +
     '</div>';
 };
 

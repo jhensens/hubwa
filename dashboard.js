@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '7 Apr 2026';
-window._hubBuildId = '20260407a';
+window._hubBuildId = '20260407b';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -274,7 +274,7 @@ function renderCrossContent(venueData, venues) {
             '</div>' +
         '</div>' +
         // Venue cards side by side
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:20px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr));gap:20px;">' +
             venueCards +
         '</div>';
 }
@@ -726,7 +726,7 @@ window.renderManagerHub = () => {
 
     // --- FINANCIAL ROW (3 cards) --- Manager only
     if (_showFinancials) {
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:14px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px;margin-bottom:14px;">';
 
     // Card 1: Today's Revenue
     html += '<div class="card" style="padding:20px;border-top:3px solid var(--green);">';
@@ -903,7 +903,7 @@ window.renderManagerHub = () => {
     } // end _showFinancials (7-day revenue)
 
     // --- TODAY'S FOCUS + QUICK ACTIONS (2-column) ---
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:14px;margin-bottom:14px;">';
 
     // Focus
     html += '<div class="card" style="padding:0;overflow:hidden;'+(focusItems.length > 0 ? 'border-top:3px solid var(--red);' : 'border-top:3px solid var(--green);')+'">';

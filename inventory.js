@@ -627,7 +627,8 @@ window._orderTabBar = function(activeView) {
         { id: 'prep-list', label: '📝 Order List', view: 'prep-list' },
         { id: 'prep-gen', label: '🍳 Prep List', view: 'prep-gen' },
         { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' },
-        { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' }
+        { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' },
+        { id: 'order-history', label: '📦 History', view: 'order-history' }
     ];
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +
         tabs.map(t => `<span class="tag-pill ${t.id===activeView?'active':''}" onclick="window.showView('${t.view}')">${t.label}</span>`).join('') +
@@ -718,6 +719,7 @@ window.renderZoneManager = () => {
 };
 
 window.editZoneForm = (i = null) => {
+    if (i !== null && !window.storageZones?.[i]) return;
     const z = i !== null ? window.storageZones[i] : { name: '', area: 'BOH' };
     const html = `
         <label style="font-size:12px; color:var(--text-muted);">Zone Name</label>
@@ -749,6 +751,7 @@ window.saveZone = (i) => {
 };
 
 window.deleteZone = (i) => {
+    if (!window.storageZones?.[i]) return;
     const z = window.storageZones[i];
     window.confirmAction({
         title: '🗄️ Delete Zone',
@@ -843,6 +846,7 @@ window.renderOrderHistory = () => {
 
 
 window.editSupplierForm = (i = null) => {
+    if (i !== null && !window.suppliers?.[i]) return;
     let s = i !== null ? window.suppliers[i] : { name:'', contact:'', cutoff:'', minSpend: 0, deliveryDays: [] };
     let daysHtml = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d =>
         `<label style="margin-right:10px; font-size:13px;"><input type="checkbox" id="sup-day-${d}" ${s.deliveryDays && s.deliveryDays.includes(d) ? 'checked' : ''}> ${d}</label>`

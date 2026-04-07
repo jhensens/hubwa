@@ -15,6 +15,26 @@ window._isToday = (ts) => {
     // Legacy locale format fallback (DD/MM/YYYY or similar)
     try { const d = new Date(ts); return !isNaN(d) && d.toISOString().split('T')[0] === today; } catch(e) { return false; }
 };
+// Display date/time formatting — consistent across all views
+// Accepts ISO (2026-04-07), ISO datetime (2026-04-07T14:32:00Z), DD/MM/YYYY, or Date objects
+window._fmtDate = (v) => {
+    if (!v) return '—';
+    let d;
+    if (v instanceof Date) d = v;
+    else if (typeof v === 'string' && v.match(/^\d{4}-\d{2}-\d{2}/)) d = new Date(v);
+    else if (typeof v === 'string' && v.includes('/')) { const p = v.split('/'); d = p[0] > 12 ? new Date(p[2],p[1]-1,p[0]) : new Date(p[2],p[0]-1,p[1]); }
+    else d = new Date(v);
+    if (isNaN(d)) return String(v);
+    return d.toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' });
+};
+window._fmtTime = (v) => {
+    if (!v) return '—';
+    if (typeof v === 'string' && v.match(/^\d{2}:\d{2}$/)) return v; // already HH:MM
+    const d = new Date(v);
+    if (isNaN(d)) return String(v);
+    return d.toLocaleTimeString('en-AU', { hour:'2-digit', minute:'2-digit', hour12: false });
+};
+window._fmtDateTime = (v) => { if (!v) return '—'; return window._fmtDate(v) + ' ' + window._fmtTime(v); };
 // Shared recipe cost calculation — single source of truth
 // Returns cost for one ingredient based on type (inv or batch)
 window._ingCost = (ing) => {

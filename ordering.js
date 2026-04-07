@@ -867,3 +867,130 @@ window.copyOrderText = (supName, estSpend) => {
     navigator.clipboard.writeText(text).then(() => window.showToast(`Order copied & logged for ${supName}!`));
 };
 
+// =============================================================================
+// ORDER HISTORY DASHBOARD
+// Browse past orders, filter by supplier/date, see spend trends
+// =============================================================================
+window._ohFilters = { supplier: 'all', from: '', to: '' };
+window._ohExpanded = {};
+
+window.renderOrderHistoryView = () => {
+    const E = window.esc;
+    const orders = (window.orderHistory || []).slice().reverse();
+    const f = window._ohFilters;
+
+    // Unique suppliers for filter
+    const supplierSet = [...new Set(orders.map(o => o.supplier).filter(Boolean))].sort();
+
+    // Apply filters
+    let filtered = orders;
+    if (f.supplier !== 'all') filtered = filtered.filter(o => o.supplier === f.supplier);
+    if (f.from) filtered = filtered.filter(o => o.date >= f.from);
+    if (f.to) filtered = filtered.filter(o => o.date <= f.to);
+
+    // KPIs
+    const totalOrders = filtered.length;
+    const totalSpend = filtered.reduce((s, o) => s + (Number(o.estSpend) || 0), 0);
+    const avgOrderValue = totalOrders > 0 ? totalSpend / totalOrders : 0;
+    const uniqueSuppliers = new Set(filtered.map(o => o.supplier)).size;
+
+    // Monthly spend aggregation for chart
+    const byMonth = {};
+    filtered.forEach(o => {
+        const m = (o.date || '').slice(0, 7); // YYYY-MM
+        if (m) byMonth[m] = (byMonth[m] || 0) + (Number(o.estSpend) || 0);
+    });
+    const monthKeys = Object.keys(byMonth).sort();
+    const maxMonthSpend = Math.max(1, ...Object.values(byMonth));
+    const monthBarHtml = monthKeys.length > 1 ? '<div style="overflow-x:auto;margin-bottom:20px;"><div style="display:flex;gap:4px;align-items:flex-end;height:120px;min-width:' + (monthKeys.length * 50) + 'px;">' +
+        monthKeys.map(m => {
+            const pct = (byMonth[m] / maxMonthSpend * 100);
+            const label = m.slice(5); // MM
+            return '<div style="flex:1;min-width:40px;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:100%;">' +
+                '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">$' + Math.round(byMonth[m]).toLocaleString() + '</div>' +
+                '<div style="background:var(--blue);border-radius:4px 4px 0 0;height:' + Math.max(4, pct) + '%;transition:height 0.3s;"></div>' +
+                '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">' + label + '</div></div>';
+        }).join('') + '</div></div>' : '';
+
+    // Order rows
+    const orderRows = filtered.length === 0
+        ? '<div class="card" style="text-align:center;color:var(--text-muted);padding:30px;">No orders found.</div>'
+        : filtered.map((o, idx) => {
+            const origIdx = orders.indexOf(o);
+            const isExpanded = window._ohExpanded[origIdx];
+            const itemCount = (o.items || []).length;
+            const spend = Number(o.estSpend || 0);
+            return '<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">' +
+                '<div onclick="window._ohToggle(' + origIdx + ')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;gap:10px;flex-wrap:wrap;">' +
+                    '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">' +
+                        '<span style="font-size:18px;">' + (o.aiGenerated ? '🤖' : '📋') + '</span>' +
+                        '<div style="min-width:0;">' +
+                            '<strong style="font-size:14px;">' + E(o.supplier || 'Unknown') + '</strong>' +
+                            '<div style="font-size:12px;color:var(--text-muted);">' + window._fmtDate(o.date) + ' · ' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="text-align:right;flex-shrink:0;">' +
+                        '<div style="font-size:16px;font-weight:bold;color:var(--brand-accent);">$' + spend.toFixed(2) + '</div>' +
+                        '<div style="font-size:10px;color:var(--text-muted);">' + (isExpanded ? '▲ collapse' : '▼ details') + '</div>' +
+                    '</div>' +
+                '</div>' +
+                (isExpanded ? '<div style="border-top:1px solid var(--border);padding:12px 16px;background:var(--bg-main);">' +
+                    '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+                    '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);"><th style="padding:6px 8px;">Item</th><th style="padding:6px 8px;text-align:center;">Qty</th><th style="padding:6px 8px;text-align:center;">Unit</th><th style="padding:6px 8px;text-align:right;">Unit $</th><th style="padding:6px 8px;text-align:right;">Line $</th></tr></thead>' +
+                    '<tbody>' + (o.items || []).map(it => {
+                        const lineTotal = (Number(it.qty) || 0) * (Number(it.price) || 0);
+                        return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 8px;">' + E(it.name) + (it.sku ? ' <small style="color:var(--text-muted);">[' + E(it.sku) + ']</small>' : '') + '</td>' +
+                            '<td style="padding:6px 8px;text-align:center;">' + it.qty + '</td>' +
+                            '<td style="padding:6px 8px;text-align:center;color:var(--text-muted);">' + E(it.unit || '') + '</td>' +
+                            '<td style="padding:6px 8px;text-align:right;">$' + (Number(it.price) || 0).toFixed(2) + '</td>' +
+                            '<td style="padding:6px 8px;text-align:right;font-weight:bold;">$' + lineTotal.toFixed(2) + '</td></tr>';
+                    }).join('') + '</tbody></table></div>' : '') +
+            '</div>';
+        }).join('');
+
+    return `<div style="max-width:900px;margin:auto;padding-bottom:40px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+            <h2 style="margin:0;">📦 Order History</h2>
+            <button onclick="window.showView('prep-list')" class="btn btn-outline" style="font-size:12px;">← Order Hub</button>
+        </div>
+
+        <div class="card" style="padding:12px 16px;margin-bottom:15px;">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;">
+                <div style="flex:1;min-width:140px;">
+                    <label style="font-size:11px;color:var(--text-muted);">Supplier</label>
+                    <select onchange="window._ohFilters.supplier=this.value;document.getElementById('mainContent').innerHTML=window.renderOrderHistoryView();" class="input-box" style="margin:0;">
+                        <option value="all">All Suppliers</option>
+                        ${supplierSet.map(s => '<option value="' + E(s) + '"' + (f.supplier === s ? ' selected' : '') + '>' + E(s) + '</option>').join('')}
+                    </select>
+                </div>
+                <div style="min-width:120px;">
+                    <label style="font-size:11px;color:var(--text-muted);">From</label>
+                    <input type="date" value="${f.from}" onchange="window._ohFilters.from=this.value;document.getElementById('mainContent').innerHTML=window.renderOrderHistoryView();" class="input-box" style="margin:0;">
+                </div>
+                <div style="min-width:120px;">
+                    <label style="font-size:11px;color:var(--text-muted);">To</label>
+                    <input type="date" value="${f.to}" onchange="window._ohFilters.to=this.value;document.getElementById('mainContent').innerHTML=window.renderOrderHistoryView();" class="input-box" style="margin:0;">
+                </div>
+                <button onclick="window._ohFilters={supplier:'all',from:'',to:''};document.getElementById('mainContent').innerHTML=window.renderOrderHistoryView();" class="btn btn-outline" style="font-size:11px;padding:6px 12px;">Clear</button>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;">
+            <div class="card" style="text-align:center;border-top:3px solid var(--blue);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Orders</div><div style="font-size:24px;font-weight:bold;">${totalOrders}</div></div>
+            <div class="card" style="text-align:center;border-top:3px solid var(--green);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Spend</div><div style="font-size:24px;font-weight:bold;">$${Math.round(totalSpend).toLocaleString()}</div></div>
+            <div class="card" style="text-align:center;border-top:3px solid var(--purple);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Avg Order</div><div style="font-size:24px;font-weight:bold;">$${Math.round(avgOrderValue).toLocaleString()}</div></div>
+            <div class="card" style="text-align:center;border-top:3px solid var(--orange);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Suppliers</div><div style="font-size:24px;font-weight:bold;">${uniqueSuppliers}</div></div>
+        </div>
+
+        ${monthBarHtml ? '<div class="card" style="padding:16px;margin-bottom:18px;"><h4 style="margin:0 0 10px 0;font-size:13px;color:var(--text-muted);">Monthly Order Spend</h4>' + monthBarHtml + '</div>' : ''}
+
+        <h4 style="margin:0 0 10px 0;color:var(--text-muted);font-size:13px;">${filtered.length} order${filtered.length !== 1 ? 's' : ''}</h4>
+        ${orderRows}
+    </div>`;
+};
+
+window._ohToggle = (idx) => {
+    window._ohExpanded[idx] = !window._ohExpanded[idx];
+    document.getElementById('mainContent').innerHTML = window.renderOrderHistoryView();
+};
+

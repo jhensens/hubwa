@@ -69,7 +69,7 @@ window.renderSafeView = function() {
     // Grid view
     let docsHtml = '';
     if (filteredDocs.length > 0 && viewMode === 'grid') {
-        docsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">${filteredDocs.map(d => {
+        docsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px;">${filteredDocs.map(d => {
             const st = window._safeGetStatus(d);
             const borderColor = st.color;
             return `<div class="card" style="border-top:5px solid ${borderColor};margin-bottom:0;padding:20px;">
@@ -192,6 +192,7 @@ window.addSafeCat = () => {
     window.editSafeCategories();
 };
 window.delSafeCat = (i) => {
+    if (!window.safeCategories?.[i]) return;
     window.confirmAction({
         title: '📁 Delete Category', message: 'Delete this category? Documents in it will move to <strong>General / Other</strong>.',
         confirmLabel: 'Delete Category', tier: 'standard',
@@ -554,7 +555,7 @@ window._renderKbCards = () => {
         return t;
     };
 
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">' + filtered.map(k =>
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px;">' + filtered.map(k =>
         '<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(' + k.idx + ')" onmouseover="this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.transform=\'translateY(0)\'">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
                 '<h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">' + highlight(k.title, 100) + '</h4>' +
@@ -620,6 +621,7 @@ window.addKbCat = () => {
     window.editKbCategories();
 };
 window.delKbCat = (i) => {
+    if (!window.kbCategories?.[i]) return;
     window.confirmAction({
         title: '📚 Delete Category', message: 'Delete this category? SOPs in it will move to <strong>General</strong>.',
         confirmLabel: 'Delete Category', tier: 'standard',
@@ -704,6 +706,7 @@ window.viewSOP = (i) => {
 };
 
 window.editSOPForm = (i) => {
+    if (!window.knowledgeBase?.[i]) return;
     const k = window.knowledgeBase[i];
     const cats = window.kbCategories || [];
     const catOpts = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');

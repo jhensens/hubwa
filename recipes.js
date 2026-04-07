@@ -251,7 +251,7 @@ window.renderRecipeView = () => {
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Station</small><div style="margin-top:5px;">${stationPills}</div></div>
             <div><small style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">Status</small><div style="margin-top:5px;">${statusPills}</div></div>
         </div>
-        ${viewMode === 'table' ? tableHtml : `<div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;">${gridHtml}</div>`}
+        ${viewMode === 'table' ? tableHtml : `<div id="rec-list-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:12px;">${gridHtml}</div>`}
     </div>`;
 };
 
