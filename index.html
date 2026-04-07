@@ -88,6 +88,7 @@
                     <div class="nav-item restricted" data-view="suppliers" onclick="window.showView('suppliers')">🚚 Suppliers</div>
                     <div class="nav-item" data-view="zones" onclick="window.showView('zones')">🗄️ Storage Zones</div>
                     <div class="nav-item restricted" data-view="tanda-settings" onclick="window.openTandaSettings()">⏱️ Tanda Settings</div>
+                    <div class="nav-item restricted" onclick="window.openLightspeedSettings()">🛒 Lightspeed API</div>
                     <div class="nav-item restricted" data-view="pos-linker" onclick="window.showView('pos-linker')">🔗 POS Auto-Linker</div>
                     <div class="nav-item restricted" data-view="badge-management" onclick="window.showView('badge-management')">🏆 Badge Management</div>
                     <div class="nav-item restricted" data-view="staff-hub-config" onclick="window.showView('staff-hub-config')">👤 Staff Hub Config</div>
@@ -174,6 +175,7 @@
 <script src="auth.js"></script>
 <script src="venues.js"></script>
 <script src="tanda.js"></script>
+<script src="lightspeed.js"></script>
 <script src="storage.js"></script>
 <script src="nav.js"></script>
 <script src="notifications.js"></script>
@@ -244,7 +246,16 @@ if ('serviceWorker' in navigator) {
             banner.id = 'update-banner';
             banner.innerHTML = '\u{1f504} Update available \u2014 <b>tap to reload</b> <span onclick="this.parentElement.remove();event.stopPropagation();" style="margin-left:12px;cursor:pointer;font-size:16px;">\u2715</span>';
             banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#3b82f6;color:white;text-align:center;padding:12px 16px;font-size:14px;font-family:Inter,sans-serif;cursor:pointer;animation:slideDown 0.3s ease-out;';
-            banner.onclick = function() { window.location.reload(); };
+            banner.onclick = function() {
+                // Tell the waiting service worker to activate, then reload
+                navigator.serviceWorker.getRegistration().then(function(reg) {
+                    if (reg && reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    } else {
+                        window.location.reload();
+                    }
+                });
+            };
             document.body.prepend(banner);
         };
         if (reg.waiting) showUpdateBanner();

@@ -313,8 +313,8 @@ window.showDepletionConfirmation = function(salesItems, source) {
         .sort(function(a, b) { return a.name.localeCompare(b.name); })
         .map(function(r) { return '<option value="' + r.id + '">' + esc(r.name) + '</option>'; }).join('');
 
-    var sourceLabel = source === 'csv-depletion' ? 'Lightspeed CSV' : 'AI POS Depletion';
-    var sourceColor = source === 'csv-depletion' ? 'var(--blue)' : 'var(--purple)';
+    var sourceLabel = window._sourceLabel(source);
+    var sourceColor = window._sourceColor(source);
 
     var html = '<div style="max-width:850px; margin:auto; padding-bottom:90px;">' +
         '<h2 style="margin-top:0;">Confirm Stock Depletion</h2>' +
@@ -494,13 +494,18 @@ window.executeUnifiedDepletion = function() {
     window.depletionLogs.push(depletionRun);
 
     // Audit log
-    var sourceLabel = source === 'csv-depletion' ? 'Lightspeed CSV' : 'AI POS Depletion';
     window.logAudit('depletionLogs', 'depletion-run', depletionRun.id,
-        sourceLabel + ': ' + result.deductedCount + ' stock lines, ' + itemsSold.length + ' recipes, ' + depletionRun.skippedUnmapped + ' skipped');
+        window._sourceLabel(source) + ': ' + result.deductedCount + ' stock lines, ' + itemsSold.length + ' recipes, ' + depletionRun.skippedUnmapped + ' skipped');
 
     window._pendingDepletionData = null;
     window.saveToDisk();
     window.showToast('Depleted ' + result.deductedCount + ' stock lines from ' + itemsSold.length + ' recipes.');
+
+    // Auto-generate order drafts after depletion (stock levels just changed)
+    if (window._generateOrderDrafts) {
+        setTimeout(() => window._generateOrderDrafts(), 500);
+    }
+
     window.showView('inventory');
 };
 
@@ -567,8 +572,8 @@ window.renderDepletionHistoryView = function() {
         '</div>';
     } else {
         logs.forEach(function(d) {
-            var sourceColor = d.source === 'csv-depletion' ? 'var(--blue)' : 'var(--purple)';
-            var sourceLabel = d.source === 'csv-depletion' ? 'CSV' : 'AI';
+            var sourceColor = window._sourceColor(d.source);
+            var sourceLabel = window._sourceLabel(d.source, true);
             var reversedBadge = d.reversed ? '<span style="background:var(--red); color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:8px;">REVERSED</span>' : '';
 
             html += '<div class="card" style="margin-bottom:12px; border-left:4px solid ' + sourceColor + ';' + (d.reversed ? ' opacity:0.6;' : '') + '">' +
@@ -600,7 +605,7 @@ window.renderDepletionHistoryView = function() {
                     '<button onclick="window._undoDepletionRun(\'' + d.id + '\')" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">Undo This Run</button>' +
                 '</div>';
             } else {
-                html += '<div style="margin-top:15px; text-align:right; font-size:12px; color:var(--text-muted);">Reversed at ' + (d.reversedAt ? new Date(d.reversedAt).toLocaleString() : '?') + '</div>';
+                html += '<div style="margin-top:15px; text-align:right; font-size:12px; color:var(--text-muted);">Reversed at ' + (d.reversedAt ? window._fmtDateTime(d.reversedAt) : '?') + '</div>';
             }
 
             html += '</div></div>';

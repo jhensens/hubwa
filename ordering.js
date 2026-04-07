@@ -868,6 +868,374 @@ window.copyOrderText = (supName, estSpend) => {
 };
 
 // =============================================================================
+// AUTO-ORDER DRAFTS ENGINE
+// Automatically stages orders when stock drops below PAR after depletion
+// Checks supplier delivery schedule and cutoff times
+// =============================================================================
+
+// Generate draft orders for suppliers delivering tomorrow (or today if before cutoff)
+// Called after depletion runs, CSV imports, or manually from Drafts tab
+window._generateOrderDrafts = () => {
+    const items = (window.inventoryItems || []).filter(i => !i.archived);
+    const suppliers = window.suppliers || [];
+    const now = new Date();
+    const isWeekend = [0, 5, 6].includes(now.getDay());
+
+    // Check both today and tomorrow delivery windows
+    const todayDay = window._dayNames[now.getDay()];
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowDay = window._dayNames[tomorrow.getDay()];
+    const currentHHMM = now.toTimeString().slice(0, 5); // "HH:MM"
+
+    // Find items below PAR grouped by supplier
+    const belowPar = items.filter(i => {
+        const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+        return par > 0 && (i.stock || 0) < par && i.supplier;
+    });
+
+    if (belowPar.length === 0) return; // nothing to draft
+
+    // Group by supplier
+    const bySup = {};
+    belowPar.forEach(i => {
+        if (!bySup[i.supplier]) bySup[i.supplier] = [];
+        bySup[i.supplier].push(i);
+    });
+
+    const newDrafts = [];
+
+    Object.entries(bySup).forEach(([supName, supItems]) => {
+        const sup = suppliers.find(s => s.name === supName);
+        if (!sup) return; // skip unassigned/unknown suppliers
+
+        // Determine delivery window: tomorrow delivery (order today), or today if before cutoff
+        const deliversTomorrow = sup.deliveryDays && sup.deliveryDays.includes(tomorrowDay);
+        const deliversToday = sup.deliveryDays && sup.deliveryDays.includes(todayDay);
+        const beforeCutoff = !sup.cutoff || currentHHMM < sup.cutoff;
+
+        // Only create drafts for actionable delivery windows
+        let deliveryDay = '';
+        let orderByTime = '';
+        if (deliversTomorrow) {
+            deliveryDay = tomorrowDay;
+            orderByTime = sup.cutoff || '';
+        } else if (deliversToday && beforeCutoff) {
+            deliveryDay = todayDay;
+            orderByTime = sup.cutoff || '';
+        } else {
+            // Find next delivery day
+            const dayNames = window._dayNames;
+            for (let d = 2; d <= 7; d++) {
+                const futureDate = new Date(now.getTime() + d * 86400000);
+                const futureDay = dayNames[futureDate.getDay()];
+                if (sup.deliveryDays && sup.deliveryDays.includes(futureDay)) {
+                    deliveryDay = futureDay;
+                    orderByTime = sup.cutoff || '';
+                    break;
+                }
+            }
+            if (!deliveryDay) return; // no upcoming delivery day found
+        }
+
+        // Check if there's already an active draft for this supplier
+        const existingDraft = (window.orderDrafts || []).find(d =>
+            d.supplier === supName && d.status === 'pending'
+        );
+        if (existingDraft) {
+            // Update existing draft with current stock levels
+            existingDraft.items = supItems.map(i => {
+                const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+                const qty = parseFloat((par - (i.stock || 0)).toFixed(1));
+                return {
+                    id: i.id,
+                    name: i.recipeName || i.name,
+                    fullName: i.name,
+                    sku: i.sku || '',
+                    qty: qty,
+                    unit: i.buyUnit || 'Unit',
+                    price: i.price || 0,
+                    currentStock: i.stock || 0,
+                    par: par
+                };
+            });
+            existingDraft.estSpend = existingDraft.items.reduce((s, it) => s + (it.qty * it.price), 0);
+            existingDraft.deliveryDay = deliveryDay;
+            existingDraft.orderByTime = orderByTime;
+            existingDraft.updatedAt = window._isoNow();
+            return;
+        }
+
+        // Build draft order
+        const draftItems = supItems.map(i => {
+            const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+            const qty = parseFloat((par - (i.stock || 0)).toFixed(1));
+            return {
+                id: i.id,
+                name: i.recipeName || i.name,
+                fullName: i.name,
+                sku: i.sku || '',
+                qty: qty,
+                unit: i.buyUnit || 'Unit',
+                price: i.price || 0,
+                currentStock: i.stock || 0,
+                par: par
+            };
+        });
+
+        const estSpend = draftItems.reduce((s, it) => s + (it.qty * it.price), 0);
+
+        newDrafts.push({
+            id: window.generateId('draft'),
+            supplier: supName,
+            items: draftItems,
+            estSpend: estSpend,
+            minSpend: sup.minSpend || 0,
+            deliveryDay: deliveryDay,
+            orderByTime: orderByTime,
+            contact: sup.contact || '',
+            status: 'pending', // pending | confirmed | dismissed
+            createdAt: window._isoNow(),
+            updatedAt: window._isoNow(),
+            source: 'auto' // auto | manual
+        });
+    });
+
+    if (newDrafts.length > 0) {
+        if (!window.orderDrafts) window.orderDrafts = [];
+        window.orderDrafts.push(...newDrafts);
+        window.saveToDisk();
+        window.showToast('📦 ' + newDrafts.length + ' order draft' + (newDrafts.length > 1 ? 's' : '') + ' staged — review in Order Drafts');
+    }
+};
+
+// Dismiss a draft
+window._dismissDraft = (draftId) => {
+    const draft = (window.orderDrafts || []).find(d => d.id === draftId);
+    if (draft) {
+        draft.status = 'dismissed';
+        draft.updatedAt = window._isoNow();
+        window.saveToDisk();
+        window.showView('order-drafts');
+    }
+};
+
+// Update qty on a draft item + recalc line/spend display inline
+window._updateDraftQty = (draftId, itemIdx, newQty) => {
+    const draft = (window.orderDrafts || []).find(d => d.id === draftId);
+    if (!draft || !draft.items[itemIdx]) return;
+    draft.items[itemIdx].qty = parseFloat(newQty) || 0;
+    draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
+    draft.updatedAt = window._isoNow();
+    // Update display elements without re-rendering the whole view
+    var lineEl = document.querySelector('[data-draft="' + draftId + '"] [data-line="' + itemIdx + '"]');
+    if (lineEl) lineEl.textContent = '$' + (draft.items[itemIdx].qty * draft.items[itemIdx].price).toFixed(2);
+    var spendEl = document.getElementById('draft-spend-' + draftId);
+    if (spendEl) spendEl.textContent = '$' + draft.estSpend.toFixed(2);
+};
+
+// Save draft edits on blur (when user finishes editing a qty field)
+window._saveDraftOnBlur = () => { window.saveToDisk(); };
+
+// Remove an item from a draft
+window._removeDraftItem = (draftId, itemIdx) => {
+    const draft = (window.orderDrafts || []).find(d => d.id === draftId);
+    if (!draft) return;
+    draft.items.splice(itemIdx, 1);
+    if (draft.items.length === 0) {
+        draft.status = 'dismissed';
+    }
+    draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
+    draft.updatedAt = window._isoNow();
+    window.saveToDisk();
+    window.showView('order-drafts');
+};
+
+// Confirm a draft — copies order text, logs to orderHistory, removes draft
+window._confirmDraft = (draftId) => {
+    const draft = (window.orderDrafts || []).find(d => d.id === draftId);
+    if (!draft || draft.status !== 'pending') return;
+
+    // Recalculate spend from current qtys
+    draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
+
+    // Build order text
+    const venueName = window._getVenueName();
+    let text = 'Hi ' + draft.supplier + ',\n\nCould I please place an order for the following:\n\n';
+    draft.items.filter(it => it.qty > 0).forEach(it => {
+        text += '- ' + it.qty + 'x ' + it.unit + ' of ' + it.fullName + (it.sku ? ' [' + it.sku + ']' : '') + '\n';
+    });
+    text += '\nThanks,\n' + venueName;
+
+    // Log to orderHistory
+    if (!window.orderHistory) window.orderHistory = [];
+    window.orderHistory.push({
+        date: window._isoDate(),
+        supplier: draft.supplier,
+        estSpend: draft.estSpend,
+        items: draft.items.filter(it => it.qty > 0).map(it => ({
+            name: it.fullName,
+            sku: it.sku,
+            qty: it.qty,
+            unit: it.unit,
+            price: it.price
+        })),
+        autoDraft: true
+    });
+
+    // Mark draft as confirmed
+    draft.status = 'confirmed';
+    draft.updatedAt = window._isoNow();
+    window.saveToDisk();
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+        window.showToast('✅ Order confirmed & copied for ' + draft.supplier + '!');
+    }).catch(() => {
+        window.showToast('Order confirmed for ' + draft.supplier + ' (clipboard failed — check console)');
+        console.log('Order text:\n' + text);
+    });
+
+    window.logAudit('orderDrafts', 'draft-confirmed', draft.id,
+        draft.supplier + ': ' + draft.items.length + ' items, est $' + draft.estSpend.toFixed(2));
+
+    window.showView('order-drafts');
+};
+
+// Clean up old dismissed/confirmed drafts (keep last 50)
+window._cleanOldDrafts = () => {
+    if (!window.orderDrafts) return;
+    const pending = window.orderDrafts.filter(d => d.status === 'pending');
+    const done = window.orderDrafts.filter(d => d.status !== 'pending');
+    window.orderDrafts = [...pending, ...done.slice(-50)];
+};
+
+// Render the Order Drafts view
+window.renderOrderDraftsView = () => {
+    const E = window.esc;
+    window._cleanOldDrafts();
+    const drafts = (window.orderDrafts || []);
+    const pending = drafts.filter(d => d.status === 'pending');
+    const confirmed = drafts.filter(d => d.status === 'confirmed').slice(-10).reverse();
+    const dismissed = drafts.filter(d => d.status === 'dismissed').slice(-10).reverse();
+
+    const totalPendingSpend = pending.reduce((s, d) => s + (d.estSpend || 0), 0);
+    const totalPendingItems = pending.reduce((s, d) => s + d.items.length, 0);
+
+    // Pending drafts
+    const pendingHtml = pending.length === 0
+        ? '<div class="card" style="text-align:center;padding:30px;color:var(--text-muted);">' +
+            '<div style="font-size:36px;margin-bottom:10px;">✅</div>' +
+            '<div style="font-weight:600;font-size:15px;">No pending order drafts</div>' +
+            '<div style="font-size:13px;margin-top:6px;">Drafts are auto-generated after depletion runs when stock drops below PAR.</div>' +
+          '</div>'
+        : pending.map(d => {
+            const meetsMin = d.estSpend >= (d.minSpend || 0);
+            const isUrgent = d.deliveryDay === window._dayNames[new Date().getDay()] ||
+                             d.deliveryDay === window._dayNames[(new Date().getDay() + 1) % 7];
+
+            let statusBadge = '';
+            if (!meetsMin && d.minSpend > 0) statusBadge += '<span style="font-size:11px;color:var(--red);margin-right:8px;">⚠️ Under min spend ($' + d.estSpend.toFixed(0) + '/$' + d.minSpend + ')</span>';
+            if (isUrgent && d.orderByTime) statusBadge += '<span style="font-size:11px;color:var(--orange);">⏰ Order by ' + d.orderByTime + '</span>';
+
+            const itemRows = d.items.map((it, idx) => {
+                const lineTotal = (it.qty * it.price).toFixed(2);
+                return '<tr style="border-bottom:1px solid var(--border);">' +
+                    '<td style="padding:8px 10px;">' +
+                        '<strong style="font-size:13px;">' + E(it.name) + '</strong>' +
+                        (it.sku ? ' <small style="color:var(--text-muted);">[' + E(it.sku) + ']</small>' : '') +
+                        '<div style="font-size:11px;color:var(--text-muted);">Stock: ' + Number(it.currentStock).toFixed(1) + ' · PAR: ' + it.par + '</div>' +
+                    '</td>' +
+                    '<td style="padding:8px 10px;text-align:center;">' +
+                        '<input type="number" value="' + it.qty + '" min="0" step="0.5" ' +
+                        'onchange="window._updateDraftQty(\'' + d.id + '\',' + idx + ',this.value)" ' +
+                        'onblur="window._saveDraftOnBlur()" ' +
+                        'class="input-box" style="width:70px;text-align:center;margin:0;padding:6px;">' +
+                    '</td>' +
+                    '<td style="padding:8px 10px;text-align:center;color:var(--text-muted);font-size:12px;">' + E(it.unit) + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;font-size:12px;">$' + (it.price || 0).toFixed(2) + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;font-weight:bold;font-size:13px;" data-draft="' + d.id + '" data-line="' + idx + '">$' + lineTotal + '</td>' +
+                    '<td style="padding:8px 10px;text-align:center;">' +
+                        '<button onclick="window._removeDraftItem(\'' + d.id + '\',' + idx + ')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-muted);" title="Remove item">✕</button>' +
+                    '</td>' +
+                '</tr>';
+            }).join('');
+
+            return '<div class="card" style="border-top:4px solid ' + (isUrgent ? 'var(--orange)' : 'var(--blue)') + ';margin-bottom:14px;padding:0;overflow:hidden;">' +
+                '<div style="padding:14px 16px;border-bottom:1px solid var(--border);">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+                        '<div>' +
+                            '<h3 style="margin:0;font-size:16px;">' + E(d.supplier) + '</h3>' +
+                            '<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">' +
+                                '🚚 Delivers ' + E(d.deliveryDay) +
+                                (d.orderByTime ? ' · Cutoff ' + E(d.orderByTime) : '') +
+                                ' · ' + d.items.length + ' item' + (d.items.length !== 1 ? 's' : '') +
+                            '</div>' +
+                            (statusBadge ? '<div style="margin-top:4px;">' + statusBadge + '</div>' : '') +
+                        '</div>' +
+                        '<div style="text-align:right;">' +
+                            '<div id="draft-spend-' + d.id + '" style="font-size:20px;font-weight:bold;color:var(--brand-accent);">$' + d.estSpend.toFixed(2) + '</div>' +
+                            '<div style="font-size:10px;color:var(--text-muted);">Est. Spend</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div style="padding:0 16px;">' +
+                    '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+                    '<thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                        '<th style="padding:8px 10px;text-align:left;">Item</th>' +
+                        '<th style="padding:8px 10px;text-align:center;">Order Qty</th>' +
+                        '<th style="padding:8px 10px;text-align:center;">Unit</th>' +
+                        '<th style="padding:8px 10px;text-align:right;">Unit $</th>' +
+                        '<th style="padding:8px 10px;text-align:right;">Line $</th>' +
+                        '<th style="padding:8px 10px;width:30px;"></th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + itemRows + '</tbody>' +
+                    '</table>' +
+                '</div>' +
+                '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">' +
+                    '<button onclick="window._dismissDraft(\'' + d.id + '\')" class="btn btn-outline" style="font-size:12px;">Dismiss</button>' +
+                    '<button onclick="window._confirmDraft(\'' + d.id + '\')" class="btn btn-blue" style="font-size:12px;">✅ Confirm & Copy Order</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+    // Recent confirmed/dismissed (collapsed)
+    const historyHtml = (confirmed.length + dismissed.length) > 0
+        ? '<details style="margin-top:20px;">' +
+            '<summary style="cursor:pointer;font-size:13px;color:var(--text-muted);font-weight:600;padding:8px 0;">Recent Draft History (' + (confirmed.length + dismissed.length) + ')</summary>' +
+            '<div style="margin-top:8px;">' +
+            [...confirmed, ...dismissed].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).map(d => {
+                const icon = d.status === 'confirmed' ? '✅' : '🚫';
+                const color = d.status === 'confirmed' ? 'var(--green)' : 'var(--text-muted)';
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">' +
+                    '<span>' + icon + ' <strong>' + E(d.supplier) + '</strong> — ' + d.items.length + ' items · $' + (d.estSpend || 0).toFixed(0) + '</span>' +
+                    '<span style="color:' + color + ';font-size:12px;">' + window._fmtDateTime(d.updatedAt) + '</span>' +
+                '</div>';
+            }).join('') +
+            '</div></details>'
+        : '';
+
+    return '<div style="max-width:900px;margin:auto;padding-bottom:40px;">' +
+        window._orderTabBar('order-drafts') +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
+            '<div>' +
+                '<h2 style="margin:0;">📦 Auto-Order Drafts</h2>' +
+                '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Auto-staged orders based on PAR levels and supplier delivery schedules. Review, edit quantities, then confirm.</p>' +
+            '</div>' +
+            '<button onclick="window._generateOrderDrafts();window.showView(\'order-drafts\');" class="btn btn-blue" style="font-size:12px;">🔄 Refresh Drafts</button>' +
+        '</div>' +
+
+        (pending.length > 0 ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:10px;margin-bottom:18px;">' +
+            '<div class="card" style="text-align:center;border-top:3px solid var(--orange);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Pending Drafts</div><div style="font-size:24px;font-weight:bold;">' + pending.length + '</div></div>' +
+            '<div class="card" style="text-align:center;border-top:3px solid var(--blue);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Items</div><div style="font-size:24px;font-weight:bold;">' + totalPendingItems + '</div></div>' +
+            '<div class="card" style="text-align:center;border-top:3px solid var(--green);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Est. Spend</div><div style="font-size:24px;font-weight:bold;">$' + Math.round(totalPendingSpend).toLocaleString('en-AU') + '</div></div>' +
+        '</div>' : '') +
+
+        pendingHtml +
+        historyHtml +
+    '</div>';
+};
+
+// =============================================================================
 // ORDER HISTORY DASHBOARD
 // Browse past orders, filter by supplier/date, see spend trends
 // =============================================================================
@@ -907,7 +1275,7 @@ window.renderOrderHistoryView = () => {
             const pct = (byMonth[m] / maxMonthSpend * 100);
             const label = m.slice(5); // MM
             return '<div style="flex:1;min-width:40px;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:100%;">' +
-                '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">$' + Math.round(byMonth[m]).toLocaleString() + '</div>' +
+                '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">$' + Math.round(byMonth[m]).toLocaleString('en-AU') + '</div>' +
                 '<div style="background:var(--blue);border-radius:4px 4px 0 0;height:' + Math.max(4, pct) + '%;transition:height 0.3s;"></div>' +
                 '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">' + label + '</div></div>';
         }).join('') + '</div></div>' : '';
@@ -977,8 +1345,8 @@ window.renderOrderHistoryView = () => {
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;">
             <div class="card" style="text-align:center;border-top:3px solid var(--blue);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Orders</div><div style="font-size:24px;font-weight:bold;">${totalOrders}</div></div>
-            <div class="card" style="text-align:center;border-top:3px solid var(--green);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Spend</div><div style="font-size:24px;font-weight:bold;">$${Math.round(totalSpend).toLocaleString()}</div></div>
-            <div class="card" style="text-align:center;border-top:3px solid var(--purple);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Avg Order</div><div style="font-size:24px;font-weight:bold;">$${Math.round(avgOrderValue).toLocaleString()}</div></div>
+            <div class="card" style="text-align:center;border-top:3px solid var(--green);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Total Spend</div><div style="font-size:24px;font-weight:bold;">$${Math.round(totalSpend).toLocaleString('en-AU')}</div></div>
+            <div class="card" style="text-align:center;border-top:3px solid var(--purple);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Avg Order</div><div style="font-size:24px;font-weight:bold;">$${Math.round(avgOrderValue).toLocaleString('en-AU')}</div></div>
             <div class="card" style="text-align:center;border-top:3px solid var(--orange);"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Suppliers</div><div style="font-size:24px;font-weight:bold;">${uniqueSuppliers}</div></div>
         </div>
 

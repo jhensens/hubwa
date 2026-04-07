@@ -57,6 +57,15 @@ window._recalcRecipe = (r) => {
     return r.cost;
 };
 
+// Depletion source label helper — single source of truth
+window._sourceLabel = (source, short) => {
+    if (short) return source === 'csv-depletion' ? 'CSV' : source === 'api-depletion' ? 'API' : 'AI';
+    return source === 'csv-depletion' ? 'Lightspeed CSV' : source === 'api-depletion' ? 'Lightspeed API' : 'AI POS Depletion';
+};
+window._sourceColor = (source) => source === 'csv-depletion' ? 'var(--blue)' : source === 'api-depletion' ? 'var(--cyan, var(--blue))' : 'var(--purple)';
+// Day name constants
+window._dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
 // --- 1. GLOBAL STATE INITIALIZATION ---
 window.inventoryItems = [];
 window.recipes = [];
@@ -109,6 +118,8 @@ window.knowledgeBase = [];
 window.shiftRosters = [];
 window.depletionLogs = [];
 window.orderHistory = [];
+window.orderDrafts = [];
+window.lsApiPullLog = [];
 window.stockMovements = [];
 window.stocktakes = [];
 window.staffDirectory = [];
@@ -485,4 +496,4 @@ window._seedAllBWI = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones'];
+window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'orderDrafts', 'lsApiPullLog', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones'];

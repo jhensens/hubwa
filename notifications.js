@@ -212,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => window.updateNotifBadge(), 500);
     setTimeout(() => { window.checkStorageHealth(); }, 1500);
     setTimeout(() => { window.loadTandaData(); window.startTandaAutoRefresh(); }, 2000);
+    setTimeout(() => { if (window.isLsConnected && window.isLsConnected()) window.startLsAutoRefresh(); }, 3000);
 
     // Force PIN setup if no PIN exists
     setTimeout(() => {

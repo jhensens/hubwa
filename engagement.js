@@ -460,7 +460,7 @@ window._generateHandoverPrefill = () => {
             const parts = [];
             const todaySales = (window.salesData || []).find(s => s.date === now.toLocaleDateString('en-AU'));
             if (todaySales) {
-                parts.push('Revenue: $' + Number(todaySales.total || 0).toLocaleString());
+                parts.push('Revenue: $' + Number(todaySales.total || 0).toLocaleString('en-AU'));
                 if (todaySales.covers) parts.push('Covers: ' + todaySales.covers);
             }
             // Today's wastage
@@ -613,9 +613,9 @@ window.generateMorningBriefing = async () => {
     const prompt = `You are the AI assistant for ${ctx.venue}, a hospitality venue in Hobart, Tasmania. Write a concise, actionable morning briefing for the manager opening today (${ctx.dayName}, ${ctx.isWeekend ? 'weekend' : 'weekday'}).
 
 DATA:
-- Yesterday's revenue: ${ctx.yRev !== null ? '$'+ctx.yRev.toLocaleString() : 'Not recorded'}
+- Yesterday's revenue: ${ctx.yRev !== null ? '$'+ctx.yRev.toLocaleString('en-AU') : 'Not recorded'}
 - Yesterday's covers: ${ctx.yCovers || 'Not recorded'}
-- Same day last week revenue: ${ctx.lwRev !== null ? '$'+ctx.lwRev.toLocaleString() : 'Not recorded'}
+- Same day last week revenue: ${ctx.lwRev !== null ? '$'+ctx.lwRev.toLocaleString('en-AU') : 'Not recorded'}
 - Items at zero stock: ${ctx.zeroStock.length > 0 ? ctx.zeroStock.map(i=>i.name).join(', ') : 'None'}
 - Items below PAR (${ctx.lowStock.length}): ${ctx.lowStock.map(i=>i.name+' ('+Number(i.stock).toFixed(1)+')').join(', ') || 'All good'}
 - Overdue tasks (${ctx.overdueTasks.length}): ${ctx.overdueTasks.map(t=>t.name).join(', ') || 'None'}
@@ -717,9 +717,9 @@ window.generateEodSummary = async () => {
 
     const context = `Venue: ${venue}
 Date: ${fmtDate(now)} (${now.toLocaleDateString('en-AU',{weekday:'long'})})
-Revenue: $${todayRev.toLocaleString()} ${revDelta ? '('+( Number(revDelta)>=0?'+':'')+revDelta+'% vs last week)' : ''}
+Revenue: $${todayRev.toLocaleString('en-AU')} ${revDelta ? '('+( Number(revDelta)>=0?'+':'')+revDelta+'% vs last week)' : ''}
 Covers: ${todayCovers || 'Not recorded'}
-Labor cost: $${todayWages.toLocaleString()} (${laborPct}%)
+Labor cost: $${todayWages.toLocaleString('en-AU')} (${laborPct}%)
 ${tandaInfo.actualHours ? 'Actual hours: '+tandaInfo.actualHours+'h ('+tandaInfo.actualStaffCount+' staff)' : ''}
 Wastage: $${wasteTotal.toFixed(2)} (${todayWaste.length} items)
 Temp logs: ${todayTemps.length} recorded, ${breaches.length} breaches

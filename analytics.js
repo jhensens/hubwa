@@ -135,9 +135,9 @@ window.renderForecastView = () => {
         const low = total * 0.85, high = total * 1.15;
         return '<tr style="border-bottom:1px solid var(--border);">' +
             '<td style="padding:12px 15px;">' + label + '</td>' +
-            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(low).toLocaleString() + '</td>' +
-            '<td style="padding:12px 15px;font-weight:bold;font-size:16px;color:var(--blue);">$' + Math.round(total).toLocaleString() + '</td>' +
-            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(high).toLocaleString() + '</td>' +
+            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(low).toLocaleString('en-AU') + '</td>' +
+            '<td style="padding:12px 15px;font-weight:bold;font-size:16px;color:var(--blue);">$' + Math.round(total).toLocaleString('en-AU') + '</td>' +
+            '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(high).toLocaleString('en-AU') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -158,22 +158,22 @@ window.renderForecastView = () => {
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px;">' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Next 7 Days</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--blue);">$' + Math.round(next7.reduce((a,d)=>a+d.forecast,0)).toLocaleString() + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--blue);">$' + Math.round(next7.reduce((a,d)=>a+d.forecast,0)).toLocaleString('en-AU') + '</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">forecast</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--purple);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Next 30 Days</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString() + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString('en-AU') + '</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">forecast</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--green);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Best Day (7d)</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--green);">$' + (next7.length>0?Math.round(Math.max(...next7.map(d=>d.forecast))).toLocaleString():'0') + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--green);">$' + (next7.length>0?Math.round(Math.max(...next7.map(d=>d.forecast))).toLocaleString('en-AU'):'0') + '</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">' + (next7.length>0?(next7.reduce((best,d)=>d.forecast>best.forecast?d:best,next7[0])||{}).dayName:'—') + '</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Quietest Day (7d)</div>' +
-                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">$' + (next7.length>0?Math.round(Math.min(...next7.map(d=>d.forecast))).toLocaleString():'0') + '</div>' +
+                '<div style="font-size:28px;font-weight:bold;color:var(--orange);">$' + (next7.length>0?Math.round(Math.min(...next7.map(d=>d.forecast))).toLocaleString('en-AU'):'0') + '</div>' +
                 '<div style="font-size:11px;color:var(--text-muted);">' + (next7.length>0?(next7.reduce((worst,d)=>d.forecast<worst.forecast?d:worst,next7[0])||{}).dayName:'—') + '</div>' +
             '</div>' +
         '</div>' +
@@ -202,9 +202,9 @@ window.renderForecastView = () => {
                 '<tbody>' + weekRows + '</tbody>' +
                 '<tfoot><tr style="background:rgba(139,92,246,0.1);border-top:2px solid var(--purple);">' +
                     '<td style="padding:12px 15px;font-weight:bold;">Total 30 Days</td>' +
-                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*0.85).toLocaleString() + '</td>' +
-                    '<td style="padding:12px 15px;font-weight:bold;font-size:18px;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString() + '</td>' +
-                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*1.15).toLocaleString() + '</td>' +
+                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*0.85).toLocaleString('en-AU') + '</td>' +
+                    '<td style="padding:12px 15px;font-weight:bold;font-size:18px;color:var(--purple);">$' + Math.round(totalForecast30).toLocaleString('en-AU') + '</td>' +
+                    '<td style="padding:12px 15px;color:var(--text-muted);">$' + Math.round(totalForecast30*1.15).toLocaleString('en-AU') + '</td>' +
                 '</tr></tfoot>' +
             '</table>' +
         '</div>' +

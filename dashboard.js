@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '7 Apr 2026';
-window._hubBuildId = '20260407b';
+window._hubBuildId = '20260407f';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -238,7 +238,7 @@ function renderCrossContent(venueData, venues) {
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Today\'s Revenue</div>' +
                 '<div style="font-size:24px;font-weight:bold;color:' + revColor + ';">' + revStr + '</div>' +
                 (s.todaySale ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">EFTPOS: $' + (s.todaySale.eftpos||0) + ' · Cash: $' + (s.todaySale.cash||0) + '</div>' : '') +
-                '<div style="margin-top:8px;font-size:13px;color:var(--text-muted);">This week: <strong style="color:var(--blue);">$' + Math.round(s.weekRevenue).toLocaleString() + '</strong></div>' +
+                '<div style="margin-top:8px;font-size:13px;color:var(--text-muted);">This week: <strong style="color:var(--blue);">$' + Math.round(s.weekRevenue).toLocaleString('en-AU') + '</strong></div>' +
             '</div>' +
             // Status
             statusHtml +
@@ -266,7 +266,7 @@ function renderCrossContent(venueData, venues) {
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--blue);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Combined This Week</div>' +
-                '<div style="font-size:30px;font-weight:bold;color:var(--blue);">$' + Math.round(totalWeekRevenue).toLocaleString() + '</div>' +
+                '<div style="font-size:30px;font-weight:bold;color:var(--blue);">$' + Math.round(totalWeekRevenue).toLocaleString('en-AU') + '</div>' +
             '</div>' +
             '<div class="card" style="text-align:center;border-top:4px solid var(--orange);">' +
                 '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">Venues Active</div>' +
@@ -332,7 +332,7 @@ window.renderPrimeCostView = () => {
     const weekRows = weeks.map(w =>
         '<tr style="border-bottom:1px solid var(--border);">' +
         '<td style="padding:7px 12px;font-size:12px;color:var(--text-muted);">' + w.start + ' – ' + w.end + '</td>' +
-        '<td style="padding:7px 12px;font-weight:bold;font-size:13px;">$' + Math.round(w.revenue).toLocaleString() + '</td>' +
+        '<td style="padding:7px 12px;font-weight:bold;font-size:13px;">$' + Math.round(w.revenue).toLocaleString('en-AU') + '</td>' +
         '<td style="padding:7px 12px;font-size:12px;color:var(--orange);">' + w.foodPct.toFixed(1) + '%</td>' +
         '<td style="padding:7px 12px;font-size:12px;color:var(--blue);">' + (w.labourPct !== null ? w.labourPct.toFixed(1)+'%' : '<span style="color:var(--text-muted);">No wage data</span>') + '</td>' +
         '<td style="padding:7px 12px;font-weight:bold;font-size:14px;color:' + pcColor(w.primeCost) + ';">' + (w.primeCost !== null ? w.primeCost.toFixed(1)+'%' : '—') + '</td>' +
@@ -344,7 +344,10 @@ window.renderPrimeCostView = () => {
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">' +
             '<div><h2 style="margin:0;">Prime Cost Dashboard</h2>' +
             '<small style="color:var(--text-muted);">Food Cost % + Labour % = Prime Cost. Industry target: under 65%</small></div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
             '<button onclick="window.openTandaSettings()" class="btn btn-outline" style="font-size:12px;">⏱️ ' + (window.getTandaToken?.()?'Tanda Connected':'Connect Tanda') + '</button>' +
+            '<button onclick="window.openLightspeedSettings()" class="btn btn-outline" style="font-size:12px;">🛒 ' + (window.isLsConnected?.()?'Lightspeed Connected':'Connect Lightspeed') + '</button>' +
+            '</div>' +
         '</div>' +
 
         // KPI Cards
@@ -663,6 +666,13 @@ window.renderManagerHub = () => {
         if (supItems.length === 0) return;
         focusItems.push({pri:0, icon:'🚚', color:'var(--red)', text:E(s.name)+' cutoff '+E(s.cutoff)+' — '+supItems.length+' item'+(supItems.length===1?'':'s')+' below PAR', view:'prep-list'});
     });
+
+    // Pending order draft alerts
+    const pendingDrafts = (window.orderDrafts || []).filter(d => d.status === 'pending');
+    if (pendingDrafts.length > 0) {
+        const totalDraftSpend = pendingDrafts.reduce((s, d) => s + (d.estSpend || 0), 0);
+        focusItems.push({pri:1, icon:'📦', color:'var(--blue)', text:pendingDrafts.length+' order draft'+(pendingDrafts.length===1?'':'s')+' pending — $'+Math.round(totalDraftSpend).toLocaleString('en-AU')+' est.', view:'order-drafts'});
+    }
 
     // Tanda leave alerts
     if (window._tandaData && window._tandaData.upcomingLeave) {

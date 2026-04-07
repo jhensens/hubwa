@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260407b';
+const CACHE_NAME = 'hobart-hub-20260407f';
 const APP_SHELL = [
     './',
     './index.html',
@@ -11,6 +11,7 @@ const APP_SHELL = [
     './auth.js',
     './venues.js',
     './tanda.js',
+    './lightspeed.js',
     './storage.js',
     './nav.js',
     './notifications.js',
@@ -51,10 +52,13 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Version query from main app
+// Message handler — version query + skip waiting
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'GET_VERSION') {
         event.ports[0].postMessage({ version: CACHE_NAME });
+    }
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
     }
 });
 
@@ -66,6 +70,7 @@ self.addEventListener('fetch', (event) => {
     if (url.hostname.includes('firestore.googleapis.com') ||
         url.hostname.includes('firebase') ||
         url.hostname.includes('tanda.co') ||
+        url.hostname.includes('kounta.com') ||
         url.hostname.includes('generativelanguage.googleapis.com')) {
         event.respondWith(
             fetch(event.request).catch(() => {

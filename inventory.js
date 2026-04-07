@@ -626,6 +626,7 @@ window._orderTabBar = function(activeView) {
     const tabs = [
         { id: 'prep-list', label: '📝 Order List', view: 'prep-list' },
         { id: 'prep-gen', label: '🍳 Prep List', view: 'prep-gen' },
+        { id: 'order-drafts', label: '📦 Drafts' + ((window.orderDrafts||[]).filter(d=>d.status==='pending').length > 0 ? ' (' + (window.orderDrafts||[]).filter(d=>d.status==='pending').length + ')' : ''), view: 'order-drafts' },
         { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' },
         { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' },
         { id: 'order-history', label: '📦 History', view: 'order-history' }
