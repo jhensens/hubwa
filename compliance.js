@@ -522,7 +522,9 @@ window.showTempHistory = () => {
     const unitOpts = '<option value="">All Units</option>' + units.map(u => '<option value="' + esc(u) + '"' + (filterUnit === u ? ' selected' : '') + '>' + esc(u) + '</option>').join('');
     const rows = filtered.slice(0, 100).map(t => {
         const temp = Number(t.value || 0);
-        const fail = temp > 5 || temp < -25;
+        const _u = (t.unit || '').toLowerCase();
+        const _isFreezer = _u.includes('freezer') || _u.includes('freeze');
+        const fail = _isFreezer ? (temp > -15 || temp < -30) : (temp > 5 || temp < -25);
         return '<tr style="border-bottom:1px solid var(--border);">' +
             '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + esc(t.time || '') + '</td>' +
             '<td style="padding:6px 8px;font-size:13px;">' + esc(t.unit || '') + '</td>' +
@@ -565,19 +567,29 @@ window.checkT = (i) => {
     warnEl.style.display = warning ? 'block' : 'none';
     if (warning) warnEl.innerHTML = '<span style="color:var(--red);font-weight:bold;">' + warning + '</span>';
 };
-window.logAllTemps = () => { 
+window.logAllTemps = () => {
     const staff = document.getElementById('t-staff').value;
-    if(!staff) return window.showToast("Please enter your name.", "error"); 
+    if(!staff) return window.showToast("Please enter your name.", "error");
     let logsToAdd = []; const timeNow = window._isoNow();
     for(let i = 0; i < (window.fridgeUnits || []).length; i++) {
         const valStr = document.getElementById(`t-val-${i}`).value;
-        if(!valStr) continue; 
+        if(!valStr) continue;
         const val = parseFloat(valStr); let action = "";
-        if(val > 5) { action = document.getElementById(`t-action-${i}`).value; if(!action) return window.showToast(`High temp requires Action!`, "error"); }
+        const unitName = (window.fridgeUnits[i] || '').toLowerCase();
+        const isFreezer = unitName.includes('freezer') || unitName.includes('freeze');
+        // Fridge breach: above 5°C. Freezer breach: above -15°C (target -18°C or below).
+        const breach = isFreezer ? (val > -15) : (val > 5);
+        if (breach) {
+            action = document.getElementById(`t-action-${i}`).value;
+            if (!action) return window.showToast(
+                (isFreezer ? 'Freezer ' : 'High ') + 'temp on ' + window.fridgeUnits[i] + ' requires Action!',
+                'error'
+            );
+        }
         logsToAdd.push({ unit: window.fridgeUnits[i], value: val, staff: staff, action: action, time: timeNow });
     }
     if(logsToAdd.length === 0) return window.showToast("Enter at least one temp.", "error");
-    window.tempLogs.push(...logsToAdd); window.saveToDisk(); window.showToast("Temps Logged!"); window.showView('compliance'); 
+    window.tempLogs.push(...logsToAdd); window.saveToDisk(); window.showToast("Temps Logged!"); window.showView('compliance');
 };
 window.signCheck = (l) => {
     const staffEl = document.getElementById('s-' + l.replace(/\s/g,''));

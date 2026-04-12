@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '12 Apr 2026';
-window._hubBuildId = '20260412a';
+window._hubBuildDate = '13 Apr 2026';
+window._hubBuildId = '20260413a';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -470,7 +470,13 @@ window.renderManagerHub = () => {
 
     // --- COMPLIANCE ---
     const todayTemps = (window.tempLogs||[]).filter(t => window._isToday(t.time));
-    const breaches = todayTemps.filter(t => parseFloat(t.value) > 5);
+    const breaches = todayTemps.filter(t => {
+        const v = parseFloat(t.value);
+        if (isNaN(v)) return false;
+        const u = (t.unit || '').toLowerCase();
+        const isFreezer = u.includes('freezer') || u.includes('freeze');
+        return isFreezer ? (v > -15) : (v > 5);
+    });
     const shiftType = hour < 14 ? 'opening' : hour < 20 ? 'preservice' : 'closing';
     const activeList = ((window.shiftChecklistItems||{})[shiftType]) || [];
     const checkSaved = JSON.parse(localStorage.getItem('shiftCheck_' + todayStr + '_' + shiftType) || '[]');
@@ -668,7 +674,7 @@ window.renderManagerHub = () => {
     });
 
     // Pending order draft alerts
-    const pendingDrafts = (window.orderDrafts || []).filter(d => d.status === 'pending');
+    const pendingDrafts = (Array.isArray(window.orderDrafts) ? window.orderDrafts : []).filter(d => d && d.status === 'pending');
     if (pendingDrafts.length > 0) {
         const totalDraftSpend = pendingDrafts.reduce((s, d) => s + (d.estSpend || 0), 0);
         focusItems.push({pri:1, icon:'📦', color:'var(--blue)', text:pendingDrafts.length+' order draft'+(pendingDrafts.length===1?'':'s')+' pending — $'+Math.round(totalDraftSpend).toLocaleString('en-AU')+' est.', view:'order-drafts'});

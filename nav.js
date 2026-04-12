@@ -1,6 +1,41 @@
 // --- HOBART HUB: Nav Module ---
 // View router (showView), global search, ID generation
 
+// --- HUB TAB PERSISTENCE ---
+// Persist hub sub-tab selections to sessionStorage so they survive page reloads.
+// Uses property setters so inline onclick handlers (e.g. window._invHubTab='audit')
+// auto-persist with no other code changes. sessionStorage (not localStorage) keeps
+// it per-tab and avoids cross-device leakage.
+(function() {
+    var hubTabVars = ['_invHubTab', '_recHubTab', '_analyticsTab', '_complianceTab', '_staffHubTab'];
+    hubTabVars.forEach(function(varName) {
+        var storageKey = 'hub' + varName;
+        // Hydrate initial value from sessionStorage (if any)
+        var stored = null;
+        try { stored = sessionStorage.getItem(storageKey); } catch (e) {}
+        var current = stored || undefined;
+        Object.defineProperty(window, varName, {
+            configurable: true,
+            enumerable: true,
+            get: function() { return current; },
+            set: function(v) {
+                current = v;
+                try { if (v == null) sessionStorage.removeItem(storageKey); else sessionStorage.setItem(storageKey, v); } catch (e) {}
+            }
+        });
+    });
+    // Also support ?tab=<name> query param for sub-tab deep linking (B5).
+    // Reads on load — first matching hub var gets the value.
+    try {
+        var params = new URLSearchParams(window.location.search);
+        var tabParam = params.get('tab');
+        if (tabParam) {
+            // Store under a deferred key — showView() will pick it up based on the view it's rendering
+            window._pendingTabParam = tabParam;
+        }
+    } catch (e) {}
+})();
+
 // --- 6. VIEW ROUTER ---
 window.currentView = 'dashboard';
 window.showView = (view) => {
@@ -35,6 +70,17 @@ window.showView = (view) => {
     if(activeNav) {
         activeNav.classList.add('active');
         if(viewTitle) viewTitle.innerText = activeNav.innerText.replace(/[^\x00-\x7F]/g, "").trim(); // Strips emojis from the top header
+    }
+
+    // Apply ?tab= deep-link param to the matching hub var (one-shot)
+    if (window._pendingTabParam) {
+        var _t = window._pendingTabParam;
+        if (view === 'inventory') window._invHubTab = _t;
+        else if (view === 'recipes') window._recHubTab = _t;
+        else if (view === 'sales') window._analyticsTab = _t;
+        else if (view === 'compliance') window._complianceTab = _t;
+        else if (view === 'staff-directory' || view === 'orientation' || view === 'phonebook') window._staffHubTab = _t;
+        window._pendingTabParam = null;
     }
 
     try {

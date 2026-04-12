@@ -187,9 +187,12 @@ window.lockStaffHub = () => {
     window.showToast('Staff Hub locked.');
 };
 
-window._showPinModal = (title, subtitle, onSuccess) => {
+window._showPinModal = (title, subtitle, onSuccess, showForgot) => {
     window._pinBuffer = '';
     window._pinCallback = onSuccess;
+    const forgotLink = showForgot
+        ? '<div style="margin-top:18px;"><a href="#" onclick="event.preventDefault();window._startForgotPinFlow();" style="color:var(--blue);font-size:12px;text-decoration:underline;">Forgot PIN?</a></div>'
+        : '';
     const body = '<div style="text-align:center;">' +
         (subtitle ? '<p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;">' + subtitle + '</p>' : '') +
         '<div id="pin-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;">' +
@@ -203,8 +206,89 @@ window._showPinModal = (title, subtitle, onSuccess) => {
                 return '<button onclick="window._pinKey(\'' + k + '\')" class="btn btn-outline" style="font-size:20px;font-weight:600;padding:14px;border-radius:12px;">' + k + '</button>';
             }).join('') +
         '</div>' +
+        forgotLink +
     '</div>';
     _origOpenModal(title, body);
+};
+
+// =============================================================================
+// MASTER PIN — admin override that can reset a forgotten manager PIN
+// Stored as SHA-256 hash in localStorage under 'masterPin'.
+// Single point of failure: if forgotten, the only recovery is wiping localStorage.
+// =============================================================================
+window.openMasterPinSettings = () => {
+    const existing = localStorage.getItem('masterPin');
+    if (!existing) {
+        // First-time setup
+        window._showPinModal('🔑 Set Master PIN', 'This PIN can reset a forgotten manager PIN. Choose 4+ digits and write it down somewhere safe — losing it means data loss.', async (newPin) => {
+            if (newPin.length < 4) return;
+            const hashed = await window._hashPin(newPin);
+            localStorage.setItem('masterPin', hashed);
+            window.closeModal();
+            if (typeof window.logAudit === 'function') window.logAudit('auth', 'master-pin-set', '', 'Master PIN created');
+            window.showToast('🔑 Master PIN set. Keep it safe.');
+        });
+        return;
+    }
+    // Change existing — verify current first, then prompt for new
+    window._showPinModal('🔑 Verify Master PIN', 'Enter the current Master PIN to change it.', async (attempt) => {
+        const hashed = await window._hashPin(attempt);
+        if (hashed !== existing) {
+            window._pinBuffer = '';
+            document.querySelectorAll('.pin-dot').forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+            const errEl = document.getElementById('pin-error');
+            if (errEl) errEl.textContent = 'Incorrect Master PIN.';
+            return;
+        }
+        window.closeModal();
+        setTimeout(() => {
+            window._showPinModal('🔑 New Master PIN', 'Enter a new Master PIN (4+ digits).', async (newPin) => {
+                if (newPin.length < 4) return;
+                const newHashed = await window._hashPin(newPin);
+                localStorage.setItem('masterPin', newHashed);
+                window.closeModal();
+                if (typeof window.logAudit === 'function') window.logAudit('auth', 'master-pin-change', '', 'Master PIN changed');
+                window.showToast('🔑 Master PIN updated.');
+            });
+        }, 100);
+    });
+};
+
+window._startForgotPinFlow = () => {
+    const masterHash = localStorage.getItem('masterPin');
+    if (!masterHash) {
+        const errEl = document.getElementById('pin-error');
+        if (errEl) errEl.textContent = 'No Master PIN set. Ask the owner to clear localStorage to reset.';
+        return;
+    }
+    window.closeModal();
+    setTimeout(() => {
+        window._showPinModal('🔑 Master PIN Required', 'Enter the Master PIN to reset the manager PIN.', async (attempt) => {
+            const hashed = await window._hashPin(attempt);
+            if (hashed !== masterHash) {
+                window._pinBuffer = '';
+                document.querySelectorAll('.pin-dot').forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+                const errEl = document.getElementById('pin-error');
+                if (errEl) errEl.textContent = 'Incorrect Master PIN.';
+                return;
+            }
+            window.closeModal();
+            setTimeout(() => {
+                window._showPinModal('🔐 New Manager PIN', 'Enter a new manager PIN (4+ digits).', async (newPin) => {
+                    if (newPin.length < 4) return;
+                    const newHashed = await window._hashPin(newPin);
+                    localStorage.setItem('venuePin', newHashed);
+                    localStorage.setItem('venuePinHashed', 'true');
+                    window.isLocked = false;
+                    window._lastActivity = Date.now();
+                    window.closeModal();
+                    window.checkLockState();
+                    if (typeof window.logAudit === 'function') window.logAudit('auth', 'pin-reset-via-master', '', 'Manager PIN reset via Master PIN override');
+                    window.showToast('✅ Manager PIN reset. Hub unlocked.');
+                });
+            }, 100);
+        });
+    }, 100);
 };
 
 window._pinKey = (key) => {
@@ -249,7 +333,7 @@ window.requirePin = (onSuccess) => {
             const errEl = document.getElementById('pin-error');
             if (errEl) errEl.textContent = 'Incorrect PIN. Try again.';
         }
-    });
+    }, true);
 };
 
 window.toggleLock = () => {

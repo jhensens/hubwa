@@ -210,6 +210,18 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
     div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
     .sticky-footer { bottom: -15px; flex-direction: column; }
+    /* C1: Modal overflow safety on phones — narrow viewport, prevent inline-styled content from forcing horizontal scroll */
+    .modal-content { width: 95%; max-width: 95vw; padding-left: 0; padding-right: 0; }
+    .modal-content > * { max-width: 100%; box-sizing: border-box; }
+    .modal-content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; max-width: 100%; }
+    .modal-content img, .modal-content video, .modal-content iframe { max-width: 100%; height: auto; }
+    /* C2: Touch-target safety net for classless inline-styled buttons on phones — keeps Apple HIG 44x44 rule even on raw <button> tags */
+    button:not([class*="btn"]):not([class*="nav-"]) { min-height: 36px; min-width: 36px; }
+    /* C3: Tighter dashboard density on phones — manager hub renders many cards, this keeps each one shorter so the page is less of a scroll marathon */
+    .card { padding: 12px; margin-bottom: 10px; }
+    .card h2 { font-size: 16px; }
+    .card h3 { font-size: 14px; }
+    .card h4 { font-size: 13px; }
 }
 
 /* LIA Venue Theme — strong visual differentiation */

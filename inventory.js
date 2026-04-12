@@ -930,6 +930,324 @@ window.exportInventoryCSV = () => {
     window.showToast(items.length + ' items exported.');
 };
 
+// =============================================================================
+// CSV IMPORT — round-trips with exportInventoryCSV column order
+// Match strategy: SKU first (if both rows have it), then case-insensitive name.
+// Dry-run preview before commit; cascades recipe costs on price changes.
+// =============================================================================
+window.importInventoryCSV = function() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.onchange = function(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            try {
+                window._previewInventoryImport(ev.target.result, file.name);
+            } catch (err) {
+                console.error('CSV parse failed:', err);
+                window.showToast('CSV parse failed: ' + err.message, 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+};
+
+// Parse a single CSV line respecting quoted values and escaped quotes ("")
+window._parseCsvLine = function(line) {
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { cur += ch; }
+        } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { out.push(cur); cur = ''; }
+            else { cur += ch; }
+        }
+    }
+    out.push(cur);
+    return out;
+};
+
+window._previewInventoryImport = function(csvText, fileName) {
+    // Strip BOM if present, normalize line endings
+    const text = csvText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length < 2) {
+        return window.showToast('CSV is empty or missing data rows.', 'error');
+    }
+    const headerCells = window._parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+    // Map header → column index, accepting both export labels and friendly aliases
+    const colMap = {};
+    const headerAliases = {
+        name: ['name','product','item'],
+        category: ['category','cat'],
+        subcategory: ['subcategory','sub','subcat'],
+        supplier: ['supplier','vendor'],
+        sku: ['sku','code'],
+        price: ['buy price','price','cost'],
+        buyUnit: ['buy unit','buyunit','order unit'],
+        yield: ['yield','yld'],
+        useUnit: ['use unit','useunit','unit'],
+        stock: ['current stock','stock','qty','quantity'],
+        parWeekday: ['par weekday','par wd','parwd','parweekday'],
+        parWeekend: ['par weekend','par we','parwe','parweekend'],
+        location: ['location','loc']
+    };
+    Object.keys(headerAliases).forEach(field => {
+        for (let i = 0; i < headerCells.length; i++) {
+            if (headerAliases[field].includes(headerCells[i])) { colMap[field] = i; return; }
+        }
+    });
+    if (colMap.name === undefined) {
+        return window.showToast('CSV must have a "Name" column.', 'error');
+    }
+    const existing = window.inventoryItems || [];
+    // Build lookup indexes for matching
+    const bySku = {}; const byName = {};
+    existing.forEach(it => {
+        if (it.sku) bySku[String(it.sku).trim().toLowerCase()] = it;
+        if (it.name) byName[String(it.name).trim().toLowerCase()] = it;
+    });
+    const newItems = []; const updatedItems = []; const errors = [];
+    for (let r = 1; r < lines.length; r++) {
+        const cells = window._parseCsvLine(lines[r]);
+        const get = field => colMap[field] !== undefined ? (cells[colMap[field]] || '').trim() : '';
+        const name = get('name');
+        if (!name) { errors.push({ row: r + 1, reason: 'missing name' }); continue; }
+        const sku = get('sku');
+        const parsedNum = field => {
+            const v = get(field);
+            const n = parseFloat(v);
+            return isNaN(n) ? null : n;
+        };
+        const incoming = {
+            name: name,
+            category: get('category'),
+            subcategory: get('subcategory'),
+            supplier: get('supplier'),
+            sku: sku,
+            price: parsedNum('price'),
+            buyUnit: get('buyUnit'),
+            yield: parsedNum('yield'),
+            useUnit: get('useUnit'),
+            stock: parsedNum('stock'),
+            parWeekday: parsedNum('parWeekday'),
+            parWeekend: parsedNum('parWeekend'),
+            location: get('location')
+        };
+        // Match: SKU first, then name (case-insensitive)
+        let match = null;
+        if (sku) match = bySku[sku.toLowerCase()];
+        if (!match) match = byName[name.toLowerCase()];
+        if (match) {
+            // Compute diff — only fields actually present in CSV row
+            const diffs = [];
+            ['name','category','subcategory','supplier','sku','price','buyUnit','yield','useUnit','stock','parWeekday','parWeekend','location'].forEach(field => {
+                const newVal = incoming[field];
+                if (newVal === '' || newVal === null || newVal === undefined) return;
+                const oldVal = match[field];
+                if (String(oldVal || '') !== String(newVal || '')) {
+                    diffs.push({ field: field, from: oldVal, to: newVal });
+                }
+            });
+            if (diffs.length > 0) updatedItems.push({ existing: match, incoming: incoming, diffs: diffs });
+        } else {
+            newItems.push(incoming);
+        }
+    }
+    // Stash for the commit step
+    window._csvImportPending = { newItems: newItems, updatedItems: updatedItems, fileName: fileName };
+    // Build preview HTML
+    const fmtVal = v => v === null || v === undefined || v === '' ? '<em style="color:var(--text-muted);">—</em>' : esc(String(v));
+    let html = '<div style="max-height:60vh;overflow-y:auto;padding-right:6px;">';
+    html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;">' +
+        '<div style="background:rgba(16,185,129,0.1);border-left:3px solid var(--green);padding:8px 12px;border-radius:6px;"><strong>' + newItems.length + '</strong> new</div>' +
+        '<div style="background:rgba(59,130,246,0.1);border-left:3px solid var(--blue);padding:8px 12px;border-radius:6px;"><strong>' + updatedItems.length + '</strong> updated</div>' +
+        (errors.length > 0 ? '<div style="background:rgba(239,68,68,0.1);border-left:3px solid var(--red);padding:8px 12px;border-radius:6px;"><strong>' + errors.length + '</strong> skipped</div>' : '') +
+        '</div>';
+    if (newItems.length > 0) {
+        html += '<details open style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--green);margin-bottom:6px;">➕ ' + newItems.length + ' new items</summary>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<thead><tr style="background:var(--bg-main);"><th style="text-align:left;padding:5px 8px;">Name</th><th style="text-align:left;padding:5px 8px;">Category</th><th style="text-align:left;padding:5px 8px;">Supplier</th><th style="text-align:right;padding:5px 8px;">Price</th></tr></thead><tbody>';
+        newItems.slice(0, 50).forEach(it => {
+            html += '<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px 8px;">' + esc(it.name) + '</td><td style="padding:4px 8px;color:var(--text-muted);">' + esc(it.category || '—') + '</td><td style="padding:4px 8px;color:var(--text-muted);">' + esc(it.supplier || '—') + '</td><td style="padding:4px 8px;text-align:right;">$' + (it.price || 0) + '</td></tr>';
+        });
+        if (newItems.length > 50) html += '<tr><td colspan="4" style="padding:6px;text-align:center;color:var(--text-muted);font-style:italic;">…and ' + (newItems.length - 50) + ' more</td></tr>';
+        html += '</tbody></table></details>';
+    }
+    if (updatedItems.length > 0) {
+        html += '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--blue);margin-bottom:6px;">✏️ ' + updatedItems.length + ' items will be updated</summary>';
+        updatedItems.slice(0, 50).forEach(u => {
+            html += '<div style="padding:8px 10px;margin-bottom:6px;background:var(--bg-main);border-left:3px solid var(--blue);border-radius:4px;">';
+            html += '<strong style="font-size:12px;">' + esc(u.existing.name) + '</strong>';
+            html += '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">';
+            u.diffs.forEach(d => {
+                html += '<span style="display:inline-block;margin-right:10px;"><code>' + esc(d.field) + '</code>: ' + fmtVal(d.from) + ' → <strong style="color:var(--green);">' + fmtVal(d.to) + '</strong></span>';
+            });
+            html += '</div></div>';
+        });
+        if (updatedItems.length > 50) html += '<div style="padding:6px;text-align:center;color:var(--text-muted);font-style:italic;font-size:12px;">…and ' + (updatedItems.length - 50) + ' more</div>';
+        html += '</details>';
+    }
+    if (errors.length > 0) {
+        html += '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--red);margin-bottom:6px;">⚠️ ' + errors.length + ' skipped</summary>';
+        errors.slice(0, 20).forEach(er => {
+            html += '<div style="font-size:11px;color:var(--text-muted);padding:2px 8px;">Row ' + er.row + ': ' + esc(er.reason) + '</div>';
+        });
+        html += '</details>';
+    }
+    html += '</div>';
+    html += '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">';
+    html += '<button onclick="window.closeModal()" class="btn btn-outline">Cancel</button>';
+    if (newItems.length > 0 || updatedItems.length > 0) {
+        html += '<button onclick="window._commitInventoryImport()" class="btn btn-blue">✅ Apply ' + (newItems.length + updatedItems.length) + ' changes</button>';
+    }
+    html += '</div>';
+    window.openModal('📥 Import Preview — ' + esc(fileName), html);
+};
+
+// =============================================================================
+// BULK SUPPLIER REASSIGN — move all items from one supplier to another
+// Useful when a supplier renames or items migrate to a new vendor
+// =============================================================================
+window.openBulkSupplierReassign = function() {
+    const items = (window.inventoryItems || []).filter(i => !i.archived);
+    const suppliers = Array.from(new Set(items.map(i => i.supplier).filter(s => s && s.trim()))).sort();
+    if (suppliers.length === 0) {
+        return window.showToast('No suppliers to reassign.', 'error');
+    }
+    const fromOpts = suppliers.map(s => '<option value="' + esc(s) + '">' + esc(s) + ' (' + items.filter(i => i.supplier === s).length + ')</option>').join('');
+    const toOpts = '<option value="">— select target supplier —</option>' +
+        suppliers.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('') +
+        '<option value="__NEW__">+ Type a new supplier name…</option>';
+    const html =
+        '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">' +
+            'Move all inventory items from one supplier to another. Useful when a supplier name changes or items migrate to a new vendor.' +
+        '</div>' +
+        '<label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">FROM SUPPLIER</label>' +
+        '<select id="bsr-from" class="input-box" onchange="window._bsrPreview()" style="margin-bottom:14px;">' + fromOpts + '</select>' +
+        '<label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">TO SUPPLIER</label>' +
+        '<select id="bsr-to" class="input-box" onchange="window._bsrToggleNew()" style="margin-bottom:8px;">' + toOpts + '</select>' +
+        '<input type="text" id="bsr-to-new" class="input-box" placeholder="New supplier name" style="margin-bottom:14px;display:none;">' +
+        '<div id="bsr-preview" style="background:var(--bg-main);border-radius:6px;padding:10px;font-size:12px;max-height:200px;overflow-y:auto;margin-bottom:14px;"></div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px;">' +
+            '<button onclick="window.closeModal()" class="btn btn-outline">Cancel</button>' +
+            '<button onclick="window._commitBulkSupplierReassign()" class="btn btn-blue">🔄 Reassign</button>' +
+        '</div>';
+    window.openModal('🔄 Bulk Supplier Reassign', html);
+    setTimeout(() => window._bsrPreview(), 0);
+};
+
+window._bsrToggleNew = function() {
+    const sel = document.getElementById('bsr-to');
+    const newInput = document.getElementById('bsr-to-new');
+    if (sel.value === '__NEW__') {
+        newInput.style.display = 'block';
+        newInput.focus();
+    } else {
+        newInput.style.display = 'none';
+    }
+};
+
+window._bsrPreview = function() {
+    const fromEl = document.getElementById('bsr-from');
+    const previewEl = document.getElementById('bsr-preview');
+    if (!fromEl || !previewEl) return;
+    const from = fromEl.value;
+    const matches = (window.inventoryItems || []).filter(i => !i.archived && i.supplier === from);
+    if (matches.length === 0) {
+        previewEl.innerHTML = '<em style="color:var(--text-muted);">No items.</em>';
+        return;
+    }
+    let html = '<strong style="font-size:12px;">' + matches.length + ' items will be reassigned:</strong><ul style="margin:6px 0 0;padding-left:18px;">';
+    matches.slice(0, 30).forEach(i => {
+        html += '<li>' + esc(i.name) + ' <span style="color:var(--text-muted);">(' + esc(i.category || '—') + ')</span></li>';
+    });
+    if (matches.length > 30) html += '<li style="color:var(--text-muted);font-style:italic;">…and ' + (matches.length - 30) + ' more</li>';
+    html += '</ul>';
+    previewEl.innerHTML = html;
+};
+
+window._commitBulkSupplierReassign = function() {
+    const from = document.getElementById('bsr-from').value;
+    const toSel = document.getElementById('bsr-to').value;
+    const to = toSel === '__NEW__' ? document.getElementById('bsr-to-new').value.trim() : toSel;
+    if (!from) return window.showToast('Select a FROM supplier.', 'error');
+    if (!to) return window.showToast('Select or enter a TO supplier.', 'error');
+    if (from === to) return window.showToast('FROM and TO are the same.', 'error');
+    const matches = (window.inventoryItems || []).filter(i => !i.archived && i.supplier === from);
+    if (matches.length === 0) return window.showToast('No items to reassign.', 'error');
+    matches.forEach(i => { i.supplier = to; });
+    window.saveToDisk();
+    if (typeof window.logAudit === 'function') {
+        window.logAudit('inventoryItems', 'bulk-supplier-reassign', from + '→' + to, matches.length + ' items reassigned');
+    }
+    window.closeModal();
+    window.showToast('✅ Reassigned ' + matches.length + ' items to ' + to);
+    window.showView('inventory');
+};
+
+window._commitInventoryImport = function() {
+    const pending = window._csvImportPending;
+    if (!pending) return window.showToast('Nothing to import.', 'error');
+    const inv = window.inventoryItems = window.inventoryItems || [];
+    const changedPriceIds = [];
+    let addedCount = 0, updatedCount = 0;
+    pending.newItems.forEach(it => {
+        const id = window.generateId('inv');
+        inv.push({
+            id: id,
+            name: it.name,
+            recipeName: '',
+            category: it.category || '',
+            subcategory: it.subcategory || '',
+            supplier: it.supplier || '',
+            sku: it.sku || '',
+            price: it.price || 0,
+            buyUnit: it.buyUnit || '',
+            yield: it.yield || 1,
+            useUnit: it.useUnit || '',
+            stock: it.stock || 0,
+            parWeekday: it.parWeekday || 0,
+            parWeekend: it.parWeekend || 0,
+            par: it.parWeekday || 0,
+            location: it.location || '',
+            archived: false,
+            history: []
+        });
+        addedCount++;
+    });
+    pending.updatedItems.forEach(u => {
+        const target = u.existing;
+        const oldPrice = target.price;
+        u.diffs.forEach(d => {
+            target[d.field] = d.to;
+        });
+        if (oldPrice !== target.price) changedPriceIds.push(target.id);
+        updatedCount++;
+    });
+    window.saveToDisk();
+    if (changedPriceIds.length > 0 && typeof window.cascadeRecipeCosts === 'function') {
+        window.cascadeRecipeCosts(changedPriceIds);
+    }
+    if (typeof window.logAudit === 'function') {
+        window.logAudit('inventoryItems', 'csv-import', pending.fileName || 'csv', addedCount + ' added · ' + updatedCount + ' updated' + (changedPriceIds.length ? ' · ' + changedPriceIds.length + ' price cascades' : ''));
+    }
+    window._csvImportPending = null;
+    window.closeModal();
+    window.showToast('✅ Imported ' + addedCount + ' new, ' + updatedCount + ' updated.');
+    window.showView('inventory');
+};
+
 window.printStockLevels = function() {
     var items = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
     if (!items.length) return window.showToast('No inventory items to print.', 'error');
@@ -1148,6 +1466,8 @@ window.renderInventoryView = () => {
                 <button onclick="window.openStockCountSheet()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);">🖨️ Count Sheet</button>
                 <button onclick="window.showView('zones')" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">⚙️ Zones</button>
                 <button onclick="window.exportInventoryCSV()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">📥 Export CSV</button>
+                <button onclick="window.importInventoryCSV()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">📤 Import CSV</button>
+                <button onclick="window.openBulkSupplierReassign()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">🔄 Bulk Supplier</button>
                 <button onclick="window.printStockLevels()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">🖨️ Print Stock</button>
                 <button onclick="window.fixAllYields()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--purple); color:var(--purple);" title="Auto-fix yields from item names and recalculate recipe costs">🔧 Fix Yields</button>
                 <button onclick="window.showYieldProblems()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);" title="Find items with wrong yields causing inflated recipe costs">⚠️ Yield Issues</button>
@@ -1398,7 +1718,11 @@ window.subInvItem = (id, addAnother, isModal = false) => {
         stock: parseFloat(document.getElementById('iv-st').value) || 0,
         parWeekday: parseFloat(document.getElementById('iv-parwd').value) || 0,
         parWeekend: parseFloat(document.getElementById('iv-parwe').value) || 0,
-        par: parseFloat(document.getElementById('iv-parwd').value) || 0,
+        // Legacy `par` field — keep mirroring weekday for back-compat with code that
+        // still reads `par` directly, but if a legacy item only had `par` set and the
+        // user is editing without changing it, preserve the existing value as a floor
+        // so we never silently zero out a meaningful legacy PAR.
+        par: (parseFloat(document.getElementById('iv-parwd').value) || 0) || (existingIdx >= 0 ? (window.inventoryItems[existingIdx].par || 0) : 0),
         yield: Math.max(0.01, parseFloat(document.getElementById('iv-yield').value) || 1),
         useUnit: document.getElementById('iv-useUnit').value,
         buyUnit: document.getElementById('iv-buyUnit').value,
