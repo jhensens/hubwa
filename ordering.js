@@ -874,76 +874,110 @@ window.copyOrderText = (supName, estSpend) => {
 // =============================================================================
 
 // Generate draft orders for suppliers delivering tomorrow (or today if before cutoff)
-// Called after depletion runs, CSV imports, or manually from Drafts tab
-window._generateOrderDrafts = () => {
-    const items = (window.inventoryItems || []).filter(i => !i.archived);
-    const suppliers = window.suppliers || [];
-    const now = new Date();
-    const isWeekend = [0, 5, 6].includes(now.getDay());
+// Called after depletion runs, CSV imports, or manually from Drafts tab.
+// `manual` flag enables explicit user feedback (e.g. when nothing changed).
+window._draftGenInProgress = false;
+window._generateOrderDrafts = (manual) => {
+    // Bug 4 — race guard: ignore overlapping calls (e.g. two depletions within 500ms)
+    if (window._draftGenInProgress) return;
+    window._draftGenInProgress = true;
+    try {
+        const items = (window.inventoryItems || []).filter(i => !i.archived);
+        const suppliers = window.suppliers || [];
+        const now = new Date();
+        const isWeekend = [0, 5, 6].includes(now.getDay());
 
-    // Check both today and tomorrow delivery windows
-    const todayDay = window._dayNames[now.getDay()];
-    const tomorrow = new Date(now.getTime() + 86400000);
-    const tomorrowDay = window._dayNames[tomorrow.getDay()];
-    const currentHHMM = now.toTimeString().slice(0, 5); // "HH:MM"
+        // Check both today and tomorrow delivery windows
+        const todayDay = window._dayNames[now.getDay()];
+        const tomorrow = new Date(now.getTime() + 86400000);
+        const tomorrowDay = window._dayNames[tomorrow.getDay()];
+        const currentHHMM = now.toTimeString().slice(0, 5); // "HH:MM"
 
-    // Find items below PAR grouped by supplier
-    const belowPar = items.filter(i => {
-        const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
-        return par > 0 && (i.stock || 0) < par && i.supplier;
-    });
+        // Find items below PAR grouped by supplier
+        const belowPar = items.filter(i => {
+            const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+            return par > 0 && (i.stock || 0) < par && i.supplier;
+        });
 
-    if (belowPar.length === 0) return; // nothing to draft
-
-    // Group by supplier
-    const bySup = {};
-    belowPar.forEach(i => {
-        if (!bySup[i.supplier]) bySup[i.supplier] = [];
-        bySup[i.supplier].push(i);
-    });
-
-    const newDrafts = [];
-
-    Object.entries(bySup).forEach(([supName, supItems]) => {
-        const sup = suppliers.find(s => s.name === supName);
-        if (!sup) return; // skip unassigned/unknown suppliers
-
-        // Determine delivery window: tomorrow delivery (order today), or today if before cutoff
-        const deliversTomorrow = sup.deliveryDays && sup.deliveryDays.includes(tomorrowDay);
-        const deliversToday = sup.deliveryDays && sup.deliveryDays.includes(todayDay);
-        const beforeCutoff = !sup.cutoff || currentHHMM < sup.cutoff;
-
-        // Only create drafts for actionable delivery windows
-        let deliveryDay = '';
-        let orderByTime = '';
-        if (deliversTomorrow) {
-            deliveryDay = tomorrowDay;
-            orderByTime = sup.cutoff || '';
-        } else if (deliversToday && beforeCutoff) {
-            deliveryDay = todayDay;
-            orderByTime = sup.cutoff || '';
-        } else {
-            // Find next delivery day
-            const dayNames = window._dayNames;
-            for (let d = 2; d <= 7; d++) {
-                const futureDate = new Date(now.getTime() + d * 86400000);
-                const futureDay = dayNames[futureDate.getDay()];
-                if (sup.deliveryDays && sup.deliveryDays.includes(futureDay)) {
-                    deliveryDay = futureDay;
-                    orderByTime = sup.cutoff || '';
-                    break;
-                }
-            }
-            if (!deliveryDay) return; // no upcoming delivery day found
+        if (belowPar.length === 0) {
+            if (manual) window.showToast('✅ All stock above PAR — no drafts needed');
+            return;
         }
 
-        // Check if there's already an active draft for this supplier
-        const existingDraft = (window.orderDrafts || []).find(d =>
-            d.supplier === supName && d.status === 'pending'
-        );
-        if (existingDraft) {
-            // Update existing draft with current stock levels
-            existingDraft.items = supItems.map(i => {
+        // Group by supplier
+        const bySup = {};
+        belowPar.forEach(i => {
+            if (!bySup[i.supplier]) bySup[i.supplier] = [];
+            bySup[i.supplier].push(i);
+        });
+
+        const newDrafts = [];
+        let updatedCount = 0;
+
+        Object.entries(bySup).forEach(([supName, supItems]) => {
+            const sup = suppliers.find(s => s.name === supName);
+            if (!sup) return; // skip unassigned/unknown suppliers
+
+            // Determine delivery window: tomorrow delivery (order today), or today if before cutoff
+            const deliversTomorrow = sup.deliveryDays && sup.deliveryDays.includes(tomorrowDay);
+            const deliversToday = sup.deliveryDays && sup.deliveryDays.includes(todayDay);
+            const beforeCutoff = !sup.cutoff || currentHHMM < sup.cutoff;
+
+            // Only create drafts for actionable delivery windows
+            let deliveryDay = '';
+            let orderByTime = '';
+            if (deliversTomorrow) {
+                deliveryDay = tomorrowDay;
+                orderByTime = sup.cutoff || '';
+            } else if (deliversToday && beforeCutoff) {
+                deliveryDay = todayDay;
+                orderByTime = sup.cutoff || '';
+            } else {
+                // Find next delivery day
+                const dayNames = window._dayNames;
+                for (let d = 2; d <= 7; d++) {
+                    const futureDate = new Date(now.getTime() + d * 86400000);
+                    const futureDay = dayNames[futureDate.getDay()];
+                    if (sup.deliveryDays && sup.deliveryDays.includes(futureDay)) {
+                        deliveryDay = futureDay;
+                        orderByTime = sup.cutoff || '';
+                        break;
+                    }
+                }
+                if (!deliveryDay) return; // no upcoming delivery day found
+            }
+
+            // Check if there's already an active draft for this supplier
+            const existingDraft = (window.orderDrafts || []).find(d =>
+                d.supplier === supName && d.status === 'pending'
+            );
+            if (existingDraft) {
+                // Update existing draft with current stock levels
+                existingDraft.items = supItems.map(i => {
+                    const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
+                    const qty = parseFloat((par - (i.stock || 0)).toFixed(1));
+                    return {
+                        id: i.id,
+                        name: i.recipeName || i.name,
+                        fullName: i.name,
+                        sku: i.sku || '',
+                        qty: qty,
+                        unit: i.buyUnit || 'Unit',
+                        price: i.price || 0,
+                        currentStock: i.stock || 0,
+                        par: par
+                    };
+                });
+                existingDraft.estSpend = existingDraft.items.reduce((s, it) => s + (it.qty * it.price), 0);
+                existingDraft.deliveryDay = deliveryDay;
+                existingDraft.orderByTime = orderByTime;
+                existingDraft.updatedAt = window._isoNow();
+                updatedCount++;
+                return;
+            }
+
+            // Build draft order
+            const draftItems = supItems.map(i => {
                 const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
                 const qty = parseFloat((par - (i.stock || 0)).toFixed(1));
                 return {
@@ -958,53 +992,38 @@ window._generateOrderDrafts = () => {
                     par: par
                 };
             });
-            existingDraft.estSpend = existingDraft.items.reduce((s, it) => s + (it.qty * it.price), 0);
-            existingDraft.deliveryDay = deliveryDay;
-            existingDraft.orderByTime = orderByTime;
-            existingDraft.updatedAt = window._isoNow();
-            return;
+
+            const estSpend = draftItems.reduce((s, it) => s + (it.qty * it.price), 0);
+
+            newDrafts.push({
+                id: window.generateId('draft'),
+                supplier: supName,
+                items: draftItems,
+                estSpend: estSpend,
+                minSpend: sup.minSpend || 0,
+                deliveryDay: deliveryDay,
+                orderByTime: orderByTime,
+                contact: sup.contact || '',
+                status: 'pending', // pending | confirmed | dismissed
+                createdAt: window._isoNow(),
+                updatedAt: window._isoNow(),
+                source: 'auto' // auto | manual
+            });
+        });
+
+        if (newDrafts.length > 0) {
+            if (!window.orderDrafts) window.orderDrafts = [];
+            window.orderDrafts.push(...newDrafts);
+            window.saveToDisk();
+            window.showToast('📦 ' + newDrafts.length + ' order draft' + (newDrafts.length > 1 ? 's' : '') + ' staged — review in Order Drafts');
+        } else if (updatedCount > 0) {
+            window.saveToDisk();
+            if (manual) window.showToast('🔄 Refreshed ' + updatedCount + ' existing draft' + (updatedCount !== 1 ? 's' : ''));
+        } else if (manual) {
+            window.showToast('✅ No new drafts — current pending drafts already cover items below PAR');
         }
-
-        // Build draft order
-        const draftItems = supItems.map(i => {
-            const par = isWeekend ? (i.parWeekend || i.par || 0) : (i.parWeekday || i.par || 0);
-            const qty = parseFloat((par - (i.stock || 0)).toFixed(1));
-            return {
-                id: i.id,
-                name: i.recipeName || i.name,
-                fullName: i.name,
-                sku: i.sku || '',
-                qty: qty,
-                unit: i.buyUnit || 'Unit',
-                price: i.price || 0,
-                currentStock: i.stock || 0,
-                par: par
-            };
-        });
-
-        const estSpend = draftItems.reduce((s, it) => s + (it.qty * it.price), 0);
-
-        newDrafts.push({
-            id: window.generateId('draft'),
-            supplier: supName,
-            items: draftItems,
-            estSpend: estSpend,
-            minSpend: sup.minSpend || 0,
-            deliveryDay: deliveryDay,
-            orderByTime: orderByTime,
-            contact: sup.contact || '',
-            status: 'pending', // pending | confirmed | dismissed
-            createdAt: window._isoNow(),
-            updatedAt: window._isoNow(),
-            source: 'auto' // auto | manual
-        });
-    });
-
-    if (newDrafts.length > 0) {
-        if (!window.orderDrafts) window.orderDrafts = [];
-        window.orderDrafts.push(...newDrafts);
-        window.saveToDisk();
-        window.showToast('📦 ' + newDrafts.length + ' order draft' + (newDrafts.length > 1 ? 's' : '') + ' staged — review in Order Drafts');
+    } finally {
+        window._draftGenInProgress = false;
     }
 };
 
@@ -1020,10 +1039,13 @@ window._dismissDraft = (draftId) => {
 };
 
 // Update qty on a draft item + recalc line/spend display inline
+// Bug 2: clamp negative qty to 0. UX 7: debounced auto-save (400ms) so rapid edits
+// survive a tab close even without a blur event.
 window._updateDraftQty = (draftId, itemIdx, newQty) => {
     const draft = (window.orderDrafts || []).find(d => d.id === draftId);
     if (!draft || !draft.items[itemIdx]) return;
-    draft.items[itemIdx].qty = parseFloat(newQty) || 0;
+    const q = Math.max(0, parseFloat(newQty) || 0);
+    draft.items[itemIdx].qty = q;
     draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
     draft.updatedAt = window._isoNow();
     // Update display elements without re-rendering the whole view
@@ -1031,18 +1053,32 @@ window._updateDraftQty = (draftId, itemIdx, newQty) => {
     if (lineEl) lineEl.textContent = '$' + (draft.items[itemIdx].qty * draft.items[itemIdx].price).toFixed(2);
     var spendEl = document.getElementById('draft-spend-' + draftId);
     if (spendEl) spendEl.textContent = '$' + draft.estSpend.toFixed(2);
+    // Snap input back to clamped value if user typed a negative
+    var inputEl = document.querySelector('[data-draft="' + draftId + '"] input[data-line-input="' + itemIdx + '"]');
+    if (inputEl && parseFloat(inputEl.value) !== q) inputEl.value = q;
+    // Debounced auto-save — survives tab close
+    clearTimeout(window._draftSaveTimer);
+    window._draftSaveTimer = setTimeout(() => window.saveToDisk(), 400);
 };
 
-// Save draft edits on blur (when user finishes editing a qty field)
-window._saveDraftOnBlur = () => { window.saveToDisk(); };
+// Save draft edits on blur (immediate safety net on top of debounced auto-save)
+window._saveDraftOnBlur = () => {
+    clearTimeout(window._draftSaveTimer);
+    window.saveToDisk();
+};
 
-// Remove an item from a draft
+// Remove an item from a draft. Bug 5: when the last item is removed, fully delete
+// the draft from window.orderDrafts instead of leaving an empty "ghost" card behind.
 window._removeDraftItem = (draftId, itemIdx) => {
     const draft = (window.orderDrafts || []).find(d => d.id === draftId);
     if (!draft) return;
     draft.items.splice(itemIdx, 1);
     if (draft.items.length === 0) {
-        draft.status = 'dismissed';
+        window.orderDrafts = (window.orderDrafts || []).filter(d => d.id !== draftId);
+        window.saveToDisk();
+        window.showToast('Draft cleared — all items removed');
+        window.showView('order-drafts');
+        return;
     }
     draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
     draft.updatedAt = window._isoNow();
@@ -1050,21 +1086,34 @@ window._removeDraftItem = (draftId, itemIdx) => {
     window.showView('order-drafts');
 };
 
-// Confirm a draft — copies order text, logs to orderHistory, removes draft
-window._confirmDraft = (draftId) => {
+// Confirm a draft — copies order text, logs to orderHistory, marks draft confirmed.
+// Bug 3: sanitize fields (strip control chars/newlines) before clipboard write so a
+// stray apostrophe or newline in supplier/item name can't break the formatted output.
+// UX 6: enforce min-spend gate. Pass override=true to bypass after explicit user choice.
+window._confirmDraft = (draftId, override) => {
     const draft = (window.orderDrafts || []).find(d => d.id === draftId);
     if (!draft || draft.status !== 'pending') return;
 
     // Recalculate spend from current qtys
     draft.estSpend = draft.items.reduce((s, it) => s + (it.qty * it.price), 0);
 
+    // UX 6 — min-spend gate: refuse confirm unless override flag passed
+    const underMin = draft.minSpend > 0 && draft.estSpend < draft.minSpend;
+    if (underMin && !override) {
+        window.showToast('⚠️ Order is under $' + draft.minSpend + ' min spend — use "Order anyway" to override');
+        return;
+    }
+
+    // Sanitize plain-text fields for clipboard output (Bug 3)
+    const sanitize = (s) => String(s == null ? '' : s).replace(/[\r\n\t\v\f]+/g, ' ').trim();
+
     // Build order text
     const venueName = window._getVenueName();
-    let text = 'Hi ' + draft.supplier + ',\n\nCould I please place an order for the following:\n\n';
+    let text = 'Hi ' + sanitize(draft.supplier) + ',\n\nCould I please place an order for the following:\n\n';
     draft.items.filter(it => it.qty > 0).forEach(it => {
-        text += '- ' + it.qty + 'x ' + it.unit + ' of ' + it.fullName + (it.sku ? ' [' + it.sku + ']' : '') + '\n';
+        text += '- ' + it.qty + 'x ' + sanitize(it.unit) + ' of ' + sanitize(it.fullName) + (it.sku ? ' [' + sanitize(it.sku) + ']' : '') + '\n';
     });
-    text += '\nThanks,\n' + venueName;
+    text += '\nThanks,\n' + sanitize(venueName);
 
     // Log to orderHistory
     if (!window.orderHistory) window.orderHistory = [];
@@ -1079,7 +1128,8 @@ window._confirmDraft = (draftId) => {
             unit: it.unit,
             price: it.price
         })),
-        autoDraft: true
+        autoDraft: true,
+        underMinSpend: underMin
     });
 
     // Mark draft as confirmed
@@ -1089,14 +1139,15 @@ window._confirmDraft = (draftId) => {
 
     // Copy to clipboard
     navigator.clipboard.writeText(text).then(() => {
-        window.showToast('✅ Order confirmed & copied for ' + draft.supplier + '!');
+        window.showToast('✅ Order confirmed & copied for ' + draft.supplier + (underMin ? ' (under min spend)' : '') + '!');
     }).catch(() => {
         window.showToast('Order confirmed for ' + draft.supplier + ' (clipboard failed — check console)');
         console.log('Order text:\n' + text);
     });
 
     window.logAudit('orderDrafts', 'draft-confirmed', draft.id,
-        draft.supplier + ': ' + draft.items.length + ' items, est $' + draft.estSpend.toFixed(2));
+        draft.supplier + ': ' + draft.items.length + ' items, est $' + draft.estSpend.toFixed(2) +
+        (underMin ? ' [under min spend, override]' : ''));
 
     window.showView('order-drafts');
 };
@@ -1139,28 +1190,47 @@ window.renderOrderDraftsView = () => {
 
             const itemRows = d.items.map((it, idx) => {
                 const lineTotal = (it.qty * it.price).toFixed(2);
+                // UX 8 — flag items missing a unit price so users know est. spend is incomplete
+                const noPrice = !it.price || it.price === 0;
+                const noPriceBadge = noPrice
+                    ? ' <span style="font-size:10px;background:var(--orange);color:#fff;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle;" title="Set unit price in inventory to fix">⚠️ No price</span>'
+                    : '';
                 return '<tr style="border-bottom:1px solid var(--border);">' +
                     '<td style="padding:8px 10px;">' +
-                        '<strong style="font-size:13px;">' + E(it.name) + '</strong>' +
+                        '<strong style="font-size:13px;">' + E(it.name) + '</strong>' + noPriceBadge +
                         (it.sku ? ' <small style="color:var(--text-muted);">[' + E(it.sku) + ']</small>' : '') +
                         '<div style="font-size:11px;color:var(--text-muted);">Stock: ' + Number(it.currentStock).toFixed(1) + ' · PAR: ' + it.par + '</div>' +
                     '</td>' +
                     '<td style="padding:8px 10px;text-align:center;">' +
                         '<input type="number" value="' + it.qty + '" min="0" step="0.5" ' +
+                        'data-line-input="' + idx + '" ' +
                         'onchange="window._updateDraftQty(\'' + d.id + '\',' + idx + ',this.value)" ' +
                         'onblur="window._saveDraftOnBlur()" ' +
                         'class="input-box" style="width:70px;text-align:center;margin:0;padding:6px;">' +
                     '</td>' +
                     '<td style="padding:8px 10px;text-align:center;color:var(--text-muted);font-size:12px;">' + E(it.unit) + '</td>' +
                     '<td style="padding:8px 10px;text-align:right;font-size:12px;">$' + (it.price || 0).toFixed(2) + '</td>' +
-                    '<td style="padding:8px 10px;text-align:right;font-weight:bold;font-size:13px;" data-draft="' + d.id + '" data-line="' + idx + '">$' + lineTotal + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;font-weight:bold;font-size:13px;" data-line="' + idx + '">$' + lineTotal + '</td>' +
                     '<td style="padding:8px 10px;text-align:center;">' +
                         '<button onclick="window._removeDraftItem(\'' + d.id + '\',' + idx + ')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-muted);" title="Remove item">✕</button>' +
                     '</td>' +
                 '</tr>';
             }).join('');
 
-            return '<div class="card" style="border-top:4px solid ' + (isUrgent ? 'var(--orange)' : 'var(--blue)') + ';margin-bottom:14px;padding:0;overflow:hidden;">' +
+            // UX 6 — block confirm when under min spend; offer override link
+            let confirmArea;
+            if (meetsMin || !d.minSpend) {
+                confirmArea = '<button onclick="window._confirmDraft(\'' + d.id + '\')" class="btn btn-blue" style="font-size:12px;">✅ Confirm & Copy Order</button>';
+            } else {
+                const short = (d.minSpend - d.estSpend).toFixed(0);
+                confirmArea =
+                    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
+                        '<button disabled class="btn btn-blue" style="font-size:12px;opacity:0.5;cursor:not-allowed;" title="Add more items to meet $' + d.minSpend + ' minimum">⚠️ Under $' + d.minSpend + ' min ($' + short + ' short)</button>' +
+                        '<a href="#" onclick="event.preventDefault();window._confirmDraft(\'' + d.id + '\',true);" style="font-size:11px;color:var(--text-muted);text-decoration:underline;">Order anyway →</a>' +
+                    '</div>';
+            }
+
+            return '<div class="card" data-draft="' + d.id + '" style="border-top:4px solid ' + (isUrgent ? 'var(--orange)' : 'var(--blue)') + ';margin-bottom:14px;padding:0;overflow:hidden;">' +
                 '<div style="padding:14px 16px;border-bottom:1px solid var(--border);">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
                         '<div>' +
@@ -1191,9 +1261,9 @@ window.renderOrderDraftsView = () => {
                     '<tbody>' + itemRows + '</tbody>' +
                     '</table>' +
                 '</div>' +
-                '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">' +
+                '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:flex-end;gap:8px;">' +
                     '<button onclick="window._dismissDraft(\'' + d.id + '\')" class="btn btn-outline" style="font-size:12px;">Dismiss</button>' +
-                    '<button onclick="window._confirmDraft(\'' + d.id + '\')" class="btn btn-blue" style="font-size:12px;">✅ Confirm & Copy Order</button>' +
+                    confirmArea +
                 '</div>' +
             '</div>';
         }).join('');
@@ -1221,7 +1291,7 @@ window.renderOrderDraftsView = () => {
                 '<h2 style="margin:0;">📦 Auto-Order Drafts</h2>' +
                 '<p style="margin:5px 0 0 0;color:var(--text-muted);font-size:13px;">Auto-staged orders based on PAR levels and supplier delivery schedules. Review, edit quantities, then confirm.</p>' +
             '</div>' +
-            '<button onclick="window._generateOrderDrafts();window.showView(\'order-drafts\');" class="btn btn-blue" style="font-size:12px;">🔄 Refresh Drafts</button>' +
+            '<button onclick="window._generateOrderDrafts(true);window.showView(\'order-drafts\');" class="btn btn-blue" style="font-size:12px;">🔄 Generate Drafts Now</button>' +
         '</div>' +
 
         (pending.length > 0 ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:10px;margin-bottom:18px;">' +
@@ -1291,7 +1361,7 @@ window.renderOrderHistoryView = () => {
             return '<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">' +
                 '<div onclick="window._ohToggle(' + origIdx + ')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;gap:10px;flex-wrap:wrap;">' +
                     '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">' +
-                        '<span style="font-size:18px;">' + (o.aiGenerated ? '🤖' : '📋') + '</span>' +
+                        '<span style="font-size:18px;" title="' + ((o.aiGenerated || o.autoDraft) ? 'Auto-drafted from PAR' : 'Manual order') + '">' + ((o.aiGenerated || o.autoDraft) ? '🤖' : '📋') + '</span>' +
                         '<div style="min-width:0;">' +
                             '<strong style="font-size:14px;">' + E(o.supplier || 'Unknown') + '</strong>' +
                             '<div style="font-size:12px;color:var(--text-muted);">' + window._fmtDate(o.date) + ' · ' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</div>' +
