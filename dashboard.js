@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '13 Apr 2026';
-window._hubBuildId = '20260413b';
+window._hubBuildId = '20260413c';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -778,11 +778,16 @@ window.renderManagerHub = () => {
         html += '<div style="font-size:32px;font-weight:800;color:var(--text-muted);margin:4px 0;">—</div>';
         html += '<div style="font-size:12px;color:var(--text-muted);">Log takings with wages to see labor %</div>';
     }
-    // Tanda data — rostered vs actual
+    // Tanda data — rostered vs actual (always show if connected)
     if (window._tandaData) {
         const td = window._tandaData;
+        const staleMs = td._lastUpdatedTs ? (Date.now() - td._lastUpdatedTs) : 0;
+        const isStale = staleMs > 30 * 60 * 1000; // >30 minutes
         html += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;font-size:11px;">';
-        html += '<div style="color:var(--purple);font-weight:600;margin-bottom:4px;">⏱️ Tanda Live</div>';
+        html += '<div style="color:var(--purple);font-weight:600;margin-bottom:4px;">⏱️ Tanda Live';
+        if (isStale) html += ' <span style="color:var(--orange);font-weight:normal;">⚠️ stale (' + Math.round(staleMs/60000) + 'min ago)</span>';
+        else html += ' <span style="color:var(--text-muted);font-weight:normal;">· ' + td.lastUpdated + '</span>';
+        html += '</div>';
         html += '<div style="color:var(--text-muted);">Rostered: ' + td.staffCount + ' staff · ' + td.rosteredHours + 'h · $' + td.estimatedWageCost + '</div>';
         if (Number(td.actualHours) > 0) {
             const variance = Number(td.actualWageCost) - Number(td.estimatedWageCost);
@@ -791,6 +796,10 @@ window.renderManagerHub = () => {
             html += '<div style="color:var(--text-muted);">Actual: ' + td.actualStaffCount + ' staff · ' + td.actualHours + 'h · <strong style="color:' + varColor + ';">$' + td.actualWageCost + '</strong></div>';
             html += '<div style="color:' + varColor + ';font-weight:600;">' + varLabel + ' budget</div>';
         }
+        html += '</div>';
+    } else if (window.getTandaToken && window.getTandaToken()) {
+        html += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;font-size:11px;">';
+        html += '<div style="color:var(--text-muted);">⏱️ Tanda: loading...</div>';
         html += '</div>';
     }
     html += '</div>';

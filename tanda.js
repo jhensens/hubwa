@@ -11,6 +11,7 @@ window.getTandaToken = () => {
     return localStorage.getItem(vid + '_tandaApiToken') || '';
 };
 
+window._tandaErrorShown = false; // throttle: only show one error toast per refresh cycle
 window.fetchTanda = async (endpoint) => {
     const token = window.getTandaToken();
     if (!token) return null;
@@ -18,9 +19,25 @@ window.fetchTanda = async (endpoint) => {
         const res = await fetch('https://my.tanda.co/api/v2/' + endpoint, {
             headers: { 'Authorization': 'bearer ' + token, 'Content-Type': 'application/json' }
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            if (!window._tandaErrorShown) {
+                window._tandaErrorShown = true;
+                if (res.status === 401 || res.status === 403) {
+                    window.showToast('Tanda token expired or invalid — update in Settings', 'error');
+                } else {
+                    window.showToast('Tanda API error (HTTP ' + res.status + ')', 'error');
+                }
+            }
+            return null;
+        }
         return await res.json();
-    } catch(e) { return null; }
+    } catch(e) {
+        if (!window._tandaErrorShown) {
+            window._tandaErrorShown = true;
+            window.showToast("Can't reach Tanda API — check internet connection", 'error');
+        }
+        return null;
+    }
 };
 
 // --- TANDA HOURS HELPER ---
@@ -44,6 +61,7 @@ window._tandaDepartments = [];
 
 window.loadTandaData = async () => {
     if (!window.getTandaToken()) return;
+    window._tandaErrorShown = false; // reset error throttle for this cycle
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
@@ -114,9 +132,11 @@ window.loadTandaData = async () => {
         }
     });
 
-    // 4. Weekly shifts (actual hours worked)
+    // 4. Shifts (actual hours worked) — 30 days back for analytics coverage
+    const shiftsStart = new Date(today); shiftsStart.setDate(shiftsStart.getDate() - 30);
+    const shiftsStartStr = shiftsStart.toISOString().split('T')[0];
     const weekShiftsData = await window.fetchTanda(
-        'shifts?from=' + weekStartStr + '&to=' + weekEndStr + '&show_costs=true'
+        'shifts?from=' + shiftsStartStr + '&to=' + dateStr + '&show_costs=true'
     );
     const weekShifts = weekShiftsData ? (Array.isArray(weekShiftsData) ? weekShiftsData : (weekShiftsData.shifts || [])) : [];
     let actualHours = 0, actualCost = 0, actualStaff = [];
@@ -240,6 +260,7 @@ window.loadTandaData = async () => {
         qualifications: qualifications,
         // Meta
         lastUpdated: new Date().toLocaleTimeString(),
+        _lastUpdatedTs: Date.now(),
         userCount: users.length
     };
     if (['dashboard', 'prime-cost', 'orientation'].includes(window.currentView)) window.showView(window.currentView);
@@ -259,6 +280,7 @@ window.loadTandaClockedIn = async () => {
         return { name, since };
     });
     window._tandaData.lastUpdated = new Date().toLocaleTimeString();
+    window._tandaData._lastUpdatedTs = Date.now();
 };
 
 // --- TANDA AUTO-REFRESH ---
