@@ -657,7 +657,7 @@ window.editRecipeForm = (id = null) => {
                     </div>
                 </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
+            <div class="recipe-edit-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
                 <div class="card" style="padding:15px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <h4 style="margin:0;font-size:14px;">Ingredients</h4>
@@ -667,8 +667,8 @@ window.editRecipeForm = (id = null) => {
                         </div>
                     </div>
                     <div style="max-height:320px;overflow-y:auto;">${ingHtml||'<p style="font-size:13px;color:var(--text-muted);text-align:center;padding:10px 0;">No ingredients yet.</p>'}</div>
-                    <div style="margin-top:10px;display:flex;gap:5px;">
-                        <select id="add-sel" class="input-box" style="flex:1;margin:0;font-size:12px;" onchange="window.updateUnitHint()"><option value="">Select ingredient...</option><optgroup label="Live Inventory">${invOpts}</optgroup><optgroup label="Prep Batches">${batchOpts}</optgroup></select>
+                    <div style="margin-top:10px;display:flex;gap:5px;max-width:100%;">
+                        <select id="add-sel" class="input-box" style="flex:1;min-width:0;margin:0;font-size:12px;" onchange="window.updateUnitHint()"><option value="">Select ingredient...</option><optgroup label="Live Inventory">${invOpts}</optgroup><optgroup label="Prep Batches">${batchOpts}</optgroup></select>
                         <input type="number" step="0.001" id="add-qty" class="input-box" placeholder="Qty" style="width:65px;margin:0;border-color:var(--blue);">
                         <button onclick="window.addIng()" class="btn btn-green" style="padding:8px 10px;">Add</button>
                     </div>

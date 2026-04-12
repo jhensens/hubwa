@@ -129,16 +129,16 @@ body {
 /* Main Wrapper */
 .main-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .main-header { padding: 12px 20px; background: rgba(24, 24, 28, 0.95); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px); z-index: 5; }
-.content-area { padding: 20px; overflow-y: auto; flex-grow: 1; position: relative; }
+.content-area { padding: 20px; overflow-y: auto; flex-grow: 1; position: relative; box-sizing: border-box; }
 
 /* Commercial UI Components */
-.card { background: var(--card-bg); padding: 18px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+.card { background: var(--card-bg); padding: 18px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); box-sizing: border-box; min-width: 0; max-width: 100%; }
 .sync-badge { font-size: 12px; font-weight: 600; color: var(--green); padding: 6px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 20px; transition: all 0.3s ease; }
 
 /* Form Elements */
 .input-box { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; background: var(--bg-main); color: var(--text-main); box-sizing: border-box; font-family: inherit; font-size: 14px; transition: border-color 0.2s; }
 .input-box:focus { outline: none; border-color: var(--blue); }
-.search-bar { width: 100%; padding: 10px 16px; border: 1px solid var(--border); border-radius: 30px; margin-bottom: 15px; background: var(--card-bg); color: white; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); transition: all 0.2s; }
+.search-bar { width: 100%; padding: 10px 16px; border: 1px solid var(--border); border-radius: 30px; margin-bottom: 15px; background: var(--card-bg); color: white; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); transition: all 0.2s; box-sizing: border-box; }
 .search-bar:focus { outline: none; border-color: var(--blue); box-shadow: 0 2px 15px rgba(59, 130, 246, 0.2); }
 
 /* Buttons */
@@ -222,6 +222,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     .card h2 { font-size: 16px; }
     .card h3 { font-size: 14px; }
     .card h4 { font-size: 13px; }
+    /* Recipe edit grid: stack to single column on mobile */
+    .recipe-edit-grid { grid-template-columns: 1fr !important; }
 }
 
 /* LIA Venue Theme — strong visual differentiation */
