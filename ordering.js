@@ -1141,8 +1141,7 @@ window._confirmDraft = (draftId, override) => {
     navigator.clipboard.writeText(text).then(() => {
         window.showToast('✅ Order confirmed & copied for ' + draft.supplier + (underMin ? ' (under min spend)' : '') + '!');
     }).catch(() => {
-        window.showToast('Order confirmed for ' + draft.supplier + ' (clipboard failed — check console)');
-        console.log('Order text:\n' + text);
+        window.showToast('Order confirmed for ' + draft.supplier + ' (clipboard unavailable).');
     });
 
     window.logAudit('orderDrafts', 'draft-confirmed', draft.id,
@@ -1430,5 +1429,195 @@ window.renderOrderHistoryView = () => {
 window._ohToggle = (idx) => {
     window._ohExpanded[idx] = !window._ohExpanded[idx];
     document.getElementById('mainContent').innerHTML = window.renderOrderHistoryView();
+};
+
+// =============================================================================
+// DELIVERY RECEIVING CHECKLIST — HACCP compliance
+// Logs incoming deliveries with temp checks, condition, date codes, photos
+// =============================================================================
+
+window.renderDeliveryCheckView = () => {
+    const E = window.esc;
+    const logs = (window.deliveryLogs || []).slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    const recent = logs.slice(0, 20);
+
+    const supplierOpts = (window.suppliers || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(s => '<option value="' + E(s.name) + '">' + E(s.name) + '</option>').join('');
+
+    const logRows = recent.length === 0
+        ? '<div style="text-align:center;padding:32px 20px;color:var(--text-muted);"><div style="font-size:28px;margin-bottom:8px;">📋</div><div style="font-size:14px;">No deliveries logged yet.</div></div>'
+        : recent.map((log, idx) => {
+            const passCount = (log.checks || []).filter(c => c.pass).length;
+            const failCount = (log.checks || []).filter(c => !c.pass).length;
+            const allPass = failCount === 0 && passCount > 0;
+            return '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 15px;background:var(--bg-main);cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'">' +
+                    '<div>' +
+                        '<strong style="font-size:14px;">' + E(log.supplier || 'Unknown') + '</strong>' +
+                        '<span style="margin-left:10px;font-size:12px;color:var(--text-muted);">' + (window._fmtDateTime ? window._fmtDateTime(log.timestamp) : log.timestamp) + '</span>' +
+                        '<span style="margin-left:10px;font-size:12px;color:' + (allPass ? 'var(--green)' : 'var(--red)') + ';font-weight:600;">' + (allPass ? '✅ PASS' : '⚠️ ' + failCount + ' issue' + (failCount !== 1 ? 's' : '')) + '</span>' +
+                    '</div>' +
+                    '<span style="color:var(--text-muted);font-size:12px;">▼</span>' +
+                '</div>' +
+                '<div style="display:none;padding:15px;font-size:13px;">' +
+                    (log.checks || []).map(c =>
+                        '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);">' +
+                            '<span>' + E(c.label) + '</span>' +
+                            '<span style="color:' + (c.pass ? 'var(--green)' : 'var(--red)') + ';font-weight:600;">' + (c.pass ? '✅ Pass' : '❌ Fail') + (c.note ? ' — ' + E(c.note) : '') + '</span>' +
+                        '</div>'
+                    ).join('') +
+                    (log.temp ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🌡️ Temp recorded: <strong>' + log.temp + '°C</strong></div>' : '') +
+                    (log.receivedBy ? '<div style="margin-top:4px;font-size:12px;color:var(--text-muted);">👤 Received by: ' + E(log.receivedBy) + '</div>' : '') +
+                    (log.notes ? '<div style="margin-top:4px;font-size:12px;color:var(--text-muted);">📝 ' + E(log.notes) + '</div>' : '') +
+                    '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:var(--red);" onclick="window._deleteDeliveryLog(' + idx + ')">🗑️ Delete</button></div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+    return '<div style="max-width:900px;margin:auto;">' +
+        window._orderTabBar('delivery-check') +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:20px;">' +
+            '<div>' +
+                '<h2 style="margin:0;">📋 Delivery Receiving</h2>' +
+                '<div style="color:var(--text-muted);font-size:13px;margin-top:2px;">HACCP delivery checks — temp, condition, date codes, packaging</div>' +
+            '</div>' +
+            '<button onclick="window._newDeliveryCheck()" class="btn btn-green">+ Log Delivery</button>' +
+        '</div>' +
+        '<div class="card" style="border-top:5px solid var(--green);">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                '<h3 style="margin:0;font-size:15px;">Recent Deliveries</h3>' +
+                '<span style="font-size:12px;color:var(--text-muted);">' + logs.length + ' total</span>' +
+            '</div>' +
+            logRows +
+        '</div>' +
+    '</div>';
+};
+
+// HACCP check items for delivery receiving
+const _deliveryChecks = [
+    { id: 'temp', label: 'Temperature within safe range (cold chain ≤5°C, frozen ≤-15°C)', category: 'Temperature' },
+    { id: 'packaging', label: 'Packaging intact — no tears, dents, or damage', category: 'Condition' },
+    { id: 'datecodes', label: 'Date codes checked — all within use-by/best-before', category: 'Date Codes' },
+    { id: 'pest', label: 'No signs of pest activity or contamination', category: 'Contamination' },
+    { id: 'quantity', label: 'Quantity matches order/invoice', category: 'Quantity' },
+    { id: 'quality', label: 'Product quality acceptable (colour, odour, texture)', category: 'Quality' },
+    { id: 'labelling', label: 'Correct labelling — allergens, ingredients listed', category: 'Labelling' },
+    { id: 'vehicle', label: 'Delivery vehicle clean and appropriate temp', category: 'Vehicle' },
+];
+
+window._newDeliveryCheck = () => {
+    const E = window.esc;
+    const supplierOpts = (window.suppliers || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(s => '<option value="' + E(s.name) + '">' + E(s.name) + '</option>').join('');
+
+    const checkRows = _deliveryChecks.map(c =>
+        '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:8px;font-size:13px;">' + E(c.label) + '</td>' +
+            '<td style="padding:8px;text-align:center;">' +
+                '<label style="cursor:pointer;margin-right:12px;"><input type="radio" name="dc-' + c.id + '" value="pass" checked> ✅</label>' +
+                '<label style="cursor:pointer;"><input type="radio" name="dc-' + c.id + '" value="fail"> ❌</label>' +
+            '</td>' +
+            '<td style="padding:8px;"><input type="text" class="input-box" placeholder="Notes (if fail)" style="margin:0;padding:4px 6px;font-size:12px;" id="dcn-' + c.id + '"></td>' +
+        '</tr>'
+    ).join('');
+
+    const staffOpts = (window.staffDirectory || []).filter(s => s.status === 'Active' || !s.status)
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(s => '<option value="' + E(s.name) + '">' + E(s.name) + '</option>').join('');
+
+    const html = '<div style="max-height:75vh;overflow-y:auto;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">' +
+            '<div><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Supplier</label>' +
+                '<select class="input-box" id="dc-supplier" style="margin:0;"><option value="">— Select —</option>' + supplierOpts + '<option value="_other">Other (type below)</option></select></div>' +
+            '<div><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Received by</label>' +
+                '<select class="input-box" id="dc-received-by" style="margin:0;"><option value="">— Select —</option>' + staffOpts + '</select></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">' +
+            '<div><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Product Temp (°C)</label>' +
+                '<input type="number" step="0.1" class="input-box" id="dc-temp" placeholder="e.g. 3.5" style="margin:0;"></div>' +
+            '<div><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Invoice / PO Number</label>' +
+                '<input type="text" class="input-box" id="dc-invoice" placeholder="Optional" style="margin:0;"></div>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">' +
+            '<thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;border-bottom:2px solid var(--border);">' +
+                '<th style="padding:6px 8px;text-align:left;">Check</th>' +
+                '<th style="padding:6px 8px;text-align:center;width:100px;">Result</th>' +
+                '<th style="padding:6px 8px;text-align:left;width:160px;">Notes</th>' +
+            '</tr></thead>' +
+            '<tbody>' + checkRows + '</tbody>' +
+        '</table>' +
+        '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">General Notes</label>' +
+        '<textarea class="input-box" id="dc-notes" rows="2" placeholder="Any additional notes about this delivery" style="margin:0;"></textarea>' +
+    '</div>';
+
+    window.confirmAction({
+        title: '📋 Log Delivery Receiving Check',
+        message: html,
+        confirmLabel: '💾 Save Delivery Log',
+        tier: 'standard',
+        onConfirm: () => {
+            const supplier = document.getElementById('dc-supplier')?.value || '';
+            const receivedBy = document.getElementById('dc-received-by')?.value || '';
+            const temp = document.getElementById('dc-temp')?.value || '';
+            const invoice = document.getElementById('dc-invoice')?.value || '';
+            const notes = document.getElementById('dc-notes')?.value || '';
+
+            if (!supplier) {
+                window.showToast('Please select a supplier.', 'error');
+                return;
+            }
+
+            const checks = _deliveryChecks.map(c => {
+                const radios = document.querySelectorAll('input[name="dc-' + c.id + '"]');
+                let pass = true;
+                radios.forEach(r => { if (r.checked && r.value === 'fail') pass = false; });
+                const note = document.getElementById('dcn-' + c.id)?.value || '';
+                return { id: c.id, label: c.label, pass, note };
+            });
+
+            const failCount = checks.filter(c => !c.pass).length;
+
+            const log = {
+                id: window.generateId('dlv'),
+                timestamp: window._isoNow ? window._isoNow() : new Date().toISOString(),
+                supplier,
+                receivedBy,
+                temp: temp ? parseFloat(temp) : null,
+                invoice,
+                notes,
+                checks,
+                allPass: failCount === 0
+            };
+
+            if (!window.deliveryLogs) window.deliveryLogs = [];
+            window.deliveryLogs.push(log);
+            window.saveToDisk();
+
+            if (failCount > 0) {
+                window.showToast('⚠️ Delivery logged with ' + failCount + ' issue' + (failCount !== 1 ? 's' : '') + ' — follow up required!', 'error');
+            } else {
+                window.showToast('✅ Delivery from ' + supplier + ' logged — all checks passed.', 'success');
+            }
+            window.showView('delivery-check');
+        }
+    });
+};
+
+window._deleteDeliveryLog = (idx) => {
+    const logs = (window.deliveryLogs || []).slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    if (!logs[idx]) return;
+    window.confirmAction({
+        title: '🗑️ Delete Delivery Log',
+        message: 'Delete delivery from <strong>' + window.esc(logs[idx].supplier) + '</strong>?',
+        confirmLabel: 'Delete',
+        tier: 'danger',
+        onConfirm: () => {
+            const logId = logs[idx].id;
+            window.deliveryLogs = (window.deliveryLogs || []).filter(l => l.id !== logId);
+            window.saveToDisk();
+            window.showToast('Delivery log deleted.');
+            window.showView('delivery-check');
+        }
+    });
 };
 

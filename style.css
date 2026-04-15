@@ -20,11 +20,13 @@
     --text-muted: #a1a1aa;
 }
 
-body { 
-    margin: 0; 
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-    background: var(--bg-main); 
-    color: var(--text-main); 
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-main);
+    color: var(--text-main);
     -webkit-font-smoothing: antialiased;
 }
 
@@ -511,7 +513,7 @@ table .btn {
     position: absolute;
     top: 100%;
     right: 0;
-    width: 340px;
+    width: min(340px, calc(100vw - 30px));
     max-height: 420px;
     overflow-y: auto;
     background: var(--card-bg);

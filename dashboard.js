@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '13 Apr 2026';
-window._hubBuildId = '20260413c';
+window._hubBuildId = '20260413h';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -274,7 +274,7 @@ function renderCrossContent(venueData, venues) {
             '</div>' +
         '</div>' +
         // Venue cards side by side
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr));gap:20px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:20px;">' +
             venueCards +
         '</div>';
 }

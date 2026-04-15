@@ -138,27 +138,119 @@ window.renderVarianceReport = () => {
 
 
 window.renderAllergenView = () => {
-    return `<div style="max-width: 800px; margin: auto;">
+    const allergenCols = [
+        { key: 'gluten', label: 'Gluten', short: 'GL' },
+        { key: 'dairy', label: 'Dairy', short: 'DA' },
+        { key: 'eggs', label: 'Eggs', short: 'EG' },
+        { key: 'nuts', label: 'Nuts', short: 'NU' },
+        { key: 'shellfish', label: 'Shell\u00ADfish', short: 'SH' },
+        { key: 'fish', label: 'Fish', short: 'FI' },
+        { key: 'soy', label: 'Soy', short: 'SO' },
+        { key: 'sesame', label: 'Sesame', short: 'SE' }
+    ];
+    const dietaryCols = [
+        { key: 'GF', label: 'GF' }, { key: 'DF', label: 'DF' },
+        { key: 'VG', label: 'VG' }, { key: 'V', label: 'V' }, { key: 'NF', label: 'NF' }
+    ];
+
+    const menuRecipes = (window.recipes || []).filter(r => r.type === 'Menu' && !r.archived)
+        .sort((a, b) => (a.category || '').localeCompare(b.category || '') || a.name.localeCompare(b.name));
+
+    const _parseAllergens = (r) => {
+        const flags = (r.allergens || []).join(' ').toLowerCase();
+        const nameLc = r.name.toLowerCase();
+        const contains = {};
+        const dietary = {};
+        allergenCols.forEach(c => {
+            contains[c.key] = flags.includes(c.key) || flags.includes('contains: ' + c.label.toLowerCase().replace('\u00AD',''));
+        });
+        dietaryCols.forEach(c => {
+            dietary[c.key] = flags.includes(c.key.toLowerCase()) || r.name.includes(c.key);
+        });
+        // Special: if "GF" in flags, gluten = false (free of it)
+        if (dietary.GF) contains.gluten = false;
+        if (dietary.DF) contains.dairy = false;
+        if (dietary.NF) contains.nuts = false;
+        return { contains, dietary };
+    };
+
+    let prevCat = '';
+    const rows = menuRecipes.map(r => {
+        const { contains, dietary } = _parseAllergens(r);
+        const scanned = r.allergens && r.allergens.length > 0;
+        let catRow = '';
+        const cat = r.category || 'Uncategorised';
+        if (cat !== prevCat) {
+            prevCat = cat;
+            catRow = `<tr class="allergen-cat-row"><td colspan="${allergenCols.length + dietaryCols.length + 1}" style="padding:8px 10px;font-weight:700;font-size:13px;background:var(--bg);color:var(--text-muted);border-top:2px solid var(--border);">${esc(cat)}</td></tr>`;
+        }
+        const allergenCells = allergenCols.map(c =>
+            `<td style="text-align:center;padding:5px 3px;font-size:16px;" title="${c.label}">${contains[c.key] ? '⚠️' : scanned ? '✓' : '—'}</td>`
+        ).join('');
+        const dietaryCells = dietaryCols.map(c =>
+            `<td style="text-align:center;padding:5px 3px;font-size:12px;font-weight:700;color:${dietary[c.key] ? 'var(--green)' : 'var(--text-muted)'};">${dietary[c.key] ? c.key : ''}</td>`
+        ).join('');
+        return catRow + `<tr style="border-bottom:1px solid var(--border);">` +
+            `<td style="padding:5px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="${esc(r.name)}">${esc(r.name)}</td>` +
+            allergenCells + dietaryCells + `</tr>`;
+    }).join('');
+
+    const scannedCount = menuRecipes.filter(r => r.allergens && r.allergens.length > 0).length;
+
+    return `<div style="max-width:1100px;margin:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
             <div>
                 <h2 style="margin:0">🧪 Allergen Matrix</h2>
-                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Dietary flags from recipe names or AI scan — GF, VG, DF, NF and more</div>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">${scannedCount}/${menuRecipes.length} recipes scanned &nbsp;|&nbsp; ⚠️ = contains &nbsp; ✓ = free &nbsp; — = not scanned</div>
             </div>
-            <button onclick="window.runAiAllergenScan()" class="btn btn-purple">✨ AI Scan Menu</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window._printAllergenMatrix()" class="btn btn-outline">🖨️ Print Matrix</button>
+                <button onclick="window.runAiAllergenScan()" class="btn btn-purple">✨ AI Scan Menu</button>
+            </div>
         </div>
         <div id="allergen-status" style="margin-bottom:15px;"></div>
-        <table style="width:100%; background:var(--card-bg); border-radius:8px; border-collapse:collapse;">
-            <tr style="background:#111; text-align:left;">
-                <th style="padding:8px 12px;">Menu Item</th>
-                <th style="padding:8px 12px;">Dietary Flags</th>
-            </tr>
-            ${(window.recipes || []).filter(r => r.type === 'Menu' && !r.archived).map(r => {
-                let flags = r.allergens && r.allergens.length > 0 ? r.allergens.join(', ') :
-                    `${r.name.includes('GF') ? 'GF ' : ''}${r.name.includes('VG') ? 'VG ' : ''}${r.name.includes('DF') ? 'DF ' : ''}`.trim() || '—';
-                return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 12px;font-size:13px;">${esc(r.name)}</td><td style="padding:7px 12px; color:var(--brand-accent); font-weight:bold;">${esc(flags)}</td></tr>`;
-            }).join('')}
-        </table>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table id="allergen-matrix-table" style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;min-width:700px;">
+                <thead><tr style="background:#111;text-align:center;">
+                    <th style="padding:8px 10px;text-align:left;min-width:140px;font-size:13px;">Recipe</th>
+                    ${allergenCols.map(c => `<th style="padding:6px 3px;font-size:11px;writing-mode:vertical-lr;text-orientation:mixed;min-width:36px;" title="${c.label}">${c.short}</th>`).join('')}
+                    <th style="padding:6px 2px;border-left:2px solid var(--border);font-size:10px;color:var(--text-muted);">|</th>
+                    ${dietaryCols.map(c => `<th style="padding:6px 3px;font-size:11px;color:var(--green);min-width:30px;" title="${c.label}">${c.key}</th>`).join('')}
+                </tr></thead>
+                <tbody>${rows || '<tr><td colspan="' + (allergenCols.length + dietaryCols.length + 1) + '" style="padding:30px;text-align:center;color:var(--text-muted);">No menu recipes found. Add recipes first.</td></tr>'}</tbody>
+            </table>
+        </div>
+        <div class="card" style="margin-top:16px;border-left:4px solid var(--blue);padding:12px 16px;">
+            <p style="margin:0;font-size:12px;color:var(--text-muted);line-height:1.5;"><strong>Legend:</strong> GL=Gluten DA=Dairy EG=Eggs NU=Nuts SH=Shellfish FI=Fish SO=Soy SE=Sesame &nbsp;|&nbsp; GF=Gluten Free DF=Dairy Free VG=Vegan V=Vegetarian NF=Nut Free<br><strong>Tip:</strong> Run <em>AI Scan Menu</em> to auto-detect allergens from recipe ingredients. Print for front-of-house reference.</p>
+        </div>
     </div>`;
+};
+
+window._printAllergenMatrix = () => {
+    const table = document.getElementById('allergen-matrix-table');
+    if (!table) return window.showToast('No matrix to print', 'error');
+    const venue = window._getVenueName();
+    const date = new Date().toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' });
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>Allergen Matrix — ${venue}</title>
+        <style>
+            body { font-family: -apple-system, sans-serif; padding: 20px; color: #111; }
+            h1 { font-size: 18px; margin: 0 0 4px; }
+            .meta { font-size: 12px; color: #666; margin-bottom: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { border: 1px solid #ccc; padding: 4px 6px; }
+            th { background: #f5f5f5; font-size: 10px; }
+            td:first-child { text-align: left; font-weight: 500; }
+            td:not(:first-child) { text-align: center; }
+            .allergen-cat-row td { background: #eee; font-weight: 700; font-size: 11px; }
+            @media print { body { padding: 0; } }
+        </style></head><body>
+        <h1>Allergen Matrix — ${venue}</h1>
+        <div class="meta">Printed ${date} &nbsp;|&nbsp; ⚠️ = contains &nbsp; ✓ = free &nbsp; — = not scanned</div>
+        ${table.outerHTML}
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 300);
 };
 
 window.runAiAllergenScan = async () => {

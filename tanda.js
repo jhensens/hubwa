@@ -12,6 +12,7 @@ window.getTandaToken = () => {
 };
 
 window._tandaErrorShown = false; // throttle: only show one error toast per refresh cycle
+window._tandaConnected = false; // track whether at least one call succeeded this cycle
 window.fetchTanda = async (endpoint) => {
     const token = window.getTandaToken();
     if (!token) return null;
@@ -20,7 +21,9 @@ window.fetchTanda = async (endpoint) => {
             headers: { 'Authorization': 'bearer ' + token, 'Content-Type': 'application/json' }
         });
         if (!res.ok) {
-            if (!window._tandaErrorShown) {
+            // Only show auth errors if no call has succeeded yet (avoids false alarm
+            // when connection works but a secondary endpoint has permission issues)
+            if (!window._tandaErrorShown && !window._tandaConnected) {
                 window._tandaErrorShown = true;
                 if (res.status === 401 || res.status === 403) {
                     window.showToast('Tanda token expired or invalid — update in Settings', 'error');
@@ -30,9 +33,10 @@ window.fetchTanda = async (endpoint) => {
             }
             return null;
         }
+        window._tandaConnected = true;
         return await res.json();
     } catch(e) {
-        if (!window._tandaErrorShown) {
+        if (!window._tandaErrorShown && !window._tandaConnected) {
             window._tandaErrorShown = true;
             window.showToast("Can't reach Tanda API — check internet connection", 'error');
         }
@@ -62,6 +66,7 @@ window._tandaDepartments = [];
 window.loadTandaData = async () => {
     if (!window.getTandaToken()) return;
     window._tandaErrorShown = false; // reset error throttle for this cycle
+    window._tandaConnected = false; // reset connection tracker
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 

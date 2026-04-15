@@ -315,10 +315,49 @@ window.fixAllYields = () => {
     return { fixed, log };
 };
 
+// ── Common ingredient yield suggestions (yield in grams/ml/each per typical buy unit) ──
+const _yieldHints = [
+    { pattern: /chive/i, yield: 20, unit: 'g', hint: '~20g per bunch' },
+    { pattern: /lime/i, yield: 40, unit: 'ml', hint: '~40ml juice per lime' },
+    { pattern: /lemon/i, yield: 50, unit: 'ml', hint: '~50ml juice per lemon' },
+    { pattern: /orange/i, yield: 80, unit: 'ml', hint: '~80ml juice per orange' },
+    { pattern: /cucumber/i, yield: 375, unit: 'g', hint: '~375g per cucumber' },
+    { pattern: /spring roll pastry|rice paper/i, yield: 25, unit: 'each', hint: '~25 sheets per pack' },
+    { pattern: /black garlic/i, yield: 50, unit: 'g', hint: '~50g per bulb' },
+    { pattern: /garlic\b(?!.*black)/i, yield: 60, unit: 'g', hint: '~60g per bulb' },
+    { pattern: /ginger\b/i, yield: 250, unit: 'g', hint: '~250g per piece' },
+    { pattern: /galangal/i, yield: 200, unit: 'g', hint: '~200g per piece' },
+    { pattern: /lemongrass/i, yield: 30, unit: 'g', hint: '~30g per stalk' },
+    { pattern: /kaffir.*lime.*lea|lime.*lea/i, yield: 5, unit: 'g', hint: '~5g per bunch (10-12 leaves)' },
+    { pattern: /coriander|cilantro/i, yield: 30, unit: 'g', hint: '~30g per bunch' },
+    { pattern: /mint\b/i, yield: 25, unit: 'g', hint: '~25g per bunch' },
+    { pattern: /basil\b/i, yield: 25, unit: 'g', hint: '~25g per bunch' },
+    { pattern: /parsley/i, yield: 30, unit: 'g', hint: '~30g per bunch' },
+    { pattern: /shallot|spring onion|scallion/i, yield: 100, unit: 'g', hint: '~100g per bunch' },
+    { pattern: /avocado/i, yield: 170, unit: 'g', hint: '~170g flesh per avocado' },
+    { pattern: /carrot/i, yield: 180, unit: 'g', hint: '~180g per carrot' },
+    { pattern: /onion\b(?!.*spring)/i, yield: 200, unit: 'g', hint: '~200g per onion' },
+    { pattern: /capsicum|bell pepper/i, yield: 200, unit: 'g', hint: '~200g per capsicum' },
+    { pattern: /chilli|chili\b/i, yield: 15, unit: 'g', hint: '~15g per chilli' },
+    { pattern: /egg\b|eggs\b/i, yield: 12, unit: 'each', hint: '12 per dozen' },
+    { pattern: /nori\b/i, yield: 10, unit: 'each', hint: '~10 sheets per pack' },
+    { pattern: /wonton\b/i, yield: 30, unit: 'each', hint: '~30 wrappers per pack' },
+    { pattern: /dumpling\b.*wrapper|gyoza\b.*wrapper/i, yield: 30, unit: 'each', hint: '~30 wrappers per pack' },
+];
+
+window._getYieldHint = (name) => {
+    for (const h of _yieldHints) {
+        if (h.pattern.test(name)) return h;
+    }
+    return null;
+};
+
 // ── Yield Health Check — finds items needing manual yield entry ──
 window.showYieldProblems = () => {
     const problems = [];
     const seen = new Set();
+
+    // Method 1: Items used in recipes with suspicious cost
     (window.recipes || []).forEach(r => {
         (r.ingredients || []).forEach(ing => {
             if (ing.type !== 'inv' || seen.has(ing.ref)) return;
@@ -331,31 +370,48 @@ window.showYieldProblems = () => {
             }
         });
     });
+
+    // Method 2: Items with yield=1 that have a yield hint (likely produce/herbs)
+    (window.inventoryItems || []).forEach(inv => {
+        if (seen.has(inv.id) || inv.archived) return;
+        if (inv.yield > 1) return;
+        const hint = window._getYieldHint(inv.name || '');
+        if (hint) {
+            seen.add(inv.id);
+            problems.push(inv);
+        }
+    });
+
     if (problems.length === 0) {
         window.showToast('No yield problems found!', 'success');
         return;
     }
     // Build a modal showing the problem items with inline edit
     const rows = problems.sort((a, b) => a.name.localeCompare(b.name)).map(inv => {
+        const hint = window._getYieldHint(inv.name || '');
+        const suggestedYield = hint ? hint.yield : '';
+        const suggestedUnit = hint ? hint.unit : (inv.useUnit || 'g');
+        const hintText = hint ? hint.hint : '';
         return `<tr style="border-bottom:1px solid var(--border);">
             <td style="padding:8px;font-size:13px;"><strong>${window.esc(inv.name)}</strong><br>
-                <small style="color:var(--text-muted);">$${Number(inv.price||0).toFixed(2)} / ${window.esc(inv.buyUnit||'unit')}</small></td>
+                <small style="color:var(--text-muted);">$${Number(inv.price||0).toFixed(2)} / ${window.esc(inv.buyUnit||'unit')}</small>
+                ${hintText ? '<br><small style="color:var(--blue);">💡 ' + window.esc(hintText) + '</small>' : ''}</td>
             <td style="padding:8px;text-align:center;font-size:12px;color:var(--red);font-weight:bold;">${inv.yield} ${window.esc(inv.useUnit||'?')}</td>
             <td style="padding:8px;text-align:center;">
-                <input type="number" step="1" class="input-box" value="" placeholder="e.g. 1000" style="width:80px;margin:0;padding:4px;font-size:12px;" id="yfix-${inv.id}">
+                <input type="number" step="1" class="input-box" value="${suggestedYield}" placeholder="e.g. 1000" style="width:80px;margin:0;padding:4px;font-size:12px;" id="yfix-${inv.id}">
             </td>
             <td style="padding:8px;text-align:center;">
                 <select class="input-box" style="width:70px;margin:0;padding:4px;font-size:12px;" id="yufix-${inv.id}">
-                    <option value="g" ${inv.useUnit==='g'?'selected':''}>g</option>
-                    <option value="ml" ${inv.useUnit==='ml'?'selected':''}>ml</option>
-                    <option value="each" ${inv.useUnit==='each'?'selected':''}>each</option>
+                    <option value="g" ${suggestedUnit==='g'?'selected':''}>g</option>
+                    <option value="ml" ${suggestedUnit==='ml'?'selected':''}>ml</option>
+                    <option value="each" ${suggestedUnit==='each'?'selected':''}>each</option>
                 </select>
             </td>
         </tr>`;
     }).join('');
 
     const html = `<div style="max-height:70vh;overflow-y:auto;">
-        <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">These items are priced "per unit" but recipes use them by weight/volume. Set the yield to how many grams/ml are in one buy unit.</p>
+        <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">These items are priced "per unit" but recipes use them by weight/volume. Set the yield to how many grams/ml are in one buy unit. <span style="color:var(--blue);">💡 Suggested values are pre-filled where possible — adjust for your actual suppliers.</span></p>
         <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;border-bottom:2px solid var(--border);">
                 <th style="padding:6px 8px;text-align:left;">Item</th>
@@ -629,6 +685,7 @@ window._orderTabBar = function(activeView) {
         { id: 'order-drafts', label: '📦 Drafts' + ((window.orderDrafts||[]).filter(d=>d.status==='pending').length > 0 ? ' (' + (window.orderDrafts||[]).filter(d=>d.status==='pending').length + ')' : ''), view: 'order-drafts' },
         { id: 'ai-order', label: '✨ AI Suggester', view: 'ai-order' },
         { id: 'invoice', label: '🧾 Invoice Ripper', view: 'invoice' },
+        { id: 'delivery-check', label: '📋 Receiving', view: 'delivery-check' },
         { id: 'order-history', label: '📦 History', view: 'order-history' }
     ];
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">' +

@@ -110,6 +110,7 @@ window.showView = (view) => {
         else if (view === 'ai-order' && window.renderAiOrderView) content.innerHTML = window.renderAiOrderView();
         else if (view === 'order-history' && window.renderOrderHistoryView) content.innerHTML = window.renderOrderHistoryView();
         else if (view === 'order-drafts' && window.renderOrderDraftsView) content.innerHTML = window.renderOrderDraftsView();
+        else if (view === 'delivery-check' && window.renderDeliveryCheckView) content.innerHTML = window.renderDeliveryCheckView();
         // --- STANDALONE VIEWS ---
         else if (view === 'dashboard' && window.renderManagerHub) content.innerHTML = window.renderManagerHub();
         else if (view === 'suppliers' && window.renderSupplierView) content.innerHTML = window.renderSupplierView();

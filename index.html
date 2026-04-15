@@ -18,7 +18,7 @@
 <body>
 
 <div class="app-container">
-    <div class="sidebar no-print">
+    <nav class="sidebar no-print" role="navigation" aria-label="Main navigation">
 
         <!-- LOGO -->
         <div class="brand-header" onclick="window.showView('dashboard')" style="cursor:pointer;padding:12px 10px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -123,31 +123,31 @@
             </div>
             <div id="hub-version" style="font-size:10px;color:rgba(255,255,255,0.25);text-align:center;padding:4px 0;"></div>
         </div>
-    </div>
+    </nav>
 
     <div class="main-wrapper">
         <div class="main-header no-print">
             <button id="venue-badge" onclick="window.renderVenueSwitcher()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:10px;">🏢 Loading...</button>
             <div style="flex:1;max-width:400px;position:relative;margin:0 15px;">
-                <input type="text" id="global-search-input" placeholder="🔍 Search everything..." oninput="window._debouncedGlobalSearch(this.value)" onfocus="if(this.value.length>=2)window.renderGlobalSearchResults(this.value)" class="input-box" style="margin:0;padding:8px 15px;border-radius:20px;font-size:13px;background:var(--bg-main);">
+                <input type="text" id="global-search-input" placeholder="🔍 Search everything..." aria-label="Search everything" role="searchbox" oninput="window._debouncedGlobalSearch(this.value)" onfocus="if(this.value.length>=2)window.renderGlobalSearchResults(this.value)" class="input-box" style="margin:0;padding:8px 15px;border-radius:20px;font-size:13px;background:var(--bg-main);">
                 <div id="global-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;margin-top:5px;max-height:400px;overflow-y:auto;box-shadow:0 15px 40px rgba(0,0,0,0.5);z-index:100;"></div>
             </div>
-            <div id="notif-bell" onclick="window.toggleNotifPanel()" style="position:relative;cursor:pointer;font-size:20px;margin-right:12px;padding:4px;" title="Notifications">
+            <button id="notif-bell" onclick="window.toggleNotifPanel()" aria-label="Notifications" style="position:relative;cursor:pointer;font-size:20px;margin-right:12px;padding:4px;background:none;border:none;" title="Notifications">
                 🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;align-items:center;justify-content:center;padding:0 4px;">0</span>
-            </div>
+            </button>
             <div id="sync-status" class="sync-badge">🟢 Live Sync</div>
         </div>
         
-        <div class="content-area" id="mainContent">
+        <main class="content-area" id="mainContent" role="main">
             <div class="loading-state">
                 <h2>Loading Hub...</h2>
                 <p>Establishing commercial uplink.</p>
             </div>
-        </div>
+        </main>
     </div>
 </div>
 
-<div id="global-modal-overlay" class="modal-overlay" style="display:none;">
+<div id="global-modal-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div id="global-modal-content" class="modal-content"></div>
 </div>
 

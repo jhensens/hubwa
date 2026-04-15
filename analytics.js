@@ -472,37 +472,77 @@ window.renderSalesView = () => {
     }
 
     // Daily trade table — includes wages and notes from new CSV format
+    // Build full date list for period so Tanda data shows even without takings
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const tableRows = periodData.slice().reverse().map(s => {
-        const d = parseDate(s.date);
-        const dayLabel = d ? dayNames[d.getDay()] : '';
-        const wageAmt = Number(s.wages || 0);
-        const wagePctDay = Number(s.total || 0) > 0 && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+    let periodStart, periodEnd;
+    if (tab === 'month-pick') {
+        const selMonth = window._salesMonth || '';
+        if (selMonth) {
+            const [yr, mo] = selMonth.split('-').map(Number);
+            periodStart = new Date(yr, mo-1, 1);
+            periodEnd = new Date(yr, mo, 0); // last day of month
+        }
+    } else if (tab === 'week') {
+        periodStart = thisWeekStart;
+        periodEnd = new Date(today);
+    } else if (tab === 'lastweek') {
+        periodStart = lastWeekStart;
+        periodEnd = new Date(thisWeekStart - 1);
+    } else if (tab === 'days7') {
+        periodStart = last7Start;
+        periodEnd = new Date(today);
+    } else {
+        periodStart = thisMonthStart;
+        periodEnd = new Date(today);
+    }
 
-        // Tanda wage lookup: convert DD/MM/YYYY to YYYY-MM-DD
+    // Build lookup of salesData by DD/MM/YYYY key
+    const salesByDate = {};
+    periodData.forEach(s => { salesByDate[s.date] = s; });
+
+    // Generate all dates in range
+    const allPeriodDates = [];
+    if (periodStart && periodEnd) {
+        const cursor = new Date(periodEnd);
+        cursor.setHours(0,0,0,0);
+        const pStart = new Date(periodStart);
+        pStart.setHours(0,0,0,0);
+        while (cursor >= pStart) {
+            allPeriodDates.push(new Date(cursor));
+            cursor.setDate(cursor.getDate() - 1);
+        }
+    }
+
+    const tableRows = allPeriodDates.map(d => {
+        const dateStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+        const s = salesByDate[dateStr] || null;
+        const dayLabel = dayNames[d.getDay()];
+        const hasTakings = s && Number(s.total || 0) > 0;
+        const wageAmt = s ? Number(s.wages || 0) : 0;
+        const wagePctDay = hasTakings && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+
+        // Tanda wage lookup
         var tandaWageCell = '—';
         var tandaData = window._tandaData || {};
         var weeklyActual = tandaData.weeklyActual || {};
-        if (d) {
-            var isoDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-            var tandaDay = weeklyActual[isoDate];
-            if (tandaDay && tandaDay.cost > 0) {
-                var tandaPct = Number(s.total || 0) > 0 ? ' (' + ((tandaDay.cost / Number(s.total)) * 100).toFixed(0) + '%)' : '';
-                tandaWageCell = '<span style="color:var(--blue);">$' + Math.round(tandaDay.cost).toLocaleString('en-AU') + tandaPct + '</span>' +
-                    '<br><small style="color:var(--text-muted);">' + tandaDay.hours.toFixed(1) + 'h · ' + tandaDay.count + ' staff</small>';
-            }
+        var isoDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        var tandaDay = weeklyActual[isoDate];
+        if (tandaDay && tandaDay.cost > 0) {
+            var tandaPct = hasTakings ? ' (' + ((tandaDay.cost / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+            tandaWageCell = '<span style="color:var(--blue);">$' + Math.round(tandaDay.cost).toLocaleString('en-AU') + tandaPct + '</span>' +
+                '<br><small style="color:var(--text-muted);">' + tandaDay.hours.toFixed(1) + 'h · ' + tandaDay.count + ' staff</small>';
         }
 
-        return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;" onclick="window.manualTakingsForm(\''+s.date+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
-            '<td style="padding:7px 8px;font-size:12px;">' + s.date + '</td>' +
+        return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;' + (!hasTakings ? 'opacity:0.6;' : '') + '" onclick="window.manualTakingsForm(\''+dateStr+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
+            '<td style="padding:7px 8px;font-size:12px;">' + dateStr + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
-            '<td style="padding:10px;">$' + Number(s.eftpos||0).toFixed(2) + '</td>' +
-            '<td style="padding:10px;">$' + Number(s.cash||0).toFixed(2) + '</td>' +
-            '<td style="padding:6px 8px;font-size:13px;">' + (Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
-            '<td style="padding:10px;font-weight:bold;color:var(--green);">$' + Number(s.total||0).toFixed(2) + '</td>' +
+            '<td style="padding:10px;">' + (hasTakings ? '$' + Number(s.eftpos||0).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:10px;">' + (hasTakings ? '$' + Number(s.cash||0).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:6px 8px;font-size:13px;">' + (s && Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:10px;font-weight:bold;color:var(--green);">' + (hasTakings ? '$' + Number(s.total).toFixed(2) : '—') + '</td>' +
             '<td style="padding:10px;font-size:12px;">' + tandaWageCell + '</td>' +
             '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
-            '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + esc(s.notes || '') + '</td>' +
+            '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + esc(s ? s.notes || '' : '') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -555,7 +595,7 @@ window.renderSalesView = () => {
         '<div class="card" style="padding:0;overflow:hidden;">' +
             '<div style="padding:12px 20px;background:#111;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
                 '<h3 style="margin:0;font-size:15px;">Daily Breakdown — ' + periodLabel + '</h3>' +
-                '<span style="font-size:12px;color:var(--text-muted);">' + periodData.length + ' days</span>' +
+                '<span style="font-size:12px;color:var(--text-muted);">' + allPeriodDates.length + ' days' + (periodData.length < allPeriodDates.length ? ' · ' + periodData.length + ' with takings' : '') + '</span>' +
             '</div>' +
             '<div style="max-height:300px;overflow-y:auto;">' +
                 '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +

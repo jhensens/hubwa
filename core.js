@@ -173,6 +173,7 @@ window.onboardingTemplates = {
     'BOH (Back of House)': { 'Day 1: Kitchen': [{id: 'boh1', label: 'Kitchen Safety'}], 'Compliance': [{id: 'boh3', label: 'Upload Food Safety Cert', isUpload: true, cat: 'Food Safety Certs'}] }
 };
 window.taskZones = ["FOH", "BOH", "Bar", "Office", "Maintenance", "All Areas"];
+window.deliveryLogs = [];
 window.fridgeUnits = ["Walk-in Coolroom", "Walk-in Freezer", "Kitchen Line Fridge", "Kitchen Prep Fridge", "Bar Under-counter 1", "Bar Under-counter 2", "Bar Display Fridge", "Dessert Reach-in"];
 window.masterChecklists = {
     "Weekly Deep Clean \u2014 Kitchen": ["Exhaust hood & filters degreased","Behind all equipment pulled out & cleaned","Cool room shelves & floor scrubbed","Grease traps flushed & scraped","Under benches & sinks wiped","Oven interior deep clean","Dry stores shelving wiped & organised","Dishwasher & glasswasher interior cleaned"],
@@ -224,10 +225,13 @@ window.openModal = (titleHtml, bodyHtml) => {
     const content = document.getElementById('global-modal-content');
     if(!overlay || !content) return;
 
+    // Store the element that opened the modal so we can restore focus on close
+    window._modalReturnFocus = document.activeElement;
+
     content.innerHTML = `
         <div style="padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--card-bg); z-index: 10; border-radius: 12px 12px 0 0;">
-            <h3 style="margin: 0; color: var(--brand-dark); font-size: 18px;">${titleHtml}</h3>
-            <button onclick="window.closeModal()" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            <h3 id="modal-title" style="margin: 0; color: var(--brand-dark); font-size: 18px;">${titleHtml}</h3>
+            <button onclick="window.closeModal()" aria-label="Close dialog" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
         </div>
         <div style="padding: 20px;">
             ${bodyHtml}
@@ -241,15 +245,36 @@ window.closeModal = () => {
     const overlay = document.getElementById('global-modal-overlay');
     if(overlay) overlay.style.display = 'none';
     document.body.style.overflow = '';
+    // Restore focus to the element that opened the modal
+    if (window._modalReturnFocus && window._modalReturnFocus.focus) {
+        window._modalReturnFocus.focus();
+        window._modalReturnFocus = null;
+    }
 };
 
 // --- 2b. KEYBOARD SHORTCUTS ---
 document.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('global-modal-overlay');
+    const modalOpen = overlay && overlay.style.display !== 'none';
+
     // Esc → close modal
-    if (e.key === 'Escape') {
-        const overlay = document.getElementById('global-modal-overlay');
-        if (overlay && overlay.style.display !== 'none') { window.closeModal(); e.preventDefault(); return; }
+    if (e.key === 'Escape' && modalOpen) { window.closeModal(); e.preventDefault(); return; }
+
+    // Focus trap: Tab cycles within modal when open
+    if (e.key === 'Tab' && modalOpen) {
+        const content = document.getElementById('global-modal-content');
+        if (!content) return;
+        const focusable = content.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (focusable.length === 0) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first || !content.contains(document.activeElement)) { e.preventDefault(); last.focus(); }
+        } else {
+            if (document.activeElement === last || !content.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        }
+        return;
     }
+
     const mod = e.metaKey || e.ctrlKey;
     // Cmd/Ctrl + S → save
     if (mod && e.key === 's') { e.preventDefault(); if (window.saveToDisk) window.saveToDisk(); if (window.showToast) window.showToast('Saved.'); return; }
@@ -496,4 +521,4 @@ window._seedAllBWI = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'orderDrafts', 'lsApiPullLog', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones'];
+window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'orderDrafts', 'lsApiPullLog', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones', 'deliveryLogs'];

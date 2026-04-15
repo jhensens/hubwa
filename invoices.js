@@ -40,7 +40,7 @@ window.renderInvoiceView = () => {
         <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
 
             <!-- LEFT: Upload + Results -->
-            <div style="flex:1; min-width:350px;">
+            <div style="flex:1; min-width:min(350px,100%);">
                 <div class="card" style="border-top:5px solid var(--blue); text-align:center; padding:30px; margin-bottom:20px;">
                     <div style="font-size:40px; margin-bottom:10px;">📄</div>
                     <p style="color:var(--text-muted); margin:0 0 15px 0; font-size:13px;">PDF invoice or scanned image from your Brother scanner</p>
@@ -630,7 +630,7 @@ window.openBatchInvoiceUpload = () => {
 
         <div id="batch-inv-workspace" style="display:none;">
             <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
-                <div style="flex:1;min-width:350px;">
+                <div style="flex:1;min-width:min(350px,100%);">
                     <div class="card" style="border-top:5px solid var(--blue);text-align:center;padding:30px;margin-bottom:20px;">
                         <div style="font-size:40px;margin-bottom:10px;">📄</div>
                         <p id="batch-inv-current-file" style="color:var(--text-muted);margin:0 0 15px 0;font-size:13px;"></p>

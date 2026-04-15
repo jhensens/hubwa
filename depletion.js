@@ -342,7 +342,7 @@ window.showDepletionConfirmation = function(salesItems, source) {
         preview.unmatched.forEach(function(u, i) {
             html += '<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border); gap:10px;">' +
                 '<div style="min-width:0; flex:1;"><strong style="color:var(--orange);">' + esc(u.rawName) + '</strong><br><small style="color:var(--text-muted);">Sold: ' + u.qtySold + '</small></div>' +
-                '<select id="map-unknown-' + i + '" class="input-box" style="width:250px; margin:0; border-color:var(--orange); flex-shrink:0;">' + recipeOpts + '</select>' +
+                '<select id="map-unknown-' + i + '" class="input-box" style="width:min(250px,100%); margin:0; border-color:var(--orange);">' + recipeOpts + '</select>' +
             '</div>';
         });
         html += '</div>';
