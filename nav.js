@@ -123,6 +123,7 @@ window.showView = (view) => {
         else if (view === 'incidents' && window.renderIncidentView) content.innerHTML = window.renderIncidentView();
         else if (view === 'handover' && window.renderHandoverView) content.innerHTML = window.renderHandoverView();
         else if ((view === 'knowledge' || view === 'sops') && window.renderKnowledgeView) content.innerHTML = window.renderKnowledgeView();
+        else if (view === 'sop-compliance' && window.renderSOPComplianceView) content.innerHTML = window.renderSOPComplianceView();
         else if (view === 'rosters' && window.renderRosterView) content.innerHTML = window.renderRosterView();
         else if (view === 'wastage' && window.renderWastageView) content.innerHTML = window.renderWastageView();
         else if (view === 'zones' && window.renderZoneManager) content.innerHTML = window.renderZoneManager();

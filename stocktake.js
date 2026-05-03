@@ -290,19 +290,193 @@ Recipes: ${JSON.stringify(recipeData)}`;
     } catch (e) { window.hideLoadingOverlay(); statusDiv.innerHTML = `<div class="card" style="border-left:4px solid var(--red); padding:12px; color:var(--red);">AI Error: ${e.message}</div>`; }
 };
 
+// =============================================================================
+// SEVENROOMS BOOKING PARSER
+// Parses pasted CSV/TSV booking data into structured bookings.
+// Falls back to free-text mode if no recognisable CSV format detected.
+// =============================================================================
+
+// Column header alias map — fuzzy matched (lowercased, punctuation stripped)
+window._srColumnAliases = {
+    time: ['time', 'reservationtime', 'starttime', 'bookingtime', 'arrival', 'arrivaltime'],
+    party_size: ['partysize', 'guests', 'covercount', 'pax', 'covers', 'size', 'people', 'guestcount'],
+    guest_name: ['guestname', 'reservationname', 'clientname', 'name', 'bookingname', 'customer'],
+    dietary: ['dietaryrestrictions', 'dietary', 'allergies', 'allergy', 'restrictions', 'dietaryneeds'],
+    notes: ['notes', 'reservationnotes', 'specialrequests', 'request', 'comments', 'guestnotes'],
+    vip: ['vip', 'clienttype', 'tags', 'guesttags', 'vipstatus'],
+    occasion: ['specialoccasion', 'occasion', 'celebration'],
+    table: ['table', 'tablenumber', 'seating', 'tablename'],
+    date: ['date', 'reservationdate', 'bookingdate']
+};
+
+// Allergen keyword detection (used for both dietary parsing and recipe matching)
+window._srAllergenKeywords = {
+    'gluten': { aliases: ['gluten', 'gf', 'celiac', 'coeliac', 'wheat'], type: 'avoid', label: 'Gluten Free' },
+    'dairy': { aliases: ['dairy', 'lactose', 'milk', 'df', 'lactose intolerant'], type: 'avoid', label: 'Dairy Free' },
+    'nuts': { aliases: ['nut', 'nuts', 'peanut', 'tree nut', 'almond', 'cashew'], type: 'avoid', label: 'Nut Allergy' },
+    'shellfish': { aliases: ['shellfish', 'crustacean', 'prawn', 'shrimp', 'crab', 'lobster'], type: 'avoid', label: 'Shellfish Allergy' },
+    'fish': { aliases: ['fish', 'seafood', 'pescatarian'], type: 'avoid', label: 'Fish Allergy' },
+    'soy': { aliases: ['soy', 'soya', 'soybean'], type: 'avoid', label: 'Soy Allergy' },
+    'sesame': { aliases: ['sesame', 'tahini'], type: 'avoid', label: 'Sesame Allergy' },
+    'eggs': { aliases: ['egg', 'eggs'], type: 'avoid', label: 'Egg Allergy' },
+    'vegan': { aliases: ['vegan', 'vg', 'plant based', 'plant-based'], type: 'preference', label: 'Vegan' },
+    'vegetarian': { aliases: ['vegetarian', 'veggie'], type: 'preference', label: 'Vegetarian' }
+};
+
+// Normalise a column header to a canonical key, or null if unknown
+window._srMatchColumn = (header) => {
+    const norm = String(header || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [key, aliases] of Object.entries(window._srColumnAliases)) {
+        if (aliases.includes(norm)) return key;
+    }
+    return null;
+};
+
+// Parse a single CSV/TSV line respecting quoted fields
+window._srParseLine = (line, delim) => {
+    const out = [];
+    let cur = '', inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"' && (i === 0 || line[i-1] !== '\\')) { inQuotes = !inQuotes; continue; }
+        if (c === delim && !inQuotes) { out.push(cur.trim()); cur = ''; continue; }
+        cur += c;
+    }
+    out.push(cur.trim());
+    return out;
+};
+
+// Main parser — returns { format, bookings, totalCovers, byTime, date }
+window._parseBookings = (text) => {
+    if (!text || !text.trim()) return { format: 'empty', bookings: [], totalCovers: 0, byTime: {}, date: null };
+
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) return { format: 'text', bookings: [], totalCovers: 0, byTime: {}, date: null };
+
+    // Detect delimiter (comma vs tab)
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const delim = tabCount > commaCount ? '\t' : ',';
+
+    // Need ≥3 delimiters in header to consider it CSV
+    if ((delim === ',' ? commaCount : tabCount) < 2) {
+        return { format: 'text', bookings: [], totalCovers: 0, byTime: {}, date: null };
+    }
+
+    // Parse header row and map columns
+    const headers = window._srParseLine(firstLine, delim);
+    const colMap = {};
+    let recognisedCount = 0;
+    headers.forEach((h, i) => {
+        const key = window._srMatchColumn(h);
+        if (key) { colMap[key] = i; recognisedCount++; }
+    });
+
+    // Need at least party_size + (time OR guest_name) to be useful CSV
+    if (recognisedCount < 2 || colMap.party_size === undefined) {
+        return { format: 'text', bookings: [], totalCovers: 0, byTime: {}, date: null };
+    }
+
+    // Parse data rows
+    const bookings = [];
+    let totalCovers = 0;
+    let detectedDate = null;
+    for (let li = 1; li < lines.length; li++) {
+        const cells = window._srParseLine(lines[li], delim);
+        if (cells.length < 2) continue;
+        const get = (k) => colMap[k] !== undefined ? (cells[colMap[k]] || '') : '';
+        const partySize = parseInt(get('party_size')) || 0;
+        if (partySize === 0) continue; // skip rows with no covers
+        const booking = {
+            time: get('time'),
+            partySize,
+            guestName: get('guest_name'),
+            dietary: get('dietary'),
+            notes: get('notes'),
+            vip: get('vip'),
+            occasion: get('occasion'),
+            table: get('table'),
+            date: get('date')
+        };
+        bookings.push(booking);
+        totalCovers += partySize;
+        if (booking.date && !detectedDate) detectedDate = booking.date;
+    }
+
+    if (bookings.length === 0) return { format: 'text', bookings: [], totalCovers: 0, byTime: {}, date: null };
+
+    // Group by time
+    const byTime = {};
+    bookings.forEach(b => {
+        const t = b.time || 'Unknown';
+        if (!byTime[t]) byTime[t] = [];
+        byTime[t].push(b);
+    });
+
+    return { format: 'csv', bookings, totalCovers, byTime, date: detectedDate };
+};
+
+// Build allergen briefing from parsed bookings — cross-references against recipe.allergens
+window._buildAllergenBriefing = (bookings) => {
+    if (!bookings || bookings.length === 0) return null;
+    const detected = {}; // { gluten: { count, guests: [], recipes: [] } }
+    bookings.forEach(b => {
+        const txt = ((b.dietary || '') + ' ' + (b.notes || '')).toLowerCase();
+        if (!txt.trim()) return;
+        for (const [key, def] of Object.entries(window._srAllergenKeywords)) {
+            if (def.aliases.some(a => txt.includes(a))) {
+                if (!detected[key]) detected[key] = { count: 0, guests: [], def };
+                detected[key].count += b.partySize;
+                if (b.guestName) detected[key].guests.push(b.guestName + (b.time ? ' ('+b.time+')' : ''));
+            }
+        }
+    });
+
+    if (Object.keys(detected).length === 0) return null;
+
+    // Cross-reference with recipes
+    const menuRecipes = (window.recipes || []).filter(r => r.type === 'Menu' && !r.archived);
+    Object.keys(detected).forEach(key => {
+        const matches = [];
+        menuRecipes.forEach(r => {
+            const flags = (r.allergens || []).join(' ').toLowerCase();
+            const recipeName = r.name.toLowerCase();
+            const def = detected[key].def;
+            if (def.type === 'avoid') {
+                // Recipe contains this allergen?
+                if (flags.includes(key) || flags.includes('contains: '+key) || def.aliases.some(a => recipeName.includes(a))) {
+                    matches.push(r.name);
+                }
+            } else if (def.type === 'preference' && key === 'vegan') {
+                if (flags.includes('vg') || flags.includes('vegan')) matches.push(r.name);
+            } else if (def.type === 'preference' && key === 'vegetarian') {
+                if (flags.includes('vegetarian') || flags.includes('vg') || flags.includes(' v ') || r.name.includes('(V)')) matches.push(r.name);
+            }
+        });
+        detected[key].recipes = matches.slice(0, 8); // cap at 8 to keep readable
+    });
+
+    return detected;
+};
+
+// =============================================================================
+// RUN SHEET VIEW
+// =============================================================================
 window.renderSheetGenView = () => {
     return `<div style="max-width: 1100px; margin: auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
             <div>
                 <h2 style="margin:0">📄 AI Run Sheet Generator</h2>
-                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Paste booking data to generate a smart run sheet for tonight's service</div>
+                <div style="color:var(--text-muted);font-size:13px;margin-top:2px">Paste SevenRooms data to auto-extract covers, allergens & VIPs — then generate a smart run sheet</div>
             </div>
             <button onclick="window.print()" class="btn btn-outline" style="background:white; color:black; font-weight:bold;">🖨️ Print Run Sheet</button>
         </div>
         <div style="display:flex; gap:20px; flex-wrap:wrap;">
             <div class="card no-print" style="flex:1; min-width:300px;">
                 <label style="font-size:12px; color:var(--text-muted);">Paste SevenRooms / booking data below</label>
-                <textarea id="raw-bookings" class="input-box" style="height:200px; font-size:12px; white-space:pre; margin-top:8px;" placeholder="Paste booking text or CSV from SevenRooms..."></textarea>
+                <textarea id="raw-bookings" class="input-box" style="height:200px; font-size:12px; white-space:pre; margin-top:8px;" placeholder="Paste booking CSV from SevenRooms (with headers like Time, Party Size, Guest Name, Dietary Restrictions, Tags)..." oninput="window._previewBookings()"></textarea>
+                <div id="bookings-preview" style="margin-top:10px;"></div>
                 <button onclick="window.generateRunSheet()" class="btn btn-purple" style="width:100%; font-size:16px; margin-top:10px;">✨ Generate Smart Sheet</button>
             </div>
             <div class="card" id="print-section" style="flex:2; background:white; color:black; min-height:600px; min-width:550px; padding:30px;">
@@ -312,16 +486,87 @@ window.renderSheetGenView = () => {
     </div>`;
 };
 
+// Live preview as user types/pastes
+window._previewBookings = () => {
+    const raw = document.getElementById('raw-bookings').value;
+    const previewDiv = document.getElementById('bookings-preview');
+    if (!raw.trim()) { previewDiv.innerHTML = ''; return; }
+
+    const parsed = window._parseBookings(raw);
+    if (parsed.format !== 'csv') {
+        previewDiv.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:8px;background:var(--bg-main);border-radius:6px;">📝 Free-text mode — AI will interpret this. (Paste a SevenRooms CSV with headers for structured extraction.)</div>';
+        return;
+    }
+
+    const briefing = window._buildAllergenBriefing(parsed.bookings);
+    const vips = parsed.bookings.filter(b => b.vip && b.vip.toLowerCase().includes('vip'));
+    const occasions = parsed.bookings.filter(b => b.occasion && b.occasion.trim());
+
+    let html = '<div style="background:var(--bg-main);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;">';
+    html += '<div style="font-weight:600;color:var(--green);margin-bottom:6px;">✓ Parsed ' + parsed.bookings.length + ' bookings · <strong>' + parsed.totalCovers + ' covers</strong></div>';
+    html += '<div style="color:var(--text-muted);font-size:11px;margin-bottom:8px;">Time spread: ' + Object.keys(parsed.byTime).filter(t => t !== 'Unknown').sort().slice(0, 4).join(', ') + (Object.keys(parsed.byTime).length > 4 ? '...' : '') + '</div>';
+
+    if (vips.length > 0) {
+        html += '<div style="margin-top:6px;color:var(--purple);"><strong>🌟 ' + vips.length + ' VIP' + (vips.length>1?'s':'') + ':</strong> ' + vips.slice(0,3).map(v => esc(v.guestName||'Unnamed')).join(', ') + (vips.length>3 ? ' +'+(vips.length-3)+' more' : '') + '</div>';
+    }
+    if (occasions.length > 0) {
+        html += '<div style="margin-top:6px;color:var(--orange);"><strong>🎉 ' + occasions.length + ' special occasion' + (occasions.length>1?'s':'') + ':</strong> ' + occasions.slice(0,3).map(o => esc((o.occasion||'')+' — '+(o.guestName||''))).join('; ') + '</div>';
+    }
+    if (briefing) {
+        html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);"><strong style="color:var(--red);">⚠️ Dietary alerts:</strong>';
+        Object.entries(briefing).forEach(([key, info]) => {
+            html += '<div style="margin-top:4px;font-size:11px;">• <strong>' + esc(info.def.label) + '</strong> ×' + info.count + (info.recipes.length > 0 ? ' <span style="color:var(--text-muted);">— affects: ' + info.recipes.slice(0,3).map(esc).join(', ') + (info.recipes.length>3?' +'+(info.recipes.length-3):'') + '</span>' : '') + '</div>';
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+    previewDiv.innerHTML = html;
+};
+
 window.generateRunSheet = async () => {
     const rawText = document.getElementById('raw-bookings').value;
     const outputDiv = document.getElementById('run-sheet-output');
     if (!rawText.trim()) return window.showToast("Paste booking data first.", "error");
+
+    const parsed = window._parseBookings(rawText);
+    const isStructured = parsed.format === 'csv';
+
     outputDiv.innerHTML = `<p style="text-align:center; color:#666;">🤖 Generating run sheet...</p>`;
     window.showLoadingOverlay('🤖 Generating run sheet...');
-    const prompt = `You are a hospitality operations AI for Bar Wa Izakaya in Hobart. Generate a professional run sheet from this booking data.
-Format as clean HTML using only inline styles (white background, black text — this will be printed). 
+
+    // Auto-log booked covers if structured + we can determine the date
+    if (isStructured && parsed.totalCovers > 0) {
+        const targetDate = parsed.date || window._isoDate();
+        if (window._autoLogBookedCovers) window._autoLogBookedCovers(targetDate, parsed.totalCovers, parsed.bookings.length);
+    }
+
+    // Build the AI prompt — structured if possible, free-text otherwise
+    let prompt;
+    if (isStructured) {
+        const briefing = window._buildAllergenBriefing(parsed.bookings);
+        const briefingSummary = briefing ? Object.entries(briefing).map(([k,v]) => `${v.def.label}: ${v.count}pax (avoid: ${v.recipes.slice(0,3).join(', ')||'n/a'})`).join('; ') : 'none';
+        const vips = parsed.bookings.filter(b => b.vip && b.vip.toLowerCase().includes('vip'));
+        const occasions = parsed.bookings.filter(b => b.occasion && b.occasion.trim());
+
+        prompt = `You are a hospitality operations AI for ${window._getVenueName()} in Hobart. Generate a professional run sheet.
+Format as clean HTML using only inline styles (white background, black text — for printing).
+
+Structure:
+1. Header: venue name, date, total covers (${parsed.totalCovers}), # bookings (${parsed.bookings.length})
+2. ${vips.length > 0 || occasions.length > 0 ? 'A "🌟 SPECIAL ATTENTION TONIGHT" callout box at the top listing VIPs and special occasions in red/bold' : ''}
+3. ${briefing ? 'A "⚠️ DIETARY HEADS-UP" callout box listing allergens with counts and affected dishes to avoid: ' + briefingSummary : ''}
+4. Bookings grouped by time slot with: time, party name, pax, table, dietary, notes
+5. End with a staff prep checklist (5-8 actionable items based on the bookings — e.g. set up extra GF station if GF guests, prep birthday plate, etc.)
+
+Booking data (JSON):
+${JSON.stringify(parsed.bookings, null, 2)}`;
+    } else {
+        prompt = `You are a hospitality operations AI for ${window._getVenueName()} in Hobart. Generate a professional run sheet from this booking data.
+Format as clean HTML using only inline styles (white background, black text — this will be printed).
 Include: date/time, pax count, booking name, special requirements, staff notes. Group by time slot. Add a staff checklist section at the end.
 Booking data: ${rawText}`;
+    }
+
     try {
         const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -333,7 +578,7 @@ Booking data: ${rawText}`;
         const text = data.candidates[0].content.parts[0].text;
         outputDiv.innerHTML = text.replace(/^```html/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
         window.hideLoadingOverlay();
-        window.showToast("Run sheet generated!");
+        window.showToast(isStructured ? `Run sheet generated · ${parsed.totalCovers} covers` : "Run sheet generated!");
     } catch (e) { window.hideLoadingOverlay(); outputDiv.innerHTML = `<p style="color:red;">Error: ${e.message}</p>`; }
 };
 

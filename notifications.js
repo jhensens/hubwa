@@ -72,14 +72,27 @@ window.getNotifications = function() {
         }
     });
 
-    // Expiring documents (<30 days)
+    // Expiring documents (<30 days) — only for docs the current user can see
     (window.digitalSafe || []).forEach(d => {
         if (!d.expiry) return;
+        if (window._canSeeDoc && !window._canSeeDoc(d)) return;
         const exp = new Date(d.expiry);
         const daysLeft = (exp - now) / 86400000;
         if (daysLeft < 0) notifs.push({type:'doc', icon:'📄', text: d.name + ' has EXPIRED', view:'safe', priority:0});
         else if (daysLeft <= 30) notifs.push({type:'doc', icon:'📄', text: d.name + ' expires in ' + Math.ceil(daysLeft) + 'd', view:'safe', priority:1});
     });
+
+    // Outstanding SOP acknowledgements for the current logged-in staff member
+    if (window._activeStaffMember && window._isSOPAcked) {
+        (window.knowledgeBase || []).forEach((k,i) => {
+            if (!k.requireAck) return;
+            if (window._canSeeDoc && !window._canSeeDoc(k)) return;
+            const sopId = window._sopId(k, i);
+            if (!window._isSOPAcked(sopId)) {
+                notifs.push({type:'sop-ack', icon:'📋', text: 'Read & acknowledge: ' + k.title, view:'knowledge', priority:1});
+            }
+        });
+    }
 
     // Below par stock
     (window.inventoryItems || []).filter(i => !i.archived && i.par && i.stock < i.par).forEach(i => {

@@ -125,11 +125,13 @@ window.saveToDisk = () => {
 window.loadData = () => {
     // Manual reload — pull from Firebase and re-render
     const _vidLD = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => { try { window[k] = JSON.parse(localStorage.getItem(_vidLD+'_'+k) || localStorage.getItem(k)) || window[k]; } catch(e) {} });
+    if (window._backfillDocAccessLevels) window._backfillDocAccessLevels();
     if (typeof db !== 'undefined') {
         db.collection('venueData').doc(window.getVenueDocId()).get().then((doc) => {
             if (doc.exists) {
                 let data = doc.data();
                 window.saveKeys.forEach(k => { if (data[k] !== undefined) window[k] = data[k]; });
+                if (window._backfillDocAccessLevels) window._backfillDocAccessLevels();
                 const _vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi'; window.saveKeys.forEach(k => localStorage.setItem(_vid+'_'+k, JSON.stringify(window[k])));
                 window.checkLockState();
                 // Don't re-render here — avoid loop. User can navigate normally.

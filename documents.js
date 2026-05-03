@@ -40,19 +40,57 @@ window.renderSafeView = function() {
     const viewMode = window._safeViewMode || 'grid';
     const searchQ = (window._safeSearchQuery || '').toLowerCase();
 
-    // Filter by tab + search
-    let indexed = docs.map((d,i) => ({...d, originalIndex:i}));
+    // Filter by tier (access control), then tab + search + tag + tier-pill + recent/pinned
+    const tierPill = window._safeTierFilter || '';
+    const tagFilter = window._safeTagFilter || '';
+    const showPinnedOnly = window._safeShowPinnedOnly || false;
+    const showRecentOnly = window._safeShowRecentOnly || false;
+    const pinnedIds = window._getPinnedDocIds();
+    const recentIds = window._getRecentDocIds().map(r => r.id);
+
+    let indexed = docs.map((d,i) => ({...d, originalIndex:i}))
+        .filter(d => window._canSeeDoc(d));
+    if (tierPill) indexed = indexed.filter(d => (d.accessLevel || 'manager') === tierPill);
     if (activeTab !== 'all') indexed = indexed.filter(d => (d.category || 'General / Other') === activeTab);
-    if (searchQ.length >= 2) indexed = indexed.filter(d => (d.name||'').toLowerCase().includes(searchQ) || (d.notes||'').toLowerCase().includes(searchQ) || (d.category||'').toLowerCase().includes(searchQ));
-    const filteredDocs = window._safeSortDocs(indexed);
+    if (tagFilter) indexed = indexed.filter(d => (d.tags || []).includes(tagFilter));
+    if (showPinnedOnly) indexed = indexed.filter(d => pinnedIds.includes(window._docId(d, d.originalIndex)));
+    if (showRecentOnly) indexed = indexed.filter(d => recentIds.includes(window._docId(d, d.originalIndex)));
+    if (searchQ.length >= 2) {
+        const terms = searchQ.split(/\s+/).filter(Boolean);
+        indexed = indexed.filter(d => {
+            const hay = ((d.name||'') + ' ' + (d.notes||'') + ' ' + (d.category||'') + ' ' + ((d.tags||[]).join(' '))).toLowerCase();
+            return terms.every(t => hay.includes(t));
+        });
+    }
+    // Pinned first, then existing sort
+    let filteredDocs = window._safeSortDocs(indexed);
+    filteredDocs.sort((a, b) => {
+        const ap = pinnedIds.includes(window._docId(a, a.originalIndex)) ? 0 : 1;
+        const bp = pinnedIds.includes(window._docId(b, b.originalIndex)) ? 0 : 1;
+        return ap - bp;
+    });
 
     // Tab pills — only show categories that have docs (plus All)
-    const tabPills = [`<span class="tag-pill ${activeTab === 'all' ? 'active' : ''}" onclick="window._safeActiveTab='all';window.showView('safe');">All (${docs.length})</span>`]
+    const visibleDocs = docs.filter(d => window._canSeeDoc(d));
+    const tabPills = [`<span class="tag-pill ${activeTab === 'all' && !window._safeShowPinnedOnly && !window._safeShowRecentOnly && !window._safeTierFilter ? 'active' : ''}" onclick="window._safeActiveTab='all';window._safeShowPinnedOnly=false;window._safeShowRecentOnly=false;window._safeTierFilter='';window._safeTagFilter='';window.showView('safe');">All (${visibleDocs.length})</span>`]
         .concat(cats.map(c => {
-            const count = docs.filter(d => (d.category || 'General / Other') === c).length;
+            const count = visibleDocs.filter(d => (d.category || 'General / Other') === c).length;
             if (count === 0 && activeTab !== c) return '';
             return `<span class="tag-pill ${activeTab === c ? 'active' : ''}" onclick="window._safeActiveTab='${E(c).replace(/'/g,"\\'")}';window.showView('safe');">${E(c)} (${count})</span>`;
         })).filter(Boolean).join('');
+
+    // Smart-filter pills (above category pills): Pinned, Recent, Tier
+    const pinnedCount = window._getPinnedDocIds().length;
+    const recentCount = window._getRecentDocIds().length;
+    const role = window._activeStaffMember?.role;
+    const showDirPill = role === 'Director' || (!window._activeStaffMember && !window.isLocked);
+    const smartPills =
+        (pinnedCount > 0 ? `<span class="tag-pill ${window._safeShowPinnedOnly ? 'active' : ''}" onclick="window._safeShowPinnedOnly=!window._safeShowPinnedOnly;window._safeShowRecentOnly=false;window.showView('safe');">⭐ Pinned (${pinnedCount})</span>` : '') +
+        (recentCount > 0 ? `<span class="tag-pill ${window._safeShowRecentOnly ? 'active' : ''}" onclick="window._safeShowRecentOnly=!window._safeShowRecentOnly;window._safeShowPinnedOnly=false;window.showView('safe');">🕐 Recent (${recentCount})</span>` : '') +
+        `<span class="tag-pill ${window._safeTierFilter==='general' ? 'active' : ''}" style="border-color:#10b981;" onclick="window._safeTierFilter=window._safeTierFilter==='general'?'':'general';window.showView('safe');">🟢 General</span>` +
+        `<span class="tag-pill ${window._safeTierFilter==='manager' ? 'active' : ''}" style="border-color:#3b82f6;" onclick="window._safeTierFilter=window._safeTierFilter==='manager'?'':'manager';window.showView('safe');">🔵 Manager</span>` +
+        (showDirPill ? `<span class="tag-pill ${window._safeTierFilter==='director' ? 'active' : ''}" style="border-color:#eab308;" onclick="window._safeTierFilter=window._safeTierFilter==='director'?'':'director';window.showView('safe');">🟡 Director</span>` : '') +
+        (window._safeTagFilter ? `<span class="tag-pill active" style="background:rgba(139,92,246,0.3);border-color:#a78bfa;" onclick="window._safeTagFilter='';window.showView('safe');">#${E(window._safeTagFilter)} ✕</span>` : '');
 
     // Expiry alerts
     const expiringSoon = docs.filter(d => d.expiry && ((new Date(d.expiry) - new Date()) / 86400000) <= 30 && new Date(d.expiry) > new Date());
@@ -72,23 +110,34 @@ window.renderSafeView = function() {
         docsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px;">${filteredDocs.map(d => {
             const st = window._safeGetStatus(d);
             const borderColor = st.color;
-            return `<div class="card" style="border-top:5px solid ${borderColor};margin-bottom:0;padding:20px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-                    <div style="flex:1;padding-right:10px;">
+            const docId = window._docId(d, d.originalIndex);
+            const isPdf = (d.type === 'pdf') || /\.pdf(\?|#|$)/i.test(d.data||'');
+            const thumbHTML = isPdf
+                ? '<div style="height:120px;background:#1a1a1a;border-radius:6px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;overflow:hidden;"><img data-pdf-thumb="' + window.safeUrl(d.data||'') + '" style="max-width:100%;max-height:100%;opacity:0;transition:opacity 0.3s;" alt=""><span style="position:absolute;color:#666;font-size:36px;">📄</span></div>'
+                : '';
+            return `<div class="card" style="border-top:5px solid ${borderColor};margin-bottom:0;padding:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:6px;">
+                    <div style="flex:1;padding-right:6px;min-width:0;">
                         <h4 style="margin:0 0 4px 0;font-size:15px;">${E(d.name)}</h4>
-                        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${E(d.category || 'General')}</span>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">${E(d.category || 'General')}</span>
+                            ${window._tierBadge(d.accessLevel)}
+                        </div>
                     </div>
-                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <div style="display:flex;gap:2px;flex-shrink:0;align-items:flex-start;">
+                        ${window._pinStarHTML(docId)}
                         <button onclick="window.editDocForm(${d.originalIndex})" class="btn-touch" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;" title="Edit">✏️</button>
                         <button onclick="window.delDoc(${d.originalIndex})" class="btn-touch" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;" title="Delete">&times;</button>
                     </div>
                 </div>
+                ${thumbHTML}
                 ${d.notes ? `<p style="margin:4px 0 8px 0;font-size:12px;color:var(--text-muted);line-height:1.4;">${E(d.notes)}</p>` : ''}
-                <p style="margin:4px 0 12px 0;font-size:12px;color:${st.color};">
+                ${window._renderTagChips(d.tags, {clickable:true})}
+                <p style="margin:8px 0 10px 0;font-size:12px;color:${st.color};">
                     ${d.expiry ? (st.label === 'EXPIRED' ? '⚠️ Expired: ' : st.label === 'Expiring' ? '📅 Expires: ' : 'Expires: ') + d.expiry : 'No expiry set'}
                     <span style="background:${st.color};color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">${st.label}</span>
                 </p>
-                ${d.data ? `<a href="${window.safeUrl(d.data)}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">📄 View / Download</a>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
+                ${d.data ? `<button onclick="window._openDocViewer(window.digitalSafe[${d.originalIndex}])" class="btn btn-outline" style="display:block;width:100%;text-align:center;font-size:12px;">📄 View / Download</button>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="display:block;text-align:center;text-decoration:none;font-size:12px;">🔗 Open Link</a>` : ''}
             </div>`;
         }).join('')}</div>`;
     }
@@ -97,20 +146,25 @@ window.renderSafeView = function() {
     if (filteredDocs.length > 0 && viewMode === 'table') {
         docsHtml = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;">
             <thead><tr style="text-align:left;background:#111;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;">
+                <th style="padding:10px 6px;width:30px;"></th>
                 <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('name')">Name</th>
                 <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('category')">Category</th>
+                <th style="padding:10px 12px;">Tier</th>
                 <th style="padding:10px 12px;cursor:pointer;" onclick="window._safeSortBy('expiry')">Expiry</th>
                 <th style="padding:10px 12px;">Status</th>
                 <th style="padding:10px 12px;text-align:right;">Actions</th>
             </tr></thead><tbody>${filteredDocs.map(d => {
                 const st = window._safeGetStatus(d);
+                const docId = window._docId(d, d.originalIndex);
                 return `<tr style="border-bottom:1px solid var(--bg-main);">
-                    <td style="padding:10px 12px;"><strong style="font-size:13px;">${E(d.name)}</strong>${d.notes ? '<br><span style="font-size:11px;color:var(--text-muted);">'+E(d.notes).substring(0,60)+(d.notes.length>60?'...':'')+'</span>' : ''}</td>
+                    <td style="padding:6px;text-align:center;">${window._pinStarHTML(docId)}</td>
+                    <td style="padding:10px 12px;"><strong style="font-size:13px;">${E(d.name)}</strong>${d.notes ? '<br><span style="font-size:11px;color:var(--text-muted);">'+E(d.notes).substring(0,60)+(d.notes.length>60?'...':'')+'</span>' : ''}${(d.tags||[]).length ? '<br>' + window._renderTagChips(d.tags, {clickable:true}) : ''}</td>
                     <td style="padding:10px 12px;font-size:12px;color:var(--text-muted);">${E(d.category||'General')}</td>
+                    <td style="padding:10px 12px;">${window._tierBadge(d.accessLevel)}</td>
                     <td style="padding:10px 12px;font-size:12px;color:${st.color};">${d.expiry || '—'}</td>
                     <td style="padding:10px 12px;"><span style="background:${st.color};color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;">${st.label}</span></td>
                     <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
-                        ${d.data ? `<a href="${window.safeUrl(d.data)}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">📄 View</a>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">🔗 Open</a>` : ''}
+                        ${d.data ? `<button onclick="window._openDocViewer(window.digitalSafe[${d.originalIndex}])" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-right:4px;">📄 View</button>` : d.link ? `<a href="${window.safeUrl(d.link)}" target="_blank" class="btn btn-outline" style="font-size:11px;padding:4px 8px;text-decoration:none;margin-right:4px;">🔗 Open</a>` : ''}
                         <button onclick="window.editDocForm(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-right:4px;">✏️</button>
                         <button onclick="window.delDoc(${d.originalIndex})" class="btn btn-outline" style="font-size:11px;padding:4px 8px;color:var(--red);">&times;</button>
                     </td>
@@ -138,9 +192,11 @@ window.renderSafeView = function() {
             </div>
         </div>
         ${alertHtml}
-        <input type="text" class="search-bar" placeholder="🔍 Search documents and notes..." oninput="window._safeSearchQuery=this.value;window.showView('safe')" value="${window._safeSearchQuery||''}" style="margin-bottom:15px;">
+        <input type="text" class="search-bar" placeholder="🔍 Search documents, notes, tags... (press / to focus)" oninput="window._safeSearchQuery=this.value;window.showView('safe')" value="${window._safeSearchQuery||''}" style="margin-bottom:12px;">
+        <div style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;">${smartPills}</div>
         <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:6px;">${tabPills}</div>
         ${emptyHtml}${docsHtml}
+        <script>setTimeout(() => { if (window._applyPdfThumbs) window._applyPdfThumbs(); }, 50);</script>
     </div>`;
 };
 
@@ -206,6 +262,10 @@ window.bulkUploadForm = () => {
     const html = `
         <label style="font-size:11px;color:var(--text-muted);">Category for all files</label>
         <select id="bulk-cat" class="input-box">${catOpts}</select>
+        <label style="font-size:11px;color:var(--text-muted);">Access Tier (applies to all)</label>
+        ${window._tierSelect('manager', 'bulk-tier')}
+        <label style="font-size:11px;color:var(--text-muted);">Tags (optional — applies to all, comma separated)</label>
+        ${window._tagInputHTML([], 'bulk-tags')}
         <label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional — applies to all)</label>
         <input type="date" id="bulk-expiry" class="input-box">
         <label style="font-size:11px;color:var(--text-muted);">Notes (optional — applies to all)</label>
@@ -237,8 +297,11 @@ window.runBulkUpload = async () => {
             await fileRef.put(file);
             const downloadURL = await fileRef.getDownloadURL();
             window.digitalSafe.push({
+                id: (window.generateId ? window.generateId('doc') : 'doc_' + Date.now() + '_' + uploaded),
                 name: file.name.replace(/\.[^.]+$/, ''),
                 category: cat, expiry: expiry, notes: notes,
+                accessLevel: (document.getElementById('bulk-tier') || {}).value || 'manager',
+                tags: window._readTagInput('bulk-tags'),
                 type: file.type.includes('pdf') ? 'pdf' : 'image',
                 data: downloadURL,
                 uploadDate: new Date().toISOString(),
@@ -262,6 +325,10 @@ window.addDocForm = () => {
         <select id="d-cat" class="input-box">${catOpts}</select>
         <label style="font-size:11px;color:var(--text-muted);">Document Name</label>
         <input type="text" id="d-name" class="input-box" placeholder="e.g. Liquor License 2026">
+        <label style="font-size:11px;color:var(--text-muted);">Access Tier — who can see this?</label>
+        ${window._tierSelect('manager', 'd-tier')}
+        <label style="font-size:11px;color:var(--text-muted);">Tags (Optional — comma separated)</label>
+        ${window._tagInputHTML([], 'd-tags')}
         <label style="font-size:11px;color:var(--text-muted);">Expiry Date (Optional)</label>
         <input type="date" id="d-expiry" class="input-box">
         <label style="font-size:11px;color:var(--text-muted);">Notes (Optional)</label>
@@ -278,6 +345,8 @@ window.subDoc = async () => {
     const category = document.getElementById('d-cat').value;
     const expiry = document.getElementById('d-expiry').value;
     const notes = (document.getElementById('d-notes') || {}).value || '';
+    const accessLevel = (document.getElementById('d-tier') || {}).value || 'manager';
+    const tags = window._readTagInput('d-tags');
     const fileInput = document.getElementById('d-file');
     const linkInput = document.getElementById('d-link');
     const link = linkInput ? linkInput.value.trim() : '';
@@ -287,17 +356,18 @@ window.subDoc = async () => {
     const btn = document.getElementById('btn-doc-save');
     btn.innerText = 'Saving... ⏳'; btn.disabled = true;
 
+    const newId = (window.generateId ? window.generateId('doc') : 'doc_' + Date.now());
     if (fileInput.files.length) {
         try {
             const file = fileInput.files[0];
             const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
             await fileRef.put(file);
             const downloadURL = await fileRef.getDownloadURL();
-            window.digitalSafe.push({ name, category, expiry, notes, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
+            window.digitalSafe.push({ id: newId, name, category, expiry, notes, accessLevel, tags, type: file.type.includes('pdf') ? 'pdf' : 'image', data: downloadURL, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
             window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast('Document Secured!');
         } catch (error) { window.showToast('Upload failed.', 'error'); btn.innerText = 'Save to Safe'; btn.disabled = false; }
     } else {
-        window.digitalSafe.push({ name, category, expiry, notes, type: 'link', link: link, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
+        window.digitalSafe.push({ id: newId, name, category, expiry, notes, accessLevel, tags, type: 'link', link: link, uploadDate: new Date().toISOString(), lastUpdated: new Date().toISOString() });
         window.saveToDisk(); window.closeModal(); window.showView('safe'); window.showToast('Document Secured!');
     }
 };
@@ -311,30 +381,41 @@ window.editDocForm = (i) => {
     const E = window.esc;
     const cats = (window.safeCategories || []);
     const catOpts = cats.map(c => '<option value="' + E(c) + '" ' + (c === doc.category ? 'selected' : '') + '>' + E(c) + '</option>').join('');
+    const versionsLink = (doc.versions && doc.versions.length > 0)
+        ? '<div style="text-align:right;margin-top:-8px;margin-bottom:8px;"><button onclick="window.viewVersionHistory(' + i + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">📜 Version History (' + doc.versions.length + ')</button></div>'
+        : '';
     const html = '<label style="font-size:11px;color:var(--text-muted);">Document Name</label>' +
         '<input type="text" id="edit-doc-name" class="input-box" value="' + E(doc.name||'') + '" placeholder="e.g. Liquor License 2026">' +
         '<label style="font-size:11px;color:var(--text-muted);">Category</label>' +
         '<select id="edit-doc-cat" class="input-box"><option value="">-- Select Category --</option>' + catOpts + '</select>' +
+        '<label style="font-size:11px;color:var(--text-muted);">Access Tier — who can see this?</label>' +
+        window._tierSelect(doc.accessLevel, 'edit-doc-tier') +
+        '<label style="font-size:11px;color:var(--text-muted);">Tags (comma separated)</label>' +
+        window._tagInputHTML(doc.tags || [], 'edit-doc-tags') +
         '<label style="font-size:11px;color:var(--text-muted);">Expiry Date (optional)</label>' +
         '<input type="date" id="edit-doc-expiry" class="input-box" value="' + (doc.expiry||'') + '">' +
         '<label style="font-size:11px;color:var(--text-muted);">Notes</label>' +
         '<input type="text" id="edit-doc-notes" class="input-box" value="' + E(doc.notes||'') + '" placeholder="e.g. Policy details, renewal info">' +
-        '<label style="font-size:11px;color:var(--text-muted);">Replace File (optional — leave empty to keep current)</label>' +
-        '<input type="file" id="edit-doc-file" accept="application/pdf,image/*,.doc,.docx,.xlsx,.xls" class="input-box" style="padding:12px;margin-bottom:20px;">' +
-        '<button onclick="window.saveDocEdit(' + i + ')" class="btn btn-green" style="width:100%;" id="btn-edit-doc-save">Save Changes</button>';
+        '<label style="font-size:11px;color:var(--text-muted);">Replace File (optional — keeps prior 5 versions)</label>' +
+        '<input type="file" id="edit-doc-file" accept="application/pdf,image/*,.doc,.docx,.xlsx,.xls" class="input-box" style="padding:12px;margin-bottom:8px;">' +
+        versionsLink +
+        '<button onclick="window.saveDocEdit(' + i + ')" class="btn btn-green" style="width:100%;margin-top:12px;" id="btn-edit-doc-save">Save Changes</button>';
     window.openModal('✏️ Edit — ' + E(doc.name||'Untitled'), html);
 };
 
 window.saveDocEdit = async (i) => {
     const name = document.getElementById('edit-doc-name').value.trim();
     if (!name) return window.showToast('Name is required.', 'error');
+    if (!window.digitalSafe[i].id) window.digitalSafe[i].id = (window.generateId ? window.generateId('doc') : 'doc_' + Date.now());
     window.digitalSafe[i].name = name;
     window.digitalSafe[i].category = document.getElementById('edit-doc-cat').value;
+    window.digitalSafe[i].accessLevel = (document.getElementById('edit-doc-tier') || {}).value || window.digitalSafe[i].accessLevel || 'manager';
+    window.digitalSafe[i].tags = window._readTagInput('edit-doc-tags');
     window.digitalSafe[i].expiry = document.getElementById('edit-doc-expiry').value;
     window.digitalSafe[i].notes = (document.getElementById('edit-doc-notes') || {}).value || '';
     window.digitalSafe[i].lastUpdated = new Date().toISOString();
 
-    // Handle file replacement
+    // Handle file replacement (with version history)
     const fileInput = document.getElementById('edit-doc-file');
     if (fileInput && fileInput.files.length) {
         const btn = document.getElementById('btn-edit-doc-save');
@@ -344,6 +425,9 @@ window.saveDocEdit = async (i) => {
             const fileRef = storage.ref().child('safe_docs/' + Date.now() + '_' + file.name);
             await fileRef.put(file);
             const downloadURL = await fileRef.getDownloadURL();
+            // Push old file to versions before overwriting
+            const oldUrl = window.digitalSafe[i].data;
+            if (oldUrl) window._addVersionToDoc(i, oldUrl, 'Replaced ' + new Date().toLocaleDateString('en-AU'));
             window.digitalSafe[i].data = downloadURL;
             window.digitalSafe[i].type = file.type.includes('pdf') ? 'pdf' : 'image';
         } catch (err) {
@@ -522,14 +606,15 @@ window._renderKbCards = () => {
     const activeTab = window._kbActiveTab || 'all';
     const search = (window._kbSearch || '').toLowerCase().trim();
 
-    let filtered = activeTab === 'all' ? kb.map((k,i) => ({...k, idx:i}))
-        : kb.map((k,i) => ({...k, idx:i})).filter(k => k.category === activeTab);
+    // Apply tier-based access filter first
+    let filtered = kb.map((k,i) => ({...k, idx:i, sopId: window._sopId(k,i)})).filter(k => window._canSeeDoc(k));
+    if (activeTab !== 'all') filtered = filtered.filter(k => k.category === activeTab);
 
-    // Full-text search across title + content + category
+    // Full-text search — now includes tags
     if (search) {
         const terms = search.split(/\s+/);
         filtered = filtered.filter(k => {
-            const haystack = ((k.title||'') + ' ' + (k.content||'') + ' ' + (k.category||'')).toLowerCase();
+            const haystack = ((k.title||'') + ' ' + (k.content||'') + ' ' + (k.category||'') + ' ' + ((k.tags||[]).join(' '))).toLowerCase();
             return terms.every(t => haystack.includes(t));
         });
     }
@@ -555,16 +640,29 @@ window._renderKbCards = () => {
         return t;
     };
 
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px;">' + filtered.map(k =>
-        '<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(' + k.idx + ')" onmouseover="this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.transform=\'translateY(0)\'">' +
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
-                '<h4 style="margin:0;font-size:15px;flex:1;padding-right:8px;">' + highlight(k.title, 100) + '</h4>' +
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px;">' + filtered.map(k => {
+        const ackRequired = k.requireAck;
+        const isAcked = ackRequired && window._isSOPAcked(k.sopId);
+        const ackBadge = ackRequired
+            ? (isAcked ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid #10b98140;" title="You acknowledged this">✓ Acked</span>'
+                       : '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444440;" title="Required reading">📋 Required</span>')
+            : '';
+        // Strip HTML for the preview snippet
+        const plainContent = k.content ? k.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g,' ').trim() : '';
+        return '<div class="card" style="margin:0;padding:20px;cursor:pointer;transition:transform 0.2s;border-top:4px solid var(--blue);" onclick="window.viewSOP(' + k.idx + ')" onmouseover="this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.transform=\'translateY(0)\'">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:6px;">' +
+                '<h4 style="margin:0;font-size:15px;flex:1;padding-right:6px;">' + highlight(k.title, 100) + '</h4>' +
                 (k.fileUrl ? '<span style="font-size:18px;flex-shrink:0;" title="Has attachment">📎</span>' : '') +
             '</div>' +
-            '<span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);display:inline-block;margin-bottom:10px;">' + esc(k.category || 'General') + '</span>' +
-            (k.content ? '<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">' + highlight(k.content, 120) + '</p>' : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>') +
-        '</div>'
-    ).join('') + '</div>';
+            '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">' +
+                '<span style="font-size:11px;color:var(--text-muted);background:var(--bg-main);padding:2px 8px;border-radius:8px;border:1px solid var(--border);">' + esc(k.category || 'General') + '</span>' +
+                window._tierBadge(k.accessLevel) +
+                ackBadge +
+            '</div>' +
+            (plainContent ? '<p style="color:var(--text-muted);font-size:13px;margin:0;line-height:1.4;">' + highlight(plainContent, 120) + '</p>' : '<p style="color:var(--text-muted);font-size:13px;margin:0;font-style:italic;">File attachment only</p>') +
+            window._renderTagChips(k.tags, {clickable:false}) +
+        '</div>';
+    }).join('') + '</div>';
 };
 
 window.renderKnowledgeView = () => {
@@ -633,28 +731,44 @@ window.newSOPForm = () => {
     const cats = window.kbCategories || [];
     const catOpts = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     const html = `
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
             <div><label style="font-size:11px;color:var(--text-muted);">SOP Title</label>
             <input type="text" id="k-title" class="input-box" placeholder="e.g. Opening Procedure" style="margin:0;"></div>
             <div><label style="font-size:11px;color:var(--text-muted);">Category</label>
             <input type="text" id="k-cat" class="input-box" placeholder="e.g. FOH" list="kb-cat-list" style="margin:0;">
             <datalist id="kb-cat-list">${catOpts}</datalist></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Access Tier</label>
+            ${window._tierSelect('manager', 'k-tier')}</div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Tags (comma separated)</label>
+            ${window._tagInputHTML([], 'k-tags')}</div>
+        </div>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="k-require-ack" style="width:auto;margin:0;"> Require staff to acknowledge they've read this (compliance tracking)
+        </label>
         <label style="font-size:11px;color:var(--text-muted);">Content (optional if uploading a file)</label>
-        <textarea id="k-content" class="input-box" placeholder="Write SOP content here..." style="height:200px;margin-bottom:15px;line-height:1.6;"></textarea>
+        <div id="k-content-host" style="margin-bottom:15px;">
+            <textarea id="k-content" class="input-box" placeholder="Loading editor…" style="height:200px;line-height:1.6;"></textarea>
+        </div>
         <label style="font-size:11px;color:var(--text-muted);">Attach File — PDF or image (optional)</label>
         <input type="file" id="k-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
         <button onclick="window.saveSOP()" class="btn btn-green" style="width:100%;font-size:15px;" id="btn-sop-save">Save SOP</button>`;
     window.openModal('📚 New SOP / Document', html);
+    window.loadQuill(() => window._mountQuill('k-content-host', ''));
 };
 
 window.saveSOP = async () => {
     const title = document.getElementById('k-title').value.trim();
-    const content = document.getElementById('k-content').value.trim();
+    const content = (window._readQuill && window._readQuill()) || (document.getElementById('k-content') || {}).value || '';
     const cat = document.getElementById('k-cat').value.trim() || 'General';
+    const accessLevel = (document.getElementById('k-tier') || {}).value || 'manager';
+    const tags = window._readTagInput('k-tags');
+    const requireAck = !!(document.getElementById('k-require-ack') || {}).checked;
     const fileInput = document.getElementById('k-file');
     if (!title) return window.showToast('Title is required.', 'error');
-    if (!content && !fileInput.files.length) return window.showToast('Add content or attach a file.', 'error');
+    const plainContent = content.replace(/<[^>]+>/g, '').trim();
+    if (!plainContent && !fileInput.files.length) return window.showToast('Add content or attach a file.', 'error');
 
     const btn = document.getElementById('btn-sop-save');
     btn.innerText = 'Saving...'; btn.disabled = true;
@@ -673,7 +787,9 @@ window.saveSOP = async () => {
     if (!window.kbCategories) window.kbCategories = [];
     if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
 
-    window.knowledgeBase.push({ title, category: cat, content, fileUrl, lastModified: window._isoDate() });
+    const newId = (window.generateId ? window.generateId('sop') : 'sop_' + Date.now());
+    window.knowledgeBase.push({ id: newId, title, category: cat, content, fileUrl, accessLevel, tags, requireAck, lastModified: window._isoDate() });
+    window._quillInstance = null; // release editor
     window.saveToDisk();
     window.closeModal();
     window.showView('knowledge');
@@ -683,6 +799,31 @@ window.saveSOP = async () => {
 window.viewSOP = (i) => {
     const k = window.knowledgeBase[i];
     if (!k) return;
+    if (!window._canSeeDoc(k)) {
+        window.showToast('You don\'t have access to this SOP.', 'error');
+        return window.showView('knowledge');
+    }
+    const sopId = window._sopId(k, i);
+    const isAcked = k.requireAck && window._isSOPAcked(sopId);
+    const showAckButton = k.requireAck && window._activeStaffMember && !isAcked;
+    const ackHTML = showAckButton
+        ? '<div style="margin-top:30px;padding:20px;background:rgba(16,185,129,0.08);border:2px solid var(--green);border-radius:10px;text-align:center;">' +
+            '<p style="margin:0 0 12px 0;font-size:14px;font-weight:600;">📋 Required Reading</p>' +
+            '<p style="margin:0 0 14px 0;font-size:13px;color:var(--text-muted);">Confirm you have read and understood this SOP. Your manager will see this.</p>' +
+            '<button onclick="window.ackSOP(\'' + sopId.replace(/\\/g,"\\\\").replace(/'/g,"\\'") + '\', \'' + esc(k.title).replace(/'/g,"\\'") + '\')" class="btn btn-green" style="font-size:15px;padding:10px 24px;">✅ I\'ve read and understood this</button>' +
+          '</div>'
+        : (k.requireAck && isAcked
+            ? '<div style="margin-top:24px;padding:14px;background:rgba(16,185,129,0.06);border-left:4px solid var(--green);border-radius:6px;font-size:13px;color:var(--green);font-weight:600;">✓ You acknowledged this SOP</div>'
+            : '');
+
+    // Render content (HTML if present, else plain text)
+    const isHtml = /<[a-z][\s\S]*>/i.test(k.content || '');
+    const contentBlock = k.content
+        ? (isHtml
+            ? '<div class="sop-content" style="line-height:1.8;font-size:15px;color:var(--text-main);">' + k.content + '</div>'
+            : '<div style="white-space:pre-wrap;line-height:1.8;font-size:15px;color:var(--text-main);">' + esc(k.content) + '</div>')
+        : '<p style="color:var(--text-muted);font-style:italic;">No written content — see attached file above.</p>';
+
     document.getElementById('mainContent').innerHTML = `
     <div class="card" style="max-width:800px;margin:auto;padding:40px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -693,15 +834,22 @@ window.viewSOP = (i) => {
             </div>
         </div>
         <h2 style="margin:0 0 8px 0;">${esc(k.title)}</h2>
-        <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
+        <div style="display:flex;gap:6px;margin-bottom:15px;flex-wrap:wrap;align-items:center;">
             <span class="tag-pill" style="margin:0;">${esc(k.category || 'General')}</span>
+            ${window._tierBadge(k.accessLevel)}
+            ${k.requireAck ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(234,179,8,0.15);color:#eab308;border:1px solid #eab30840;">📋 REQUIRES ACK</span>' : ''}
             ${k.lastModified ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Last updated: ${k.lastModified}</span>` : ''}
         </div>
-        ${k.fileUrl ? `<div style="margin-bottom:20px;padding:15px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        ${(k.tags && k.tags.length) ? window._renderTagChips(k.tags, {clickable:false}) : ''}
+        ${k.fileUrl ? `<div style="margin:20px 0;padding:15px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <span style="font-size:13px;color:var(--text-muted);">📎 Attached file</span>
-            <a href="${k.fileUrl}" target="_blank" download class="btn btn-outline" style="text-decoration:none;font-size:12px;">Download / View</a>
+            <div style="display:flex;gap:6px;">
+                <button onclick="window._openDocViewer({fileUrl:'${esc(k.fileUrl)}', name:'${esc(k.title).replace(/'/g,"\\'")}', type: ${/\.pdf(\?|#|$)/i.test(k.fileUrl) ? "'pdf'" : "'image'"}})" class="btn btn-blue" style="font-size:12px;">👁️ View Inline</button>
+                <a href="${k.fileUrl}" target="_blank" download class="btn btn-outline" style="text-decoration:none;font-size:12px;">⬇ Download</a>
+            </div>
         </div>` : ''}
-        ${k.content ? `<div style="white-space:pre-wrap;line-height:1.8;font-size:15px;color:var(--text-main);">${esc(k.content)}</div>` : '<p style="color:var(--text-muted);font-style:italic;">No written content — see attached file above.</p>'}
+        ${contentBlock}
+        ${ackHTML}
     </div>`;
 };
 
@@ -711,15 +859,26 @@ window.editSOPForm = (i) => {
     const cats = window.kbCategories || [];
     const catOpts = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     const html = `
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:15px;">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
             <div><label style="font-size:11px;color:var(--text-muted);">Title</label>
             <input type="text" id="k-edit-title" class="input-box" value="${esc(k.title)}" style="margin:0;"></div>
             <div><label style="font-size:11px;color:var(--text-muted);">Category</label>
             <input type="text" id="k-edit-cat" class="input-box" value="${esc(k.category||'')}" list="kb-edit-cats" style="margin:0;">
             <datalist id="kb-edit-cats">${catOpts}</datalist></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div><label style="font-size:11px;color:var(--text-muted);">Access Tier</label>
+            ${window._tierSelect(k.accessLevel, 'k-edit-tier')}</div>
+            <div><label style="font-size:11px;color:var(--text-muted);">Tags (comma separated)</label>
+            ${window._tagInputHTML(k.tags || [], 'k-edit-tags')}</div>
+        </div>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="k-edit-require-ack" ${k.requireAck ? 'checked' : ''} style="width:auto;margin:0;"> Require staff to acknowledge they've read this
+        </label>
         <label style="font-size:11px;color:var(--text-muted);">Content</label>
-        <textarea id="k-edit-content" class="input-box" style="height:200px;margin-bottom:15px;line-height:1.6;">${esc(k.content||'')}</textarea>
+        <div id="k-edit-content-host" style="margin-bottom:15px;">
+            <textarea id="k-edit-content" class="input-box" style="height:200px;line-height:1.6;">${esc(k.content||'')}</textarea>
+        </div>
         ${k.fileUrl ? `<div style="margin-bottom:15px;padding:10px;background:var(--bg-main);border-radius:6px;font-size:13px;display:flex;justify-content:space-between;">
             <span>📎 Existing file attached</span>
             <a href="${k.fileUrl}" target="_blank" style="color:var(--blue);text-decoration:none;">View</a>
@@ -728,12 +887,16 @@ window.editSOPForm = (i) => {
         <input type="file" id="k-edit-file" accept="application/pdf,image/*" class="input-box" style="padding:12px;margin-bottom:20px;">
         <button onclick="window.updateSOP(${i})" class="btn btn-green" style="width:100%;" id="btn-sop-edit">Save Changes</button>`;
     window.openModal('✏️ Edit SOP', html);
+    window.loadQuill(() => window._mountQuill('k-edit-content-host', k.content || ''));
 };
 
 window.updateSOP = async (i) => {
     const title = document.getElementById('k-edit-title').value.trim();
     const cat = document.getElementById('k-edit-cat').value.trim() || 'General';
-    const content = document.getElementById('k-edit-content').value.trim();
+    const content = (window._readQuill && window._readQuill()) || (document.getElementById('k-edit-content') || {}).value || '';
+    const accessLevel = (document.getElementById('k-edit-tier') || {}).value || 'manager';
+    const tags = window._readTagInput('k-edit-tags');
+    const requireAck = !!(document.getElementById('k-edit-require-ack') || {}).checked;
     const fileInput = document.getElementById('k-edit-file');
     if (!title) return window.showToast('Title required.', 'error');
     const btn = document.getElementById('btn-sop-edit');
@@ -748,7 +911,9 @@ window.updateSOP = async (i) => {
     }
     if (!window.kbCategories) window.kbCategories = [];
     if (cat && cat !== 'General' && !window.kbCategories.includes(cat)) window.kbCategories.push(cat);
-    window.knowledgeBase[i] = { ...window.knowledgeBase[i], title, category: cat, content, fileUrl, lastModified: window._isoDate() };
+    if (!window.knowledgeBase[i].id) window.knowledgeBase[i].id = (window.generateId ? window.generateId('sop') : 'sop_' + Date.now());
+    window.knowledgeBase[i] = { ...window.knowledgeBase[i], title, category: cat, content, fileUrl, accessLevel, tags, requireAck, lastModified: window._isoDate() };
+    window._quillInstance = null;
     window.saveToDisk(); window.closeModal(); window.viewSOP(i); window.showToast('SOP Updated!');
 };
 
@@ -857,3 +1022,522 @@ window._doSeedKB = () => {
     window.showToast(sops.length + ' BWI SOPs loaded!');
     window.showView('knowledge');
 };
+
+// =============================================================================
+// DOC-HUB v2 — Tier access, tags, pinning, recent, inline viewer, versioning, SOP acks
+// =============================================================================
+
+// --- ACCESS TIER ---
+window._canSeeDoc = (doc) => {
+    if (!doc) return false;
+    const level = doc.accessLevel || 'manager'; // safe default
+    const role = window._activeStaffMember?.role;
+    const isKioskUnlocked = !window._activeStaffMember && !window.isLocked;
+    if (level === 'general') return true;
+    if (level === 'manager') return role === 'Manager' || role === 'Director' || isKioskUnlocked;
+    if (level === 'director') return role === 'Director' || isKioskUnlocked;
+    return false;
+};
+
+window._currentRoleLabel = () => {
+    const role = window._activeStaffMember?.role;
+    if (role) return role;
+    if (!window.isLocked) return 'Master';
+    return 'Locked';
+};
+
+// --- BACKFILL: silent migration of older docs to 'manager' tier ---
+window._backfillDocAccessLevels = () => {
+    let touched = 0;
+    (window.digitalSafe || []).forEach(d => { if (!d.accessLevel) { d.accessLevel = 'manager'; touched++; } });
+    (window.knowledgeBase || []).forEach(k => { if (!k.accessLevel) { k.accessLevel = 'manager'; touched++; } });
+    if (touched > 0) {
+        if (window.logAudit) window.logAudit('digitalSafe', 'tier-backfill', null, 'Backfilled ' + touched + ' documents/SOPs to Manager tier');
+        if (window.saveToDisk) window.saveToDisk();
+    }
+    return touched;
+};
+
+// --- TIER UI HELPERS ---
+window._tierBadge = (level) => {
+    const lvl = level || 'manager';
+    const cfg = {
+        'general':  { label: 'General',  color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+        'manager':  { label: 'Manager',  color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+        'director': { label: 'Director', color: '#eab308', bg: 'rgba(234,179,8,0.18)' }
+    }[lvl] || { label: lvl, color: '#888', bg: 'rgba(136,136,136,0.15)' };
+    return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:' + cfg.bg + ';color:' + cfg.color + ';border:1px solid ' + cfg.color + '40;text-transform:uppercase;letter-spacing:0.5px;">' + cfg.label + '</span>';
+};
+
+window._tierSelect = (currentLevel, id) => {
+    const cur = currentLevel || 'manager';
+    return '<select id="' + id + '" class="input-box">' +
+        '<option value="general"' + (cur==='general'?' selected':'') + '>🟢 General — all staff</option>' +
+        '<option value="manager"' + (cur==='manager'?' selected':'') + '>🔵 Manager — managers + directors</option>' +
+        '<option value="director"' + (cur==='director'?' selected':'') + '>🟡 Director — directors only</option>' +
+        '</select>';
+};
+
+// --- TAGS ---
+window._normaliseTag = (t) => String(t||'').toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9\-]/g,'').substring(0,30);
+
+window._collectAllTags = () => {
+    const set = new Set();
+    (window.digitalSafe || []).forEach(d => (d.tags || []).forEach(t => set.add(t)));
+    (window.knowledgeBase || []).forEach(k => (k.tags || []).forEach(t => set.add(t)));
+    return Array.from(set).sort();
+};
+
+window._renderTagChips = (tags, opts) => {
+    if (!tags || !tags.length) return '';
+    opts = opts || {};
+    return '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">' + tags.map(t =>
+        '<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(139,92,246,0.12);color:#a78bfa;border:1px solid rgba(139,92,246,0.25);' + (opts.clickable ? 'cursor:pointer;' : '') + '"' +
+        (opts.clickable ? ' onclick="event.stopPropagation();window._safeSetTagFilter(\'' + t.replace(/'/g,"\\'") + '\');"' : '') +
+        '>#' + window.esc(t) + '</span>'
+    ).join('') + '</div>';
+};
+
+window._safeTagFilter = '';
+window._safeSetTagFilter = (t) => { window._safeTagFilter = (window._safeTagFilter === t) ? '' : t; window.showView('safe'); };
+
+// Tag input helper — pass the input id, returns array of tags from the field
+window._readTagInput = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return [];
+    return (el.value || '').split(',').map(window._normaliseTag).filter(Boolean);
+};
+
+window._tagInputHTML = (currentTags, id) => {
+    const tagsCsv = (currentTags || []).join(', ');
+    const all = window._collectAllTags();
+    return '<input type="text" id="' + id + '" class="input-box" value="' + window.esc(tagsCsv) + '" placeholder="kitchen, weekly, 2026 (comma separated)" list="' + id + '-list">' +
+        '<datalist id="' + id + '-list">' + all.map(t => '<option value="' + window.esc(t) + '">').join('') + '</datalist>';
+};
+
+// --- PIN / FAVOURITE (per-user via localStorage) ---
+window._pinStorageKey = () => {
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    const staff = (window._activeStaffMember && window._activeStaffMember.name) || 'master';
+    return 'pinnedDocs_' + vid + '_' + staff.replace(/\s+/g,'_');
+};
+
+window._getPinnedDocIds = () => {
+    try { return JSON.parse(localStorage.getItem(window._pinStorageKey()) || '[]'); }
+    catch(e) { return []; }
+};
+
+window._isPinned = (docId) => window._getPinnedDocIds().includes(docId);
+
+window._togglePin = (docId, event) => {
+    if (event) event.stopPropagation();
+    const pins = window._getPinnedDocIds();
+    const idx = pins.indexOf(docId);
+    if (idx >= 0) pins.splice(idx, 1); else pins.unshift(docId);
+    localStorage.setItem(window._pinStorageKey(), JSON.stringify(pins.slice(0, 50)));
+    if (window.currentView === 'safe') window.showView('safe');
+    else if (window.currentView === 'knowledge') window.showView('knowledge');
+};
+
+window._docId = (doc, fallback) => doc.id || ('legacy-' + (fallback != null ? fallback : (doc.name || '').replace(/\s+/g,'_')));
+
+window._pinStarHTML = (docId) => {
+    const pinned = window._isPinned(docId);
+    return '<button onclick="window._togglePin(\'' + docId.replace(/'/g,"\\'") + '\', event)" title="' + (pinned ? 'Unpin' : 'Pin to top') + '" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;color:' + (pinned ? '#fbbf24' : 'var(--text-muted)') + ';">' + (pinned ? '★' : '☆') + '</button>';
+};
+
+// --- RECENT (per-user via localStorage) ---
+window._recentStorageKey = () => {
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    const staff = (window._activeStaffMember && window._activeStaffMember.name) || 'master';
+    return 'recentDocs_' + vid + '_' + staff.replace(/\s+/g,'_');
+};
+
+window._addToRecent = (docId, name) => {
+    if (!docId) return;
+    let recent = [];
+    try { recent = JSON.parse(localStorage.getItem(window._recentStorageKey()) || '[]'); } catch(e) {}
+    recent = recent.filter(r => r.id !== docId);
+    recent.unshift({ id: docId, name: name || '', at: Date.now() });
+    localStorage.setItem(window._recentStorageKey(), JSON.stringify(recent.slice(0, 10)));
+};
+
+window._getRecentDocIds = () => {
+    try { return JSON.parse(localStorage.getItem(window._recentStorageKey()) || '[]'); }
+    catch(e) { return []; }
+};
+
+// --- INLINE VIEWER (PDF + image) ---
+window._openDocViewer = (doc, recordRecent) => {
+    if (!doc) return;
+    if (recordRecent !== false) window._addToRecent(window._docId(doc), doc.name);
+    const url = doc.data || doc.fileUrl || doc.link;
+    if (!url) return window.showToast('No file to view.', 'error');
+    const isPdf = (doc.type === 'pdf') || /\.pdf(\?|#|$)/i.test(url);
+    const isImage = (doc.type === 'image') || /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(url);
+
+    if (isPdf) return window._renderInlinePdfModal(url, doc.name || 'Document');
+    if (isImage) return window._renderInlineImageModal(url, doc.name || 'Image');
+    // Fallback: open in new tab (Word/Excel/etc.)
+    window.open(window.safeUrl(url), '_blank');
+};
+
+window._renderInlinePdfModal = (url, title) => {
+    const overlay = document.getElementById('global-modal-overlay');
+    const content = document.getElementById('global-modal-content');
+    if (!overlay || !content) return;
+    window._modalReturnFocus = document.activeElement;
+    content.innerHTML =
+        '<div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--card-bg);z-index:10;border-radius:12px 12px 0 0;flex-wrap:wrap;gap:10px;">' +
+            '<h3 id="modal-title" style="margin:0;font-size:15px;color:var(--brand-dark);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 ' + window.esc(title) + '</h3>' +
+            '<div style="display:flex;gap:6px;align-items:center;font-size:12px;">' +
+                '<button onclick="window._pdfPrev()" class="btn btn-outline" style="font-size:12px;padding:4px 10px;">◀</button>' +
+                '<span id="pdf-page-info" style="color:var(--text-muted);min-width:70px;text-align:center;">— / —</span>' +
+                '<button onclick="window._pdfNext()" class="btn btn-outline" style="font-size:12px;padding:4px 10px;">▶</button>' +
+                '<button onclick="window._pdfZoom(-0.2)" class="btn btn-outline" style="font-size:12px;padding:4px 8px;">−</button>' +
+                '<button onclick="window._pdfZoom(0.2)" class="btn btn-outline" style="font-size:12px;padding:4px 8px;">+</button>' +
+                '<a href="' + window.safeUrl(url) + '" target="_blank" download class="btn btn-outline" style="font-size:12px;padding:4px 10px;text-decoration:none;">⬇ Download</a>' +
+                '<button onclick="window.closeModal()" aria-label="Close" style="background:none;border:none;color:var(--text-muted);font-size:24px;cursor:pointer;line-height:1;padding:0 6px;">&times;</button>' +
+            '</div>' +
+        '</div>' +
+        '<div id="pdf-viewer-canvas-wrap" style="background:#222;padding:20px;text-align:center;min-height:60vh;max-height:80vh;overflow:auto;">' +
+            '<canvas id="pdf-viewer-canvas" style="background:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.4);max-width:100%;"></canvas>' +
+            '<div id="pdf-viewer-loading" style="color:#aaa;padding:40px;">Loading PDF…</div>' +
+        '</div>';
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Render via PDF.js
+    window._pdfState = { url: url, page: 1, scale: 1.4, doc: null };
+    pdfjsLib.getDocument(url).promise.then(pdfDoc => {
+        window._pdfState.doc = pdfDoc;
+        document.getElementById('pdf-viewer-loading').style.display = 'none';
+        window._pdfRenderPage();
+    }).catch(err => {
+        const lb = document.getElementById('pdf-viewer-loading');
+        if (lb) { lb.innerHTML = '⚠️ Could not load PDF.<br><a href="' + window.safeUrl(url) + '" target="_blank" style="color:var(--blue);">Open in new tab instead</a>'; }
+    });
+};
+
+window._pdfRenderPage = () => {
+    const s = window._pdfState; if (!s || !s.doc) return;
+    s.doc.getPage(s.page).then(page => {
+        const viewport = page.getViewport({ scale: s.scale });
+        const canvas = document.getElementById('pdf-viewer-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        page.render({ canvasContext: ctx, viewport: viewport });
+        const info = document.getElementById('pdf-page-info');
+        if (info) info.textContent = s.page + ' / ' + s.doc.numPages;
+    });
+};
+
+window._pdfPrev = () => { const s = window._pdfState; if (!s || !s.doc || s.page <= 1) return; s.page--; window._pdfRenderPage(); };
+window._pdfNext = () => { const s = window._pdfState; if (!s || !s.doc || s.page >= s.doc.numPages) return; s.page++; window._pdfRenderPage(); };
+window._pdfZoom = (delta) => { const s = window._pdfState; if (!s || !s.doc) return; s.scale = Math.max(0.5, Math.min(3, s.scale + delta)); window._pdfRenderPage(); };
+
+window._renderInlineImageModal = (url, title) => {
+    const body = '<div style="text-align:center;background:#222;margin:-20px;padding:20px;border-radius:0 0 12px 12px;">' +
+        '<img src="' + window.safeUrl(url) + '" style="max-width:100%;max-height:75vh;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.4);">' +
+        '<div style="margin-top:12px;"><a href="' + window.safeUrl(url) + '" target="_blank" download class="btn btn-outline" style="text-decoration:none;font-size:12px;">⬇ Download Original</a></div>' +
+        '</div>';
+    window.openModal('🖼️ ' + window.esc(title), body);
+};
+
+// --- PDF THUMBNAIL CACHE (IndexedDB) ---
+window._pdfThumbDB = null;
+window._openPdfThumbDB = () => new Promise((resolve, reject) => {
+    if (window._pdfThumbDB) return resolve(window._pdfThumbDB);
+    if (!window.indexedDB) return reject('no-idb');
+    const req = indexedDB.open('hubPdfThumbs', 1);
+    req.onupgradeneeded = (e) => { e.target.result.createObjectStore('thumbs'); };
+    req.onsuccess = (e) => { window._pdfThumbDB = e.target.result; resolve(window._pdfThumbDB); };
+    req.onerror = () => reject(req.error);
+});
+window._getCachedThumb = (url) => new Promise((resolve) => {
+    window._openPdfThumbDB().then(db => {
+        const tx = db.transaction('thumbs', 'readonly');
+        const req = tx.objectStore('thumbs').get(url);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+    }).catch(() => resolve(null));
+});
+window._cacheThumb = (url, dataUrl) => {
+    window._openPdfThumbDB().then(db => {
+        const tx = db.transaction('thumbs', 'readwrite');
+        tx.objectStore('thumbs').put(dataUrl, url);
+    }).catch(() => {});
+};
+window._generateAndApplyThumb = async (url, imgEl) => {
+    if (!imgEl || !window.pdfjsLib) return;
+    const cached = await window._getCachedThumb(url);
+    if (cached) { imgEl.src = cached; imgEl.style.opacity = 1; return; }
+    try {
+        const pdfDoc = await pdfjsLib.getDocument(url).promise;
+        const page = await pdfDoc.getPage(1);
+        const viewport = page.getViewport({ scale: 0.4 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/png');
+        window._cacheThumb(url, dataUrl);
+        imgEl.src = dataUrl; imgEl.style.opacity = 1;
+    } catch(e) { /* ignore — fallback icon stays */ }
+};
+// Hook called by render functions after DOM update
+window._applyPdfThumbs = () => {
+    document.querySelectorAll('img[data-pdf-thumb]').forEach(img => {
+        if (img.dataset.thumbApplied) return;
+        img.dataset.thumbApplied = '1';
+        window._generateAndApplyThumb(img.dataset.pdfThumb, img);
+    });
+};
+
+// --- VERSION HISTORY ---
+window._addVersionToDoc = (idx, oldUrl, label) => {
+    const d = window.digitalSafe[idx]; if (!d || !oldUrl) return;
+    if (!d.versions) d.versions = [];
+    d.versions.unshift({ url: oldUrl, replacedAt: new Date().toISOString(), replacedBy: window._currentRoleLabel(), label: label || '' });
+    // Cap at 5 — older ones are removed (keep storage cost down)
+    if (d.versions.length > 5) {
+        const toDelete = d.versions.slice(5);
+        d.versions = d.versions.slice(0, 5);
+        toDelete.forEach(v => { try { firebase.storage().refFromURL(v.url).delete(); } catch(e){} });
+    }
+};
+
+window.viewVersionHistory = (idx) => {
+    const d = window.digitalSafe[idx]; if (!d) return;
+    const versions = d.versions || [];
+    let body = '<p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Showing the last 5 replaced versions of <strong>' + window.esc(d.name) + '</strong>.</p>';
+    if (versions.length === 0) {
+        body += '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No previous versions — this is the original upload.</div>';
+    } else {
+        body += '<div style="display:flex;flex-direction:column;gap:8px;">' + versions.map((v, vi) =>
+            '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+                '<div style="font-size:12px;"><strong>v' + (versions.length - vi) + '</strong> · ' +
+                '<span style="color:var(--text-muted);">replaced ' + new Date(v.replacedAt).toLocaleString('en-AU') + '</span><br>' +
+                '<span style="font-size:11px;color:var(--text-muted);">by ' + window.esc(v.replacedBy || 'unknown') + '</span></div>' +
+                '<div style="display:flex;gap:6px;">' +
+                    '<a href="' + window.safeUrl(v.url) + '" target="_blank" download class="btn btn-outline" style="font-size:11px;padding:4px 10px;text-decoration:none;">⬇ Download</a>' +
+                    '<button onclick="window.restoreVersion(' + idx + ',' + vi + ')" class="btn btn-blue" style="font-size:11px;padding:4px 10px;">↻ Restore</button>' +
+                '</div>' +
+            '</div>'
+        ).join('') + '</div>';
+    }
+    window.openModal('📜 Version History', body);
+};
+
+window.restoreVersion = (idx, vIdx) => {
+    const d = window.digitalSafe[idx]; if (!d || !d.versions || !d.versions[vIdx]) return;
+    window.confirmAction({
+        title: '↻ Restore previous version',
+        message: 'Make this version the current file? The current file will be saved as a new prior version.',
+        confirmLabel: 'Restore', tier: 'standard',
+        onConfirm: () => {
+            const old = d.data;
+            d.data = d.versions[vIdx].url;
+            d.versions.splice(vIdx, 1);
+            if (old) window._addVersionToDoc(idx, old, 'Restored prior version');
+            d.lastUpdated = new Date().toISOString();
+            window.saveToDisk();
+            window.closeModal();
+            window.showView('safe');
+            window.showToast('Version restored.');
+        }
+    });
+};
+
+// --- SOP ACKNOWLEDGEMENTS ---
+window._sopId = (sop, idx) => sop.id || ('sop-' + idx);
+
+window._isSOPAcked = (sopId) => {
+    const staffName = window._activeStaffMember?.name;
+    if (!staffName) return true; // no staff session → ack flow only matters for staff
+    return (window.sopAcknowledgements || []).some(a => a.sopId === sopId && a.staffName === staffName);
+};
+
+window.ackSOP = (sopId, sopTitle) => {
+    if (!window._activeStaffMember) return window.showToast('Log in as staff to acknowledge.', 'error');
+    if (!window.sopAcknowledgements) window.sopAcknowledgements = [];
+    if (window._isSOPAcked(sopId)) return window.showToast('Already acknowledged.');
+    window.sopAcknowledgements.push({
+        sopId,
+        staffName: window._activeStaffMember.name,
+        role: window._activeStaffMember.role,
+        ackedAt: new Date().toISOString()
+    });
+    window.saveToDisk();
+    if (window.logAudit) window.logAudit('knowledgeBase', 'sop-acked', sopId, sopTitle + ' acknowledged');
+    window.showToast('✅ Acknowledged — your manager will see this.');
+    if (window.currentView === 'knowledge') window.showView('knowledge');
+};
+
+// --- SOP COMPLIANCE VIEW (Manager+) ---
+window.renderSOPComplianceView = () => {
+    const role = window._activeStaffMember?.role;
+    const isAuthorized = role === 'Manager' || role === 'Director' || (!window._activeStaffMember && !window.isLocked);
+    if (!isAuthorized) {
+        return '<div class="card" style="max-width:600px;margin:80px auto;text-align:center;padding:40px;"><h2 style="margin:0 0 8px;">🔒 Restricted</h2><p style="color:var(--text-muted);">This view is for Managers and Directors only.</p></div>';
+    }
+    const requiredSOPs = (window.knowledgeBase || []).map((k,i) => ({...k, idx:i, sopId: window._sopId(k,i)})).filter(k => k.requireAck);
+    const staff = (window.staffDirectory || []).filter(s => s.status !== 'Archived' && s.status !== 'Inactive');
+    const acks = window.sopAcknowledgements || [];
+
+    if (requiredSOPs.length === 0) {
+        return '<div style="max-width:1100px;margin:auto;"><h2 style="margin:0 0 4px;">📋 SOP Compliance</h2><div style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">Track which staff have acknowledged required SOPs</div>' +
+            '<div class="card" style="padding:30px;text-align:center;color:var(--text-muted);">No SOPs marked as required reading yet.<br><br><span style="font-size:12px;">Edit any SOP and tick "Require acknowledgement" to track who has read it.</span></div></div>';
+    }
+
+    let html = '<div style="max-width:1200px;margin:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">' +
+            '<div><h2 style="margin:0;">📋 SOP Compliance</h2><div style="color:var(--text-muted);font-size:13px;margin-top:2px;">Track required-reading acknowledgements across active staff</div></div>' +
+            '<button onclick="window._printSOPCompliance()" class="btn btn-outline">🖨️ Print Audit Log</button>' +
+        '</div>';
+
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:10px;">' +
+        '<table id="sop-compliance-table" style="width:100%;background:var(--card-bg);border-radius:8px;border-collapse:collapse;min-width:700px;">' +
+        '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;text-align:left;">' +
+        '<th style="padding:10px 12px;min-width:200px;">SOP</th>' +
+        staff.map(s => '<th style="padding:10px 8px;text-align:center;font-size:10px;min-width:80px;">' + window.esc((s.name||'').split(' ')[0]) + '</th>').join('') +
+        '</tr></thead><tbody>';
+
+    requiredSOPs.forEach(sop => {
+        html += '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:10px 12px;font-size:13px;">' + window.esc(sop.title) +
+                '<br><span style="font-size:10px;color:var(--text-muted);">' + window.esc(sop.category||'') + '</span></td>';
+        staff.forEach(s => {
+            const a = acks.find(x => x.sopId === sop.sopId && x.staffName === s.name);
+            if (a) {
+                html += '<td style="padding:10px 8px;text-align:center;background:rgba(16,185,129,0.08);font-size:11px;color:var(--green);" title="Acknowledged ' + new Date(a.ackedAt).toLocaleString('en-AU') + '">✓ ' + new Date(a.ackedAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</td>';
+            } else {
+                html += '<td style="padding:10px 8px;text-align:center;background:rgba(239,68,68,0.08);color:var(--red);font-weight:600;font-size:11px;">Outstanding</td>';
+            }
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Summary
+    const totalRequired = requiredSOPs.length * staff.length;
+    const totalAcked = requiredSOPs.reduce((sum, sop) => sum + staff.filter(s => acks.some(a => a.sopId === sop.sopId && a.staffName === s.name)).length, 0);
+    const pct = totalRequired > 0 ? Math.round((totalAcked / totalRequired) * 100) : 0;
+    html += '<div class="card" style="margin-top:20px;border-left:4px solid ' + (pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--orange)' : 'var(--red)') + ';padding:14px 18px;">' +
+        '<div style="font-size:13px;"><strong>' + totalAcked + ' of ' + totalRequired + ' acknowledged</strong> (' + pct + '%)</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + requiredSOPs.length + ' required SOPs × ' + staff.length + ' active staff</div>' +
+        '</div>';
+
+    html += '</div>';
+    return html;
+};
+
+window._printSOPCompliance = () => {
+    const table = document.getElementById('sop-compliance-table');
+    if (!table) return;
+    const venue = window._getVenueName();
+    const date = new Date().toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' });
+    const win = window.open('', '_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>SOP Compliance — ' + venue + '</title>' +
+        '<style>body{font-family:-apple-system,sans-serif;padding:20px;color:#111}h1{font-size:18px;margin:0 0 4px}.meta{font-size:12px;color:#666;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f5f5f5;font-size:10px}td:not(:first-child){text-align:center}@media print{body{padding:0}}</style>' +
+        '</head><body><h1>SOP Compliance Audit — ' + venue + '</h1><div class="meta">Printed ' + date + '</div>' +
+        table.outerHTML + '</body></html>');
+    win.document.close();
+    setTimeout(() => win.print(), 300);
+};
+
+// --- DASHBOARD WIDGET FEEDERS ---
+window._docStatusCounts = () => {
+    const docs = (window.digitalSafe || []).filter(window._canSeeDoc);
+    const now = new Date();
+    let expired = 0, expiring = 0;
+    docs.forEach(d => {
+        if (!d.expiry) return;
+        const days = (new Date(d.expiry) - now) / 86400000;
+        if (days < 0) expired++;
+        else if (days <= 30) expiring++;
+    });
+    // Outstanding acks for current user (if logged in as staff) OR system-wide for managers
+    const role = window._activeStaffMember?.role;
+    const requiredSOPs = (window.knowledgeBase || []).map((k,i) => ({...k, sopId: window._sopId(k,i)})).filter(k => k.requireAck);
+    let outstanding = 0;
+    if (window._activeStaffMember && role !== 'Manager' && role !== 'Director') {
+        outstanding = requiredSOPs.filter(s => !window._isSOPAcked(s.sopId)).length;
+    } else {
+        // Manager view: total outstanding across all staff
+        const staff = (window.staffDirectory || []).filter(s => s.status !== 'Archived' && s.status !== 'Inactive');
+        const acks = window.sopAcknowledgements || [];
+        outstanding = requiredSOPs.reduce((sum, sop) =>
+            sum + staff.filter(s => !acks.some(a => a.sopId === sop.sopId && a.staffName === s.name)).length, 0);
+    }
+    return { expired, expiring, outstanding };
+};
+
+window.renderDocStatusWidget = () => {
+    const c = window._docStatusCounts();
+    if (c.expired === 0 && c.expiring === 0 && c.outstanding === 0) return ''; // hide widget if all clear
+    return '<div class="card" style="padding:14px 18px;border-left:4px solid ' + (c.expired > 0 ? 'var(--red)' : c.expiring > 0 ? 'var(--orange)' : '#eab308') + ';">' +
+        '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;margin-bottom:6px;">📄 Document Status</div>' +
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;">' +
+            (c.expired > 0 ? '<a onclick="window.showView(\'safe\')" style="color:var(--red);cursor:pointer;font-weight:600;">⚠️ ' + c.expired + ' expired</a>' : '') +
+            (c.expiring > 0 ? '<a onclick="window.showView(\'safe\')" style="color:var(--orange);cursor:pointer;font-weight:600;">📅 ' + c.expiring + ' expiring</a>' : '') +
+            (c.outstanding > 0 ? '<a onclick="window.showView(\'sop-compliance\')" style="color:#eab308;cursor:pointer;font-weight:600;">📋 ' + c.outstanding + ' SOP ack' + (c.outstanding>1?'s':'') + ' outstanding</a>' : '') +
+        '</div>' +
+    '</div>';
+};
+
+// --- QUILL LAZY LOAD ---
+window._quillLoading = false;
+window._quillReady = false;
+window.loadQuill = (callback) => {
+    if (window._quillReady && window.Quill) return callback();
+    if (window._quillLoading) { setTimeout(() => window.loadQuill(callback), 200); return; }
+    window._quillLoading = true;
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = 'https://cdn.quilljs.com/2.0.2/quill.snow.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://cdn.quilljs.com/2.0.2/quill.min.js';
+    js.onload = () => { window._quillReady = true; window._quillLoading = false; callback(); };
+    js.onerror = () => { window._quillLoading = false; window.showToast('Could not load editor — using plain text.', 'error'); callback(); };
+    document.head.appendChild(js);
+};
+
+window._quillInstance = null;
+window._mountQuill = (containerId, initialHTML) => {
+    const el = document.getElementById(containerId); if (!el) return;
+    el.innerHTML = '<div id="quill-editor-host" style="background:white;color:black;border-radius:6px;min-height:240px;"></div>';
+    if (!window.Quill) return; // graceful fallback handled by caller
+    window._quillInstance = new Quill('#quill-editor-host', {
+        theme: 'snow',
+        modules: { toolbar: [
+            [{ header: [2, 3, false] }], ['bold', 'italic', 'underline'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['blockquote', 'link'], ['clean']
+        ]},
+        placeholder: 'Write the SOP content here…'
+    });
+    if (initialHTML) {
+        // If looks like HTML, set as HTML; otherwise treat as plain text
+        if (/<[a-z][\s\S]*>/i.test(initialHTML)) window._quillInstance.root.innerHTML = initialHTML;
+        else window._quillInstance.setText(initialHTML);
+    }
+};
+window._readQuill = () => window._quillInstance ? window._quillInstance.root.innerHTML : '';
+
+// --- KEYBOARD SHORTCUT: / focuses search on Safe/KB views ---
+document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const view = window.currentView;
+    if (view !== 'safe' && view !== 'knowledge') return;
+    const search = document.querySelector('#mainContent input[type="text"][placeholder*="Search"]') || document.querySelector('#mainContent input.search-bar');
+    if (search) { e.preventDefault(); search.focus(); search.select(); }
+});
+
+// =============================================================================
+// END DOC-HUB v2
+// =============================================================================
+

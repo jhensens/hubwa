@@ -134,6 +134,7 @@ window.staffHubConfig = {
         'BOH': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'], allowedViews: ['dashboard','inventory','compliance','wastage','noticeboard','tasks','maintenance','incidents','knowledge','zones','my-hub'] },
         'Bar': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['dashboard','inventory','compliance','wastage','prep-list','noticeboard','rosters','tasks','maintenance','incidents','knowledge','zones','my-hub'] },
         'Manager': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['*'] },
+        'Director': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'], quickActions: ['log-temps','wastage','maintenance','incident','sops'], allowedViews: ['*'] },
         'Kitchen Hand': { visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'], quickActions: ['log-temps','wastage','maintenance','incident'], allowedViews: ['dashboard','inventory','compliance','wastage','noticeboard','tasks','maintenance','incidents','knowledge','zones','my-hub'] }
     },
     defaultCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions'],
@@ -174,6 +175,8 @@ window.onboardingTemplates = {
 };
 window.taskZones = ["FOH", "BOH", "Bar", "Office", "Maintenance", "All Areas"];
 window.deliveryLogs = [];
+window.sopAcknowledgements = [];
+window.kbCategoriesOrder = null; // null = use default order
 window.fridgeUnits = ["Walk-in Coolroom", "Walk-in Freezer", "Kitchen Line Fridge", "Kitchen Prep Fridge", "Bar Under-counter 1", "Bar Under-counter 2", "Bar Display Fridge", "Dessert Reach-in"];
 window.masterChecklists = {
     "Weekly Deep Clean \u2014 Kitchen": ["Exhaust hood & filters degreased","Behind all equipment pulled out & cleaned","Cool room shelves & floor scrubbed","Grease traps flushed & scraped","Under benches & sinks wiped","Oven interior deep clean","Dry stores shelving wiped & organised","Dishwasher & glasswasher interior cleaned"],
@@ -521,4 +524,4 @@ window._seedAllBWI = () => {
 };
 
 // --- 4. FIREBASE & LOCAL BACKUP CONNECTOR ---
-window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'orderDrafts', 'lsApiPullLog', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones', 'deliveryLogs'];
+window.saveKeys =['inventoryItems', 'recipes', 'wastageLogs', 'suppliers', 'salesData', 'salesTargets', 'orientationLogs', 'rotationalTasks', 'taskHistory', 'tempLogs', 'complianceLogs', 'defectLogs', 'equipmentData', 'contractorLogs', 'digitalSafe', 'phoneBook', 'incidentLogs', 'handoverLogs', 'knowledgeBase', 'shiftRosters', 'onboardingTemplates', 'fridgeUnits', 'masterChecklists', 'posMappings', 'storageZones', 'depletionLogs', 'safeCategories', 'kbCategories', 'orderHistory', 'orderDrafts', 'lsApiPullLog', 'staffDirectory', 'lsImportLog', 'lsSalesByData', 'shiftChecklistItems', 'invoiceMatchMap', 'priceHistory', 'inventorySubcategories', 'kbSubcategories', 'safeSubcategories', 'handoverTemplateConfig', 'qualificationTypes', 'stockMovements', 'stocktakes', 'auditLog', 'announcements', 'kudos', 'dailyBriefings', 'badgeDefinitions', 'staffHubConfig', 'shiftFeedbackTags', 'taskZones', 'deliveryLogs', 'sopAcknowledgements', 'kbCategoriesOrder'];

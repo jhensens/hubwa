@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '13 Apr 2026';
-window._hubBuildId = '20260413h';
+window._hubBuildDate = '27 Apr 2026';
+window._hubBuildId = '20260427a';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -79,6 +79,31 @@ window.saveCovers = () => {
     }
     window.saveToDisk(); window.closeModal(); window.showView('sales');
     window.showToast('Covers logged — '+count+' guests!');
+};
+
+// --- AUTO-LOG BOOKED COVERS (from SevenRooms paste) ---
+// Writes ONLY to coversBooked field (separate from `covers` which is actual served).
+// Future Lightspeed sync will write to `covers` — these never collide.
+// Accepts ISO date (YYYY-MM-DD) or DD/MM/YYYY — normalises to DD/MM/YYYY for salesData consistency.
+window._autoLogBookedCovers = (dateStr, count, bookingCount) => {
+    if (!dateStr || !count) return false;
+    // Normalise ISO → DD/MM/YYYY
+    let normDate = dateStr;
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+        const [y,m,d] = dateStr.substring(0,10).split('-');
+        normDate = `${d}/${m}/${y}`;
+    }
+    if (!window.salesData) window.salesData = [];
+    const idx = window.salesData.findIndex(s => s.date === normDate);
+    if (idx >= 0) {
+        window.salesData[idx].coversBooked = count;
+    } else {
+        window.salesData.push({ date: normDate, coversBooked: count, total: 0 });
+    }
+    window.saveToDisk();
+    const suffix = bookingCount ? ` (${bookingCount} bookings)` : '';
+    window.showToast(`📋 ${count} booked covers logged from SevenRooms${suffix}`);
+    return true;
 };
 
 
@@ -439,6 +464,7 @@ window.renderManagerHub = () => {
     const todaySales = getSalesForDate(today);
     const todayRev = todaySales ? Number(todaySales.total||0) : 0;
     const todayCovers = todaySales ? Number(todaySales.covers||0) : 0;
+    const todayBookedCovers = todaySales ? Number(todaySales.coversBooked||0) : 0;
     const todayWages = todaySales ? Number(todaySales.wages||0) : 0;
     const hasTodayData = !!todaySales && todayRev > 0;
 
@@ -817,7 +843,18 @@ window.renderManagerHub = () => {
         html += 'Labor: <strong style="color:var(--red);">-$'+todayWages.toLocaleString('en-AU',{maximumFractionDigits:0})+'</strong><br>';
         if (estCogs > 0) html += 'Wastage: <strong style="color:var(--orange);">-$'+estCogs.toFixed(0)+'</strong><br>';
         html += '</div>';
-        if (todayCovers > 0) html += '<div style="font-size:11px;color:var(--blue);margin-top:4px;">👥 '+todayCovers+' covers · $'+(todayRev/todayCovers).toFixed(0)+' avg spend</div>';
+        if (todayCovers > 0) {
+            html += '<div style="font-size:11px;color:var(--blue);margin-top:4px;">👥 '+todayCovers+' covers · $'+(todayRev/todayCovers).toFixed(0)+' avg spend';
+            if (todayBookedCovers > 0) {
+                const variance = todayCovers - todayBookedCovers;
+                const vColor = variance >= 0 ? 'var(--green)' : 'var(--red)';
+                const vLabel = variance > 0 ? '+'+variance+' walk-ins' : (variance < 0 ? variance+' no-shows' : 'as booked');
+                html += ' <span style="color:var(--text-muted);">· booked '+todayBookedCovers+'</span> <span style="color:'+vColor+';font-weight:600;">('+vLabel+')</span>';
+            }
+            html += '</div>';
+        } else if (todayBookedCovers > 0) {
+            html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📋 Booked: '+todayBookedCovers+' covers (awaiting service)</div>';
+        }
     } else {
         html += '<div style="font-size:32px;font-weight:800;color:var(--text-muted);margin:4px 0;">—</div>';
         html += '<div style="font-size:12px;color:var(--text-muted);">Revenue data needed for P&L</div>';
@@ -826,6 +863,12 @@ window.renderManagerHub = () => {
     html += '</div>';
 
     } // end _showFinancials (financial row)
+
+    // --- DOCUMENT STATUS (managers + directors only) ---
+    if (window.renderDocStatusWidget) {
+        const docWidget = window.renderDocStatusWidget();
+        if (docWidget) html += '<div style="margin-bottom:14px;">' + docWidget + '</div>';
+    }
 
     // --- OPERATIONAL PULSE (4 compact metric cards) ---
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">';
