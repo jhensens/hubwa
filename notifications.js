@@ -209,6 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Run migrations (Director role, doc access levels)
+    if (window._backfillDocAccessLevels) window._backfillDocAccessLevels();
+
     // Run init callbacks (e.g., restore active stocktake)
     (window._hubInitCallbacks || []).forEach(function(fn) { try { fn(); } catch(e) { console.error('Init callback error:', e); } });
 
