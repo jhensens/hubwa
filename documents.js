@@ -1046,13 +1046,26 @@ window._currentRoleLabel = () => {
     return 'Locked';
 };
 
-// --- BACKFILL: silent migration of older docs to 'manager' tier ---
+// --- BACKFILL: silent migration of older docs to 'manager' tier + ensure Director role exists ---
 window._backfillDocAccessLevels = () => {
     let touched = 0;
     (window.digitalSafe || []).forEach(d => { if (!d.accessLevel) { d.accessLevel = 'manager'; touched++; } });
     (window.knowledgeBase || []).forEach(k => { if (!k.accessLevel) { k.accessLevel = 'manager'; touched++; } });
+
+    // Ensure Director role exists in saved staffHubConfig (added in 20260427 builds)
+    if (window.staffHubConfig && window.staffHubConfig.roles && !window.staffHubConfig.roles.Director) {
+        const mgr = window.staffHubConfig.roles.Manager;
+        window.staffHubConfig.roles.Director = mgr ? JSON.parse(JSON.stringify(mgr)) : {
+            visibleCards: ['shifts','qualifications','announcements','kudos','achievements','feedback','actions','leaderboard'],
+            quickActions: ['log-temps','wastage','maintenance','incident','sops'],
+            allowedViews: ['*']
+        };
+        touched++;
+        if (window.logAudit) window.logAudit('staffHubConfig', 'role-added', 'Director', 'Director role added to Staff Hub Config');
+    }
+
     if (touched > 0) {
-        if (window.logAudit) window.logAudit('digitalSafe', 'tier-backfill', null, 'Backfilled ' + touched + ' documents/SOPs to Manager tier');
+        if (window.logAudit) window.logAudit('digitalSafe', 'tier-backfill', null, 'Backfilled ' + touched + ' items (docs/SOPs/roles)');
         if (window.saveToDisk) window.saveToDisk();
     }
     return touched;
