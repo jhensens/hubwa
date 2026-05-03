@@ -96,7 +96,7 @@ window.applyRoleAccess = () => {
     var role = staff.role || 'FOH';
     var config = ((window.staffHubConfig || {}).roles || {})[role] || {};
     var allowed = config.allowedViews || (window.staffHubConfig || {}).defaultViews || window._defaultStaffViews || [];
-    var isFullAccess = allowed.includes('*') || role === 'Manager';
+    var isFullAccess = allowed.includes('*') || role === 'Manager' || role === 'Director';
 
     // Step 1: Ensure sections and restricted items are visible (for filtering)
     document.querySelectorAll('.nav-section').forEach(function(sec) {
