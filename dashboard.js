@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '27 Apr 2026';
-window._hubBuildId = '20260427f';
+window._hubBuildDate = '10 May 2026';
+window._hubBuildId = '20260510a';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -868,6 +868,16 @@ window.renderManagerHub = () => {
     if (window.renderDocStatusWidget) {
         const docWidget = window.renderDocStatusWidget();
         if (docWidget) html += '<div style="margin-bottom:14px;">' + docWidget + '</div>';
+    }
+
+    // --- STORAGE USAGE (managers + directors only) ---
+    if (window.renderStorageUsageWidget) {
+        const role = window._activeStaffMember?.role;
+        const isMgr = role === 'Manager' || role === 'Director' || (!window._activeStaffMember && !window.isLocked);
+        if (isMgr) {
+            const storageWidget = window.renderStorageUsageWidget();
+            if (storageWidget) html += '<div style="margin-bottom:14px;" id="storage-widget-host">' + storageWidget + '</div>';
+        }
     }
 
     // --- OPERATIONAL PULSE (4 compact metric cards) ---

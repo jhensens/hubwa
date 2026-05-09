@@ -1551,6 +1551,103 @@ document.addEventListener('keydown', (e) => {
 });
 
 // =============================================================================
+// FIREBASE STORAGE USAGE WIDGET — track files toward the 5GB free tier limit
+// =============================================================================
+
+window._storageUsageCache = null;
+window._storageUsageCacheTime = 0;
+window._storageUsageCalculating = false;
+
+window.calcFirebaseStorageUsage = async () => {
+    if (typeof firebase === 'undefined' || !firebase.storage || window._storageUsageCalculating) return null;
+    window._storageUsageCalculating = true;
+    const result = { total: 0, folders: {}, fileCount: 0 };
+    const folders = ['safe_docs', 'knowledge', 'invoice', 'invoices'];
+
+    try {
+        for (const folder of folders) {
+            try {
+                const ref = firebase.storage().ref().child(folder);
+                const list = await ref.listAll();
+                let folderTotal = 0, folderCount = 0;
+                // Fetch metadata in parallel (capped to avoid throttling)
+                const chunks = [];
+                for (let i = 0; i < list.items.length; i += 10) chunks.push(list.items.slice(i, i+10));
+                for (const chunk of chunks) {
+                    const metas = await Promise.all(chunk.map(item => item.getMetadata().catch(() => null)));
+                    metas.forEach(m => { if (m) { folderTotal += m.size || 0; folderCount++; } });
+                }
+                if (folderCount > 0) {
+                    result.folders[folder] = { size: folderTotal, count: folderCount };
+                    result.total += folderTotal;
+                    result.fileCount += folderCount;
+                }
+            } catch (e) { /* folder doesn't exist or no permission — skip */ }
+        }
+        window._storageUsageCache = result;
+        window._storageUsageCacheTime = Date.now();
+    } finally {
+        window._storageUsageCalculating = false;
+    }
+    return result;
+};
+
+window._refreshStorageUsage = async () => {
+    const host = document.getElementById('storage-widget-host');
+    if (host) host.innerHTML = '<div class="card" style="padding:14px 18px;text-align:center;color:var(--text-muted);font-size:12px;">⏳ Calculating storage usage… (this may take a moment if you have many files)</div>';
+    await window.calcFirebaseStorageUsage();
+    if (window.currentView === 'dashboard') window.showView('dashboard');
+};
+
+window.renderStorageUsageWidget = () => {
+    const u = window._storageUsageCache;
+    if (!u) {
+        return '<div class="card" style="padding:14px 18px;border-left:4px solid var(--text-muted);">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+                '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">💾 Firebase Storage Usage</div>' +
+                '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Free tier limit: 5 GB · Click to calculate</div></div>' +
+                '<button onclick="window._refreshStorageUsage()" class="btn btn-outline" style="font-size:12px;">Calculate Now</button>' +
+            '</div></div>';
+    }
+
+    const totalGB = u.total / (1024*1024*1024);
+    const totalMB = u.total / (1024*1024);
+    const limitGB = 5; // Firebase Spark free tier
+    const pct = Math.min((totalGB / limitGB) * 100, 100);
+    const color = pct >= 90 ? 'var(--red)' : pct >= 75 ? 'var(--orange)' : pct >= 50 ? '#eab308' : 'var(--green)';
+    const ageMin = Math.round((Date.now() - window._storageUsageCacheTime) / 60000);
+    const sizeLabel = totalGB >= 1 ? totalGB.toFixed(2) + ' GB' : totalMB.toFixed(0) + ' MB';
+
+    let html = '<div class="card" style="padding:14px 18px;border-left:4px solid ' + color + ';">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
+            '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">💾 Firebase Storage</div>' +
+                '<div style="font-size:18px;font-weight:700;color:' + color + ';margin-top:2px;">' + sizeLabel + ' / ' + limitGB + ' GB <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(' + pct.toFixed(1) + '%)</span></div></div>' +
+            '<button onclick="window._refreshStorageUsage()" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">🔄 Refresh</button>' +
+        '</div>' +
+        '<div style="background:var(--bg-main);height:6px;border-radius:3px;overflow:hidden;margin-bottom:8px;">' +
+            '<div style="height:100%;width:' + pct + '%;background:' + color + ';transition:width 0.4s ease;"></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);">' + u.fileCount + ' files total';
+
+    Object.entries(u.folders).forEach(([f, info]) => {
+        const labelMap = { 'safe_docs': 'Digital Safe', 'knowledge': 'SOPs', 'invoice': 'Invoices', 'invoices': 'Invoices' };
+        const label = labelMap[f] || f;
+        const sizeMB = info.size / (1024*1024);
+        const sizeStr = sizeMB >= 1024 ? (sizeMB/1024).toFixed(2) + ' GB' : sizeMB.toFixed(0) + ' MB';
+        html += ' · ' + label + ': ' + sizeStr + ' (' + info.count + ')';
+    });
+
+    html += ' · <em>Last calc: ' + (ageMin === 0 ? 'just now' : ageMin + ' min ago') + '</em></div>';
+
+    if (pct >= 75) {
+        html += '<div style="font-size:11px;color:' + color + ';margin-top:8px;font-weight:600;">⚠️ Approaching free tier limit. <a href="https://console.firebase.google.com/project/hobart-hub/usage" target="_blank" style="color:' + color + ';text-decoration:underline;">Review in Firebase Console</a> or upgrade to Blaze plan ($0.026/GB/month — set $5/mo cap for safety).</div>';
+    }
+
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
 // END DOC-HUB v2
 // =============================================================================
 
