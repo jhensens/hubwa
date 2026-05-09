@@ -133,11 +133,21 @@ window.lsPullSales = async (dateFrom) => {
         return { salesItems: [], orderCount: 0, revenue: 0 };
     }
 
-    // Aggregate product quantities across all orders
+    // Aggregate product quantities across all orders + daily revenue + daily covers
     var productMap = {}; // productName -> { qtySold, revenue }
+    var dailyMap = {}; // YYYY-MM-DD -> { revenue, orderCount, covers }
     var totalRevenue = 0;
 
     orders.forEach(function(order) {
+        // Daily aggregation (use completed_at or created_at)
+        var orderDate = (order.completed_at || order.created_at || '').substring(0, 10);
+        if (orderDate) {
+            if (!dailyMap[orderDate]) dailyMap[orderDate] = { revenue: 0, orderCount: 0, covers: 0 };
+            dailyMap[orderDate].orderCount++;
+            dailyMap[orderDate].covers += Number(order.cover_count || order.covers || 0);
+        }
+
+        // Line-level aggregation (existing behaviour)
         var lines = order.lines || [];
         lines.forEach(function(line) {
             var name = (line.product && line.product.name) || '';
@@ -149,8 +159,13 @@ window.lsPullSales = async (dateFrom) => {
             productMap[name].qtySold += qty;
             productMap[name].revenue += qty * price;
             totalRevenue += qty * price;
+            if (orderDate && dailyMap[orderDate]) dailyMap[orderDate].revenue += qty * price;
         });
     });
+
+    // Push daily aggregates into salesData[] using lsRevenue/lsCovers fields
+    // (separate from manual `total`/`covers` so manual entries never get overwritten)
+    if (window.lsUpdateSalesData) window.lsUpdateSalesData(dailyMap);
 
     var salesItems = Object.entries(productMap).map(function(entry) {
         return { rawName: entry[0], qtySold: entry[1].qtySold };
@@ -297,10 +312,25 @@ window.openLightspeedSettings = () => {
     html += '<button onclick="window.saveLsCredentials()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Save & Connect</button>';
 
     if (connected) {
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<button onclick="window.lsPullAndDeplete()" class="btn btn-blue" style="font-size:12px;">📥 Pull & Deplete</button>' +
             '<button onclick="window.showLoadingOverlay(\'Refreshing...\');window.lsPullSales().then(function(){window.hideLoadingOverlay();window.openLightspeedSettings();})" class="btn btn-outline" style="font-size:12px;">🔄 Refresh Data</button>' +
         '</div>';
+        // Prominent "Sync Recent" button — pulls full days for dashboard
+        html += '<button onclick="window.showLoadingOverlay(\'Syncing last 7 days from Lightspeed...\');window.lsSyncRecentDays(7).then(function(r){window.hideLoadingOverlay();if(r){window.showToast(\'Synced \'+r.orderCount+\' orders, $\'+(r.revenue||0).toFixed(0)+\' revenue.\');}window.openLightspeedSettings();})" class="btn btn-green" style="width:100%;font-size:13px;margin-bottom:12px;">⚡ Sync Last 7 Days into Dashboard</button>';
+
+        // Recent days' POS data status
+        var recentDays = (window.salesData || []).filter(function(s) { return s.lsRevenue || s.lsCovers; }).slice(-7).reverse();
+        if (recentDays.length > 0) {
+            html += '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px;">' +
+                '<div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">⚡ Live POS Data</div>' +
+                '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+                '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);"><th style="padding:4px 6px;color:var(--text-muted);font-weight:600;">Date</th><th style="padding:4px 6px;color:var(--text-muted);font-weight:600;">Orders</th><th style="padding:4px 6px;color:var(--text-muted);font-weight:600;text-align:right;">Revenue</th></tr></thead><tbody>';
+            recentDays.forEach(function(d) {
+                html += '<tr style="border-bottom:1px solid var(--bg-main);"><td style="padding:4px 6px;">' + E(d.date) + '</td><td style="padding:4px 6px;">' + (d.lsOrderCount || 0) + '</td><td style="padding:4px 6px;text-align:right;color:var(--green);font-weight:600;">$' + (d.lsRevenue || 0).toLocaleString('en-AU',{maximumFractionDigits:0}) + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+        }
 
         // Pending data alert
         if (pending && pending.length > 0) {
@@ -397,6 +427,77 @@ window._lsSelectSite = (siteId, siteName) => {
     window.closeModal();
     window.showToast('Lightspeed connected! Site: ' + siteName);
     window.startLsAutoRefresh();
+};
+
+// =============================================================================
+// 8. SALES DATA BRIDGE — populate salesData[] with live POS revenue
+// =============================================================================
+// Mirrors the dual-field pattern from SevenRooms (coversBooked vs covers):
+// - lsRevenue: live POS data (this) — never overwrites manual entry
+// - total:     manual takings entry — owned by user, untouched by sync
+// - lsCovers:  live POS data — separate from manual `covers`
+//
+// Dashboard prefers lsRevenue when available, falls back to manual total.
+// =============================================================================
+
+window.lsUpdateSalesData = (dailyMap) => {
+    if (!dailyMap || Object.keys(dailyMap).length === 0) return 0;
+    if (!window.salesData) window.salesData = [];
+    var touched = 0;
+
+    Object.entries(dailyMap).forEach(function(entry) {
+        var isoDate = entry[0]; // YYYY-MM-DD
+        var info = entry[1];
+        // Normalise to DD/MM/YYYY (existing salesData convention)
+        var parts = isoDate.split('-');
+        var ddmmyyyy = parts[2] + '/' + parts[1] + '/' + parts[0];
+
+        var idx = window.salesData.findIndex(function(s) { return s.date === ddmmyyyy; });
+        if (idx >= 0) {
+            window.salesData[idx].lsRevenue = Number(info.revenue.toFixed(2));
+            window.salesData[idx].lsCovers = info.covers || 0;
+            window.salesData[idx].lsOrderCount = info.orderCount;
+            window.salesData[idx].lsLastSync = window._isoNow();
+        } else {
+            window.salesData.push({
+                date: ddmmyyyy,
+                total: 0,
+                covers: 0,
+                lsRevenue: Number(info.revenue.toFixed(2)),
+                lsCovers: info.covers || 0,
+                lsOrderCount: info.orderCount,
+                lsLastSync: window._isoNow()
+            });
+        }
+        touched++;
+    });
+    return touched;
+};
+
+// Pull yesterday + today (full-day sync — useful for dashboard)
+window.lsSyncRecentDays = async (daysBack) => {
+    var creds = window.getLsCredentials();
+    if (!creds.companyId || !creds.siteId) return null;
+    var d = new Date();
+    d.setDate(d.getDate() - (daysBack || 1));
+    var dateFrom = d.toISOString().split('T')[0];
+    return await window.lsPullSales(dateFrom);
+};
+
+// =============================================================================
+// 9. DAILY AUTO-SYNC — runs once per session, pulls last 2 days
+// =============================================================================
+window.lsAutoSyncOnLoad = async () => {
+    if (!window.isLsConnected || !window.isLsConnected()) return;
+    if (!navigator.onLine) return;
+    // Only do this once per session
+    if (window._lsLoadedThisSession) return;
+    window._lsLoadedThisSession = true;
+    try {
+        await window.lsSyncRecentDays(2);
+    } catch (e) {
+        console.warn('Lightspeed auto-sync on load failed:', e);
+    }
 };
 
 // Disconnect — clear all credentials

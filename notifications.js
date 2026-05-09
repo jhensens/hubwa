@@ -212,6 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Run migrations (Director role, doc access levels)
     if (window._backfillDocAccessLevels) window._backfillDocAccessLevels();
 
+    // Lightspeed auto-sync on load (pulls last 2 days of sales/covers)
+    setTimeout(function() { if (window.lsAutoSyncOnLoad) window.lsAutoSyncOnLoad(); }, 2000);
+
     // Run init callbacks (e.g., restore active stocktake)
     (window._hubInitCallbacks || []).forEach(function(fn) { try { fn(); } catch(e) { console.error('Init callback error:', e); } });
 

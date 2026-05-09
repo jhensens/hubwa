@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '10 May 2026';
-window._hubBuildId = '20260510a';
+window._hubBuildId = '20260510b';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -461,9 +461,15 @@ window.renderManagerHub = () => {
     const getSalesForDate = (d) => (window.salesData||[]).find(s => s.date === fmtDate(d));
 
     // --- TODAY'S DATA ---
+    // Prefer live Lightspeed POS revenue when available, fall back to manual `total`
     const todaySales = getSalesForDate(today);
-    const todayRev = todaySales ? Number(todaySales.total||0) : 0;
-    const todayCovers = todaySales ? Number(todaySales.covers||0) : 0;
+    const todayLsRev = todaySales ? Number(todaySales.lsRevenue||0) : 0;
+    const todayManualRev = todaySales ? Number(todaySales.total||0) : 0;
+    const todayRev = todayLsRev > 0 ? todayLsRev : todayManualRev;
+    const todayRevSource = todayLsRev > 0 ? 'lightspeed' : (todayManualRev > 0 ? 'manual' : 'none');
+    const todayLsCovers = todaySales ? Number(todaySales.lsCovers||0) : 0;
+    const todayManualCovers = todaySales ? Number(todaySales.covers||0) : 0;
+    const todayCovers = todayLsCovers > 0 ? todayLsCovers : todayManualCovers;
     const todayBookedCovers = todaySales ? Number(todaySales.coversBooked||0) : 0;
     const todayWages = todaySales ? Number(todaySales.wages||0) : 0;
     const hasTodayData = !!todaySales && todayRev > 0;
@@ -774,10 +780,19 @@ window.renderManagerHub = () => {
     html += '<div class="card" style="padding:20px;border-top:3px solid var(--green);">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
     html += '<div>';
-    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Today\'s Revenue</div>';
+    const revHeaderTag = todayRevSource === 'lightspeed'
+        ? ' <span style="font-size:9px;padding:1px 6px;border-radius:6px;background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.3);font-weight:700;letter-spacing:0.3px;" title="Live from Lightspeed POS">⚡ LIVE POS</span>'
+        : '';
+    html += '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Today\'s Revenue' + revHeaderTag + '</div>';
     html += '<div style="font-size:32px;font-weight:800;color:' + (hasTodayData?'var(--green)':'var(--text-muted)') + ';margin:4px 0;">' + (hasTodayData ? '$'+todayRev.toLocaleString('en-AU',{maximumFractionDigits:0}) : '—') + '</div>';
     if (hasTodayData && todaySales) {
-        html += '<div style="font-size:11px;color:var(--text-muted);">EFT $'+(todaySales.eftpos||0)+' · Cash $'+(todaySales.cash||0)+(todaySales.meandu?' · Me&u $'+todaySales.meandu:'')+'</div>';
+        if (todayRevSource === 'lightspeed') {
+            const orderInfo = todaySales.lsOrderCount ? todaySales.lsOrderCount + ' orders' : '';
+            const syncInfo = todaySales.lsLastSync ? ' · synced ' + new Date(todaySales.lsLastSync).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}) : '';
+            html += '<div style="font-size:11px;color:var(--text-muted);">' + orderInfo + syncInfo + '</div>';
+        } else {
+            html += '<div style="font-size:11px;color:var(--text-muted);">EFT $'+(todaySales.eftpos||0)+' · Cash $'+(todaySales.cash||0)+(todaySales.meandu?' · Me&u $'+todaySales.meandu:'')+'</div>';
+        }
     }
     if (revDelta !== null) {
         const arrow = revDelta >= 0 ? '↑' : '↓';
