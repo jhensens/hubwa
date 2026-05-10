@@ -172,7 +172,7 @@ window.fetchKounta = async (endpoint) => {
 window.fetchKountaAll = async (endpoint) => {
     var allResults = [];
     var url = endpoint;
-    var maxPages = 40; // safety cap (1000 orders max)
+    var maxPages = 200; // safety cap (5000 orders max — handles ~30 days at busy venue)
     var page = 0;
     while (url && page < maxPages) {
         var result = await window.fetchKounta(url);
@@ -180,6 +180,10 @@ window.fetchKountaAll = async (endpoint) => {
         var data = Array.isArray(result.data) ? result.data : [];
         if (data.length === 0) break;
         allResults = allResults.concat(data);
+        // Stash a sample of the first order for debugging
+        if (page === 0 && allResults.length > 0 && !window._lsLastSampleOrder) {
+            window._lsLastSampleOrder = allResults[0];
+        }
         var nextPage = result.headers ? result.headers.get('X-Next-Page') : null;
         url = nextPage || null;
         page++;
@@ -242,28 +246,58 @@ window.lsPullSales = async (dateFrom) => {
     var dailyMap = {}; // YYYY-MM-DD -> { revenue, orderCount, covers }
     var totalRevenue = 0;
 
+    // Helpers: handle Kounta's varied field naming
+    var pickDate = function(o) {
+        return (o.completed_at || o.created_at || o.updated_at || o.payment_taken_at || o.date || '').toString().substring(0, 10);
+    };
+    var pickOrderTotal = function(o) {
+        // Try order-level totals first (more reliable than summing lines)
+        return Number(o.amount || o.total || o.subtotal || o.amount_total || o.gross || 0) || 0;
+    };
+    var pickCovers = function(o) {
+        return Number(o.cover_count || o.covers || o.guest_count || o.pax || 0) || 0;
+    };
+    var pickLineQty = function(l) {
+        return Math.abs(Number(l.quantity || l.qty || 1));
+    };
+    var pickLinePrice = function(l) {
+        // Try unit_price first, then derive from amount/quantity if missing
+        if (l.unit_price != null) return Number(l.unit_price);
+        if (l.price != null) return Number(l.price);
+        if (l.amount != null && l.quantity) return Number(l.amount) / Math.abs(Number(l.quantity)) || 0;
+        return 0;
+    };
+    var pickLineName = function(l) {
+        return (l.product && l.product.name) || l.product_name || l.name || l.title || '';
+    };
+    var getLines = function(o) {
+        return o.lines || o.order_lines || o.items || o.products || [];
+    };
+
     orders.forEach(function(order) {
-        // Daily aggregation (use completed_at or created_at)
-        var orderDate = (order.completed_at || order.created_at || '').substring(0, 10);
+        var orderDate = pickDate(order);
+        var orderTotal = pickOrderTotal(order);
+
         if (orderDate) {
             if (!dailyMap[orderDate]) dailyMap[orderDate] = { revenue: 0, orderCount: 0, covers: 0 };
             dailyMap[orderDate].orderCount++;
-            dailyMap[orderDate].covers += Number(order.cover_count || order.covers || 0);
+            dailyMap[orderDate].covers += pickCovers(order);
+            // Use order-level total for daily revenue (most reliable)
+            dailyMap[orderDate].revenue += orderTotal;
         }
+        totalRevenue += orderTotal;
 
-        // Line-level aggregation (existing behaviour)
-        var lines = order.lines || [];
+        // Line-level aggregation for product depletion (best-effort — may be empty if API returns summaries only)
+        var lines = getLines(order);
         lines.forEach(function(line) {
-            var name = (line.product && line.product.name) || '';
-            var qty = Math.abs(line.quantity || 1);
-            var price = line.unit_price || 0;
+            var name = pickLineName(line);
+            var qty = pickLineQty(line);
+            var price = pickLinePrice(line);
             if (!name || qty <= 0) return;
 
             if (!productMap[name]) productMap[name] = { qtySold: 0, revenue: 0 };
             productMap[name].qtySold += qty;
             productMap[name].revenue += qty * price;
-            totalRevenue += qty * price;
-            if (orderDate && dailyMap[orderDate]) dailyMap[orderDate].revenue += qty * price;
         });
     });
 
@@ -467,8 +501,9 @@ window.openLightspeedSettings = () => {
             '</div>';
         }
 
-        // Disconnect button
+        // Debug section
         html += '<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">' +
+            '<button onclick="window.lsShowSampleOrder()" class="btn btn-outline" style="width:100%;font-size:11px;margin-bottom:6px;">🔬 Debug: Show Sample Order JSON</button>' +
             '<button onclick="window.lsDisconnect()" class="btn btn-outline" style="width:100%;font-size:11px;color:var(--text-muted);">Disconnect Lightspeed</button>' +
         '</div>';
     }
@@ -705,6 +740,27 @@ window.lsAutoSyncOnLoad = async () => {
     } catch (e) {
         console.warn('Lightspeed auto-sync on load failed:', e);
     }
+};
+
+// Show sample order JSON for debugging Kounta's actual response shape
+window.lsShowSampleOrder = () => {
+    var sample = window._lsLastSampleOrder;
+    if (!sample) {
+        return window.openModal('🔬 No Sample Yet', '<p style="font-size:13px;color:var(--text-muted);">Run a sync first (click "⚡ Sync Last 7 Days into Dashboard" or "Refresh Data") to capture a sample order.</p>');
+    }
+    var fields = Object.keys(sample).map(function(k) {
+        var v = sample[k];
+        var type = Array.isArray(v) ? 'array[' + v.length + ']' : (v === null ? 'null' : typeof v);
+        return '<div style="font-size:11px;padding:4px 8px;border-bottom:1px solid var(--border);"><strong>' + k + '</strong> <span style="color:var(--text-muted);">(' + type + ')</span></div>';
+    }).join('');
+    var json = JSON.stringify(sample, null, 2);
+    var html = '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">First order from the most recent sync. Use this to verify field names.</p>' +
+        '<details open style="margin-bottom:12px;"><summary style="cursor:pointer;font-size:12px;font-weight:600;">📋 Top-level fields</summary>' +
+        '<div style="margin-top:8px;background:var(--bg-main);border-radius:6px;padding:6px;">' + fields + '</div></details>' +
+        '<details><summary style="cursor:pointer;font-size:12px;font-weight:600;">📄 Full JSON (click to expand)</summary>' +
+        '<pre style="font-size:10px;background:var(--bg-main);padding:10px;border-radius:6px;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;">' + window.esc(json) + '</pre></details>' +
+        '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(json) + ').then(function(){window.showToast(\'Copied to clipboard\');})" class="btn btn-outline" style="width:100%;margin-top:10px;font-size:12px;">📋 Copy JSON to clipboard</button>';
+    window.openModal('🔬 Sample Order JSON', html);
 };
 
 // Disconnect — clear all credentials
