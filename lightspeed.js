@@ -464,7 +464,14 @@ window.openLightspeedSettings = () => {
             '<button onclick="window.showLoadingOverlay(\'Refreshing...\');window.lsPullSales().then(function(){window.hideLoadingOverlay();window.openLightspeedSettings();})" class="btn btn-outline" style="font-size:12px;">🔄 Refresh Data</button>' +
         '</div>';
         // Prominent "Sync Recent" button — pulls full days for dashboard
-        html += '<button onclick="window.showLoadingOverlay(\'Syncing last 7 days from Lightspeed...\');window.lsSyncRecentDays(7).then(function(r){window.hideLoadingOverlay();if(r){window.showToast(\'Synced \'+r.orderCount+\' orders, $\'+(r.revenue||0).toFixed(0)+\' revenue.\');}window.openLightspeedSettings();})" class="btn btn-green" style="width:100%;font-size:13px;margin-bottom:12px;">⚡ Sync Last 7 Days into Dashboard</button>';
+        html += '<button onclick="window.showLoadingOverlay(\'Syncing last 7 days from Lightspeed...\');window.lsSyncRecentDays(7).then(function(r){window.hideLoadingOverlay();if(r){window.showToast(\'Synced \'+r.orderCount+\' orders, $\'+(r.revenue||0).toFixed(0)+\' revenue.\');}window.openLightspeedSettings();})" class="btn btn-green" style="width:100%;font-size:13px;margin-bottom:6px;">⚡ Sync Last 7 Days into Dashboard</button>';
+
+        // Historical pull (deeper sync)
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">' +
+            '<button onclick="window.lsRunHistoricalPull(30)" class="btn btn-outline" style="font-size:11px;padding:8px;">📅 Pull 30 Days</button>' +
+            '<button onclick="window.lsRunHistoricalPull(60)" class="btn btn-outline" style="font-size:11px;padding:8px;">📅 Pull 60 Days</button>' +
+            '<button onclick="window.lsRunHistoricalPull(70)" class="btn btn-outline" style="font-size:11px;padding:8px;">📅 Pull 10 Weeks (max)</button>' +
+        '</div>';
 
         // Recent days' POS data status
         var recentDays = (window.salesData || []).filter(function(s) { return s.lsRevenue || s.lsCovers; }).slice(-7).reverse();
@@ -724,6 +731,146 @@ window.lsSyncRecentDays = async (daysBack) => {
     d.setDate(d.getDate() - (daysBack || 1));
     var dateFrom = d.toISOString().split('T')[0];
     return await window.lsPullSales(dateFrom);
+};
+
+// =============================================================================
+// HISTORICAL PULL — chunked sync of up to ~10 weeks (Lightspeed's practical limit)
+// Pulls in 7-day chunks to avoid pagination cap at busy venues + give visible progress
+// =============================================================================
+window.lsPullHistorical = async (totalDaysBack, onProgress) => {
+    var creds = window.getLsCredentials();
+    if (!creds.companyId || !creds.siteId) return null;
+    var totalDays = Math.min(Math.max(totalDaysBack || 70, 1), 84); // cap at 12 weeks
+    var chunkDays = 7;
+    var totalChunks = Math.ceil(totalDays / chunkDays);
+
+    var grandTotal = { orderCount: 0, revenue: 0, dailyMap: {} };
+    var failedChunks = 0;
+
+    // Walk backwards from today in 7-day chunks
+    for (var i = 0; i < totalChunks; i++) {
+        var chunkEndDays = i * chunkDays;
+        var chunkStartDays = Math.min((i + 1) * chunkDays, totalDays);
+        var endDate = new Date(); endDate.setDate(endDate.getDate() - chunkEndDays);
+        var startDate = new Date(); startDate.setDate(startDate.getDate() - chunkStartDays);
+        var dateFrom = startDate.toISOString().split('T')[0];
+        var dateTo = endDate.toISOString().split('T')[0];
+
+        if (typeof onProgress === 'function') {
+            onProgress({
+                chunk: i + 1,
+                totalChunks: totalChunks,
+                dateFrom: dateFrom,
+                dateTo: dateTo,
+                grandTotal: grandTotal
+            });
+        }
+
+        var endpoint = 'companies/' + creds.companyId + '/sites/' + creds.siteId +
+            '/orders/complete.json?created_gte=' + dateFrom + '&created_lte=' + dateTo;
+        var orders = await window.fetchKountaAll(endpoint);
+
+        if (!orders) { failedChunks++; continue; }
+        if (orders.length === 0) continue;
+
+        // Aggregate this chunk into grand totals (using same field-pickers as lsPullSales)
+        orders.forEach(function(order) {
+            var orderDate = (order.completed_at || order.created_at || order.updated_at || order.payment_taken_at || order.date || '').toString().substring(0, 10);
+            var orderTotal = Number(order.amount || order.total || order.subtotal || order.amount_total || order.gross || 0) || 0;
+            var orderCovers = Number(order.cover_count || order.covers || order.guest_count || order.pax || 0) || 0;
+
+            if (orderDate) {
+                if (!grandTotal.dailyMap[orderDate]) grandTotal.dailyMap[orderDate] = { revenue: 0, orderCount: 0, covers: 0 };
+                grandTotal.dailyMap[orderDate].orderCount++;
+                grandTotal.dailyMap[orderDate].covers += orderCovers;
+                grandTotal.dailyMap[orderDate].revenue += orderTotal;
+            }
+            grandTotal.orderCount++;
+            grandTotal.revenue += orderTotal;
+        });
+
+        // Polite pause between chunks (be nice to Kounta's API)
+        await new Promise(function(r) { setTimeout(r, 500); });
+    }
+
+    // Push aggregated daily data into salesData[]
+    if (window.lsUpdateSalesData) window.lsUpdateSalesData(grandTotal.dailyMap);
+
+    // Log this big pull
+    if (!window.lsApiPullLog) window.lsApiPullLog = [];
+    window.lsApiPullLog.push({
+        date: window._isoDate(),
+        time: window._isoTime(),
+        orderCount: grandTotal.orderCount,
+        revenue: grandTotal.revenue,
+        itemCount: 0,
+        source: 'historical-pull-' + totalDays + 'd',
+        daysCovered: Object.keys(grandTotal.dailyMap).length,
+        failedChunks: failedChunks
+    });
+    if (window.lsApiPullLog.length > 100) window.lsApiPullLog = window.lsApiPullLog.slice(-100);
+
+    window.saveToDisk();
+    return {
+        orderCount: grandTotal.orderCount,
+        revenue: grandTotal.revenue,
+        daysCovered: Object.keys(grandTotal.dailyMap).length,
+        failedChunks: failedChunks
+    };
+};
+
+// UI wrapper for historical pull with progress modal
+window.lsRunHistoricalPull = (days) => {
+    var d = days || 70;
+    var html = '<p style="font-size:13px;margin-bottom:14px;">Pulling <strong>' + d + ' days</strong> of sales history from Lightspeed in 7-day chunks. This may take a few minutes — please don\'t close this window.</p>' +
+        '<div style="background:var(--bg-main);border-radius:8px;padding:14px;margin-bottom:10px;" id="ls-hist-status">' +
+            '<div style="font-size:12px;color:var(--text-muted);">Starting…</div>' +
+        '</div>' +
+        '<div style="background:var(--bg-main);border-radius:6px;height:8px;overflow:hidden;margin-bottom:14px;">' +
+            '<div id="ls-hist-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.3s ease;"></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);">⚠️ Lightspeed\'s API has stale data ~10 weeks back, so anything older than that may be incomplete.</div>';
+    window.openModal('📅 Historical Sync — ' + d + ' days', html);
+
+    window.lsPullHistorical(d, function(p) {
+        var statusEl = document.getElementById('ls-hist-status');
+        var barEl = document.getElementById('ls-hist-bar');
+        if (statusEl) {
+            statusEl.innerHTML =
+                '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Chunk ' + p.chunk + ' of ' + p.totalChunks + '</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);">' + p.dateFrom + ' → ' + p.dateTo + '</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">So far: ' + p.grandTotal.orderCount + ' orders · $' + Math.round(p.grandTotal.revenue).toLocaleString('en-AU') + '</div>';
+        }
+        if (barEl) {
+            var pct = ((p.chunk - 1) / p.totalChunks) * 100;
+            barEl.style.width = pct + '%';
+        }
+    }).then(function(result) {
+        if (!result) {
+            window.showToast('Historical pull failed — see console.', 'error');
+            window.closeModal();
+            return;
+        }
+        var barEl = document.getElementById('ls-hist-bar');
+        if (barEl) barEl.style.width = '100%';
+        var statusEl = document.getElementById('ls-hist-status');
+        if (statusEl) {
+            statusEl.innerHTML =
+                '<div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:6px;">✅ Done!</div>' +
+                '<div style="font-size:12px;">' + result.orderCount + ' orders pulled across ' + result.daysCovered + ' days</div>' +
+                '<div style="font-size:12px;">Total revenue: <strong style="color:var(--green);">$' + Math.round(result.revenue).toLocaleString('en-AU') + '</strong></div>' +
+                (result.failedChunks > 0 ? '<div style="font-size:11px;color:var(--orange);margin-top:6px;">⚠️ ' + result.failedChunks + ' chunk(s) failed (likely past API\'s 10-week limit)</div>' : '');
+        }
+        window.showToast('Historical sync complete: ' + result.orderCount + ' orders.');
+        // Auto-close after 4 seconds
+        setTimeout(function() {
+            window.closeModal();
+            window.openLightspeedSettings();
+        }, 4000);
+    }).catch(function(e) {
+        window.showToast('Historical pull error: ' + e.message, 'error');
+        console.error('Historical pull error:', e);
+    });
 };
 
 // =============================================================================

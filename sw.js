@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260511c';
+const CACHE_NAME = 'hobart-hub-20260511d';
 const APP_SHELL = [
     './',
     './index.html',
