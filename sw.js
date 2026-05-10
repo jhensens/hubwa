@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260511a';
+const CACHE_NAME = 'hobart-hub-20260511b';
 const APP_SHELL = [
     './',
     './index.html',
@@ -65,6 +65,12 @@ self.addEventListener('message', (event) => {
 // Fetch: cache-first for app shell, network-first for API calls
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
+
+    // Bypass service worker entirely for Cloud Functions (POST requests, no caching needed)
+    // Letting the browser handle these natively avoids any SW interception issues.
+    if (url.hostname.endsWith('cloudfunctions.net') || event.request.method !== 'GET') {
+        return; // Don't call event.respondWith() — browser handles natively
+    }
 
     // Network-first for Firebase, Tanda, Gemini API calls
     if (url.hostname.includes('firestore.googleapis.com') ||
