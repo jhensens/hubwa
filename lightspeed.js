@@ -17,10 +17,13 @@ window.LS_CLOUD_FN_BASE = (() => {
     return 'https://us-central1-hobart-hub.cloudfunctions.net';
 })();
 
-// OAuth redirect URI — comes back to /lightspeed-callback path on the Hub
+// OAuth redirect URI — base URL of the Hub (works on both Firebase + GitHub Pages).
+// GitHub Pages doesn't support URL rewrites, so we can't use a fake path like
+// /lightspeed-callback. Instead we redirect to the base URL with ?code=xxx&state=xxx;
+// the Hub auto-detects these params on page load (see handleLsOAuthCallback).
 window.LS_REDIRECT_URI = (() => {
-    // Use whatever origin the Hub is currently served from
-    return window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'lightspeed-callback';
+    // Base URL — strips any filename (e.g. index.html) but keeps the trailing slash
+    return window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
 })();
 
 // =============================================================================
