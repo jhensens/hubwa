@@ -1,10 +1,30 @@
-// --- HOBART HUB: Lightspeed/Kounta API Integration ---
-// Direct API connection to Lightspeed Restaurant (K-Series / Kounta)
-// Pulls completed orders, feeds into existing POS depletion pipeline
-// Mirrors Tanda integration pattern: localStorage credentials, auto-sync timer, settings modal
+// --- HOBART HUB: Lightspeed/Kounta API Integration (OAuth via Cloud Function) ---
+// Browser cannot call Kounta API directly (CORS + Bearer token requirements).
+// All API calls route through Firebase Cloud Functions:
+//   - lightspeedExchange: OAuth code → access/refresh tokens
+//   - lightspeedRefresh:  refresh access token when expired
+//   - lightspeedProxy:    relay API calls with auth header
+// Tokens stored in localStorage, scoped per venue.
 
 // =============================================================================
-// 1. CREDENTIAL HELPERS
+// 0. CLOUD FUNCTION ENDPOINTS
+// =============================================================================
+// Format: https://us-central1-{project}.cloudfunctions.net/{funcName}
+// Override via localStorage.setItem('lsCloudFnBase', 'https://...') for testing.
+window.LS_CLOUD_FN_BASE = (() => {
+    const override = localStorage.getItem('lsCloudFnBase');
+    if (override) return override;
+    return 'https://us-central1-hobart-hub.cloudfunctions.net';
+})();
+
+// OAuth redirect URI — comes back to /lightspeed-callback path on the Hub
+window.LS_REDIRECT_URI = (() => {
+    // Use whatever origin the Hub is currently served from
+    return window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'lightspeed-callback';
+})();
+
+// =============================================================================
+// 1. CREDENTIAL HELPERS — now manages OAuth tokens too
 // =============================================================================
 
 window.getLsCredentials = () => {
@@ -12,6 +32,9 @@ window.getLsCredentials = () => {
     return {
         clientId: localStorage.getItem(vid + '_lsClientId') || '',
         clientSecret: localStorage.getItem(vid + '_lsClientSecret') || '',
+        accessToken: localStorage.getItem(vid + '_lsAccessToken') || '',
+        refreshToken: localStorage.getItem(vid + '_lsRefreshToken') || '',
+        tokenExpiry: Number(localStorage.getItem(vid + '_lsTokenExpiry') || '0'),
         companyId: localStorage.getItem(vid + '_lsCompanyId') || '',
         siteId: localStorage.getItem(vid + '_lsSiteId') || '',
         siteName: localStorage.getItem(vid + '_lsSiteName') || '',
@@ -19,47 +42,125 @@ window.getLsCredentials = () => {
     };
 };
 
+window.setLsTokens = (accessToken, refreshToken, expiresIn) => {
+    const vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+    if (accessToken) localStorage.setItem(vid + '_lsAccessToken', accessToken);
+    if (refreshToken) localStorage.setItem(vid + '_lsRefreshToken', refreshToken);
+    if (expiresIn) localStorage.setItem(vid + '_lsTokenExpiry', String(Date.now() + (expiresIn * 1000) - 60000)); // -1min safety
+};
+
 window.isLsConnected = () => {
     const c = window.getLsCredentials();
-    return !!(c.clientId && c.clientSecret && c.companyId && c.siteId);
+    return !!(c.clientId && c.clientSecret && c.accessToken && c.companyId && c.siteId);
+};
+
+window.isLsTokenExpired = () => {
+    const c = window.getLsCredentials();
+    return !c.tokenExpiry || Date.now() >= c.tokenExpiry;
 };
 
 // =============================================================================
-// 2. API FETCH WRAPPER
+// 2. TOKEN MANAGEMENT — auto-refresh on expiry
+// =============================================================================
+window._lsRefreshing = null;
+
+window.refreshLsToken = async () => {
+    if (window._lsRefreshing) return window._lsRefreshing; // dedupe concurrent calls
+    const creds = window.getLsCredentials();
+    if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) return false;
+
+    window._lsRefreshing = (async () => {
+        try {
+            const res = await fetch(window.LS_CLOUD_FN_BASE + '/lightspeedRefresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    refresh_token: creds.refreshToken,
+                    client_id: creds.clientId,
+                    client_secret: creds.clientSecret
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                console.error('Token refresh failed:', data);
+                return false;
+            }
+            window.setLsTokens(data.access_token, data.refresh_token || creds.refreshToken, data.expires_in);
+            return true;
+        } catch (e) {
+            console.error('Token refresh error:', e);
+            return false;
+        } finally {
+            window._lsRefreshing = null;
+        }
+    })();
+    return window._lsRefreshing;
+};
+
+// =============================================================================
+// 3. API FETCH WRAPPER — calls Cloud Function proxy (solves CORS)
 // =============================================================================
 
-// Single-endpoint fetch with Basic Auth. Returns {data, headers} or null.
 window.fetchKounta = async (endpoint) => {
-    const creds = window.getLsCredentials();
-    if (!creds.clientId || !creds.clientSecret) return null;
+    let creds = window.getLsCredentials();
+    if (!creds.accessToken) return null;
     if (!navigator.onLine) return null;
 
-    const auth = btoa(creds.clientId + ':' + creds.clientSecret);
-    // If endpoint is a full URL (pagination cursor), use it directly
-    const url = endpoint.startsWith('http')
-        ? endpoint
-        : 'https://api.kounta.com/v1/' + endpoint + (endpoint.includes('.json') ? '' : '.json');
+    // Auto-refresh if token expired
+    if (window.isLsTokenExpired()) {
+        const ok = await window.refreshLsToken();
+        if (!ok) return null;
+        creds = window.getLsCredentials();
+    }
+
+    // Normalise path — accept both "companies/me" and "companies/me.json"
+    const path = endpoint.startsWith('http') ? endpoint : (endpoint.includes('.json') ? endpoint : endpoint + '.json');
+
+    const callProxy = async (token) => {
+        return fetch(window.LS_CLOUD_FN_BASE + '/lightspeedProxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: token, path: path })
+        });
+    };
 
     try {
-        const res = await fetch(url, {
-            headers: {
-                'Authorization': 'Basic ' + auth,
-                'Accept': 'application/json'
-            }
-        });
-        if (res.status === 429) {
-            // Rate limited — wait and retry once
-            await new Promise(r => setTimeout(r, 2000));
-            const retry = await fetch(url, {
-                headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' }
-            });
-            if (!retry.ok) return null;
-            return { data: await retry.json(), headers: retry.headers };
+        let res = await callProxy(creds.accessToken);
+        let result = await res.json();
+
+        // 401 from Kounta → token may have expired between our check and the call. Refresh + retry once.
+        if (result && result.status === 401) {
+            const refreshed = await window.refreshLsToken();
+            if (!refreshed) return null;
+            const newCreds = window.getLsCredentials();
+            res = await callProxy(newCreds.accessToken);
+            result = await res.json();
         }
-        if (!res.ok) return null;
-        return { data: await res.json(), headers: res.headers };
+
+        if (!result || !result.ok) {
+            if (result && result.status === 429) {
+                // Rate limited — wait and retry once
+                await new Promise(r => setTimeout(r, 2000));
+                res = await callProxy(window.getLsCredentials().accessToken);
+                result = await res.json();
+                if (!result || !result.ok) return null;
+            } else {
+                console.error('Kounta API call failed:', result);
+                return null;
+            }
+        }
+
+        // Mimic the original {data, headers} shape so existing callers keep working
+        const headersGet = (key) => {
+            if (!result.headers) return null;
+            return result.headers.x_next_page || result.headers[key.toLowerCase().replace(/-/g, '_')] || null;
+        };
+        return {
+            data: result.data,
+            headers: { get: headersGet }
+        };
     } catch (e) {
-        console.error('Kounta API error:', e);
+        console.error('Kounta proxy error:', e);
         return null;
     }
 };
@@ -301,15 +402,24 @@ window.openLightspeedSettings = () => {
         (connected ? '<span style="font-size:10px;padding:3px 8px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--green);border:1px solid rgba(16,185,129,0.2);">Auto-sync: 15min</span>' : '') +
     '</div>';
 
-    // Credential inputs
+    // Credential inputs (only shown if not yet connected, OR for re-entry)
+    if (!connected) {
+        html += '<div style="margin-bottom:12px;padding:12px;background:rgba(59,130,246,0.05);border-left:4px solid var(--blue);border-radius:6px;font-size:12px;color:var(--text-muted);">' +
+            '<strong style="color:var(--blue);">How OAuth works:</strong> Enter your Client ID + Secret below. Click "Connect with Lightspeed" → you\'ll be sent to Lightspeed to log in and approve → automatically returned here.' +
+        '</div>';
+    }
     html += '<div style="margin-bottom:12px;">' +
         '<label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Client ID</label>' +
-        '<input type="text" id="ls-client-id" class="input-box" value="' + E(creds.clientId) + '" placeholder="From Kounta back office Add-ons..." style="margin-bottom:8px;">' +
+        '<input type="text" id="ls-client-id" class="input-box" value="' + E(creds.clientId) + '" placeholder="From Lightspeed Back Office → Integrations" style="margin-bottom:8px;">' +
         '<label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Client Secret</label>' +
-        '<input type="password" id="ls-client-secret" class="input-box" value="' + E(creds.clientSecret) + '" placeholder="From Kounta back office Add-ons...">' +
+        '<input type="password" id="ls-client-secret" class="input-box" value="' + E(creds.clientSecret) + '" placeholder="From the same Integrations page (only shown once on creation)">' +
     '</div>';
 
-    html += '<button onclick="window.saveLsCredentials()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Save & Connect</button>';
+    if (!connected) {
+        html += '<button onclick="window.startLsOAuth()" class="btn btn-green" style="width:100%;margin-bottom:8px;font-size:14px;padding:12px;">🔗 Connect with Lightspeed</button>';
+    } else {
+        html += '<button onclick="window.startLsOAuth()" class="btn btn-outline" style="width:100%;margin-bottom:8px;font-size:12px;">🔄 Re-authenticate (use if connection breaks)</button>';
+    }
 
     if (connected) {
         html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
@@ -369,8 +479,17 @@ window.openLightspeedSettings = () => {
     window.openModal('🛒 Lightspeed Integration', html);
 };
 
-// Save credentials and test connection
-window.saveLsCredentials = async () => {
+// =============================================================================
+// OAUTH FLOW — "Connect with Lightspeed" button
+// =============================================================================
+// 1. Save Client ID + Secret to localStorage (needed for token exchange later)
+// 2. Generate random state for CSRF protection
+// 3. Redirect to Lightspeed authorize URL
+// 4. User logs in / approves → Lightspeed redirects back to our callback URL
+// 5. Callback handler extracts code → exchanges for tokens via Cloud Function
+// =============================================================================
+
+window.startLsOAuth = () => {
     var clientId = document.getElementById('ls-client-id').value.trim();
     var clientSecret = document.getElementById('ls-client-secret').value.trim();
     if (!clientId || !clientSecret) return window.showToast('Both Client ID and Secret are required.', 'error');
@@ -379,32 +498,117 @@ window.saveLsCredentials = async () => {
     localStorage.setItem(vid + '_lsClientId', clientId);
     localStorage.setItem(vid + '_lsClientSecret', clientSecret);
 
-    window.closeModal();
-    window.showLoadingOverlay('Connecting to Lightspeed...');
+    // Generate CSRF state — opaque random string
+    var state = vid + '_' + Math.random().toString(36).substring(2, 18);
+    sessionStorage.setItem('lsOAuthState', state);
 
-    var result = await window.lsTestConnection();
-    window.hideLoadingOverlay();
+    // Construct authorize URL
+    var authUrl = 'https://my.kounta.com/authorize'
+        + '?response_type=code'
+        + '&client_id=' + encodeURIComponent(clientId)
+        + '&redirect_uri=' + encodeURIComponent(window.LS_REDIRECT_URI)
+        + '&state=' + encodeURIComponent(state);
 
-    if (!result.ok) {
-        return window.showToast('Connection failed: ' + result.error, 'error');
+    // Redirect — Lightspeed will bring us back to LS_REDIRECT_URI with ?code=xxx
+    window.location.href = authUrl;
+};
+
+// Called when the page loads with ?code= in URL — completes the OAuth flow
+window.handleLsOAuthCallback = async () => {
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    var state = params.get('state');
+    var error = params.get('error');
+
+    // Clear the URL so refresh doesn't re-trigger
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    if (error) {
+        window.showToast('Lightspeed authorization failed: ' + error, 'error');
+        return;
+    }
+    if (!code) return; // not an OAuth callback
+
+    var savedState = sessionStorage.getItem('lsOAuthState');
+    if (!state || state !== savedState) {
+        window.showToast('OAuth state mismatch — possible CSRF. Please try connecting again.', 'error');
+        return;
+    }
+    sessionStorage.removeItem('lsOAuthState');
+
+    var creds = window.getLsCredentials();
+    if (!creds.clientId || !creds.clientSecret) {
+        window.showToast('Lightspeed credentials missing. Open Lightspeed API settings to retry.', 'error');
+        return;
     }
 
-    if (result.sites.length === 0) {
-        return window.showToast('Connected but no sites found in your Kounta account.', 'error');
-    }
+    window.showLoadingOverlay('Completing Lightspeed connection...');
 
-    if (result.sites.length === 1) {
-        // Auto-select sole site
-        localStorage.setItem(vid + '_lsSiteId', result.sites[0].id);
-        localStorage.setItem(vid + '_lsSiteName', result.sites[0].name);
-        window.showToast('Lightspeed connected! Site: ' + result.sites[0].name);
-        window.startLsAutoRefresh();
-        window.openLightspeedSettings();
-    } else {
-        // Show site picker
-        window._lsOpenSitePicker(result.sites);
+    try {
+        var res = await fetch(window.LS_CLOUD_FN_BASE + '/lightspeedExchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                code: code,
+                redirect_uri: window.LS_REDIRECT_URI,
+                client_id: creds.clientId,
+                client_secret: creds.clientSecret
+            })
+        });
+        var data = await res.json();
+        if (!res.ok) {
+            window.hideLoadingOverlay();
+            window.showToast('Token exchange failed: ' + (data.error || res.status), 'error');
+            console.error('Token exchange failed:', data);
+            return;
+        }
+
+        window.setLsTokens(data.access_token, data.refresh_token, data.expires_in);
+
+        // Now discover company + sites
+        var testResult = await window.lsTestConnection();
+        window.hideLoadingOverlay();
+
+        if (!testResult.ok) {
+            window.showToast('Connection test failed: ' + testResult.error, 'error');
+            return;
+        }
+        if (testResult.sites.length === 0) {
+            window.showToast('Connected but no sites found.', 'error');
+            return;
+        }
+        if (testResult.sites.length === 1) {
+            var vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
+            localStorage.setItem(vid + '_lsSiteId', testResult.sites[0].id);
+            localStorage.setItem(vid + '_lsSiteName', testResult.sites[0].name);
+            window.showToast('Lightspeed connected! Site: ' + testResult.sites[0].name);
+            window.startLsAutoRefresh();
+            window.openLightspeedSettings();
+        } else {
+            window._lsOpenSitePicker(testResult.sites);
+        }
+    } catch (e) {
+        window.hideLoadingOverlay();
+        window.showToast('OAuth callback error: ' + e.message, 'error');
+        console.error('OAuth callback error:', e);
     }
 };
+
+// Auto-trigger callback handler if URL contains ?code= on page load
+if (typeof window !== 'undefined') {
+    var __lsCheckCallback = function() {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('code') && params.get('state') && (params.get('state') || '').startsWith((window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi') + '_')) {
+            // Wait for Hub to finish initial render
+            setTimeout(function() { window.handleLsOAuthCallback(); }, 1500);
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', __lsCheckCallback);
+    } else {
+        __lsCheckCallback();
+    }
+}
 
 // Site picker for multi-site accounts
 window._lsOpenSitePicker = (sites) => {
@@ -510,6 +714,9 @@ window.lsDisconnect = () => {
             var vid = window.getCurrentVenue ? window.getCurrentVenue().id : 'bwi';
             localStorage.removeItem(vid + '_lsClientId');
             localStorage.removeItem(vid + '_lsClientSecret');
+            localStorage.removeItem(vid + '_lsAccessToken');
+            localStorage.removeItem(vid + '_lsRefreshToken');
+            localStorage.removeItem(vid + '_lsTokenExpiry');
             localStorage.removeItem(vid + '_lsCompanyId');
             localStorage.removeItem(vid + '_lsSiteId');
             localStorage.removeItem(vid + '_lsSiteName');
