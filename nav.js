@@ -147,6 +147,7 @@ window.showView = (view) => {
         else if (view === 'ls-reconcile' && window.renderLsReconcileView) content.innerHTML = window.renderLsReconcileView();
         else if (view === 'waste-report' && window.renderWasteReportView) content.innerHTML = window.renderWasteReportView();
         else if (view === 'data-health' && window.renderDataHealthView) content.innerHTML = window.renderDataHealthView();
+        else if (view === 'reconcile' && window.renderReconcileView) content.innerHTML = window.renderReconcileView();
         else if (view === 'ask-hub' && window.renderAskHubView) content.innerHTML = window.renderAskHubView();
         else if (view === 'my-hub' && window.renderMyHubView) content.innerHTML = window.renderMyHubView();
         else if (view === 'badge-management' && window.renderBadgeManagementView) content.innerHTML = window.renderBadgeManagementView();
@@ -270,6 +271,7 @@ window.globalSearch = (query) => {
         { keywords: ['reconcile', 'reconciliation', 'lightspeed reconcile', 'revenue variance', 'gp variance'], icon: '⚖️', label: 'Lightspeed Reconciliation', sub: 'Revenue vs costed depletion variance', view: 'ls-reconcile' },
         { keywords: ['waste report', 'wastage rollup', 'waste by reason'], icon: '🗑️', label: 'Waste Report', sub: 'Wastage rollup by reason', view: 'waste-report' },
         { keywords: ['data health', 'integrity', 'orphan', 'data audit'], icon: '🩺', label: 'Data Health', sub: 'Orphan refs, batch cycles, duplicates', view: 'data-health' },
+        { keywords: ['reconcile', 'reconciliation', 'recipe keeper', 'source diff', 'recipe drift'], icon: '🔄', label: 'Reconcile Recipes from Source', sub: 'Diff & fix recipes against Recipe Keeper HTML export', view: 'reconcile' },
         { keywords: ['setup', 'wizard', 'seed', 'bwi default'], icon: '🏮', label: 'BWI Setup Wizard', sub: 'Load venue defaults', view: null }
     ];
     viewLinks.forEach(function(vl) {

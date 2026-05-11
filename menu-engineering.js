@@ -305,6 +305,7 @@ window.renderAiBatchLinker = () => {
             '<div style="font-size:42px;font-weight:bold;color:var(--purple);">' + totalRaw + '</div>' +
             '<div style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">' + rawRecipes.length + ' recipes with unlinked ingredients</div>' +
             '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+                '<button onclick="window.showView(\'reconcile\')" class="btn btn-outline" style="font-size:14px;padding:12px 22px;border-color:var(--orange);color:var(--orange);" title="Diff every recipe against your Recipe Keeper HTML export and fix qty/unit/link drift">🔄 Reconcile from Source</button>' +
                 '<button onclick="window.runAutoLinkUnambiguous()" class="btn btn-outline" style="font-size:14px;padding:12px 22px;border-color:var(--green);color:var(--green);" title="Scan & link raw ingredients that parse to a single unambiguous inventory match — no AI needed">⚡ Auto-Link Unambiguous</button>' +
                 '<button onclick="window.runAiBatchLink()" class="btn btn-purple" style="font-size:16px;padding:14px 30px;">✨ Run AI Batch Linker</button>' +
             '</div>' +
