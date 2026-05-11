@@ -111,16 +111,43 @@ window.renderMarginView = () => {
     const above=sorted.filter(r=>r.gp>=GP_TARGET);
     const avgGp=menuRecipes.length>0?(menuRecipes.reduce((s,r)=>s+r.gp,0)/menuRecipes.length).toFixed(1):0;
     const stationColor={'Kitchen':'var(--orange)','Bar':'var(--blue)','Prep':'var(--purple)'};
+    const _roundUp = v => Math.ceil(v * 2) / 2; // round to nearest $0.50
     const rowHtml=(recipes)=>recipes.map(r=>{
         const gpColor=r.gp>=GP_TARGET?'var(--green)':r.gp>=GP_TARGET-5?'var(--orange)':'var(--red)';
+        // Suggested price for GP_TARGET: cost / (1 - GP_TARGET/100), rounded up to $0.50
+        const _suggested = (Number(r.cost||0) > 0 && r.gp < GP_TARGET) ? _roundUp(Number(r.cost) / (1 - GP_TARGET/100)) : null;
+        const suggestCell = (_suggested && _suggested > Number(r.price||0))
+            ? `<button onclick="window._applySuggestedPrice('${r.id}', ${_suggested})" class="btn btn-outline" style="font-size:11px;padding:4px 10px;border-color:var(--green);color:var(--green);" title="Set price to $${_suggested.toFixed(2)} (${GP_TARGET}% GP)">→ $${_suggested.toFixed(2)}</button>`
+            : '<span style="font-size:11px;color:var(--text-muted);">—</span>';
         return `<tr style="border-bottom:1px solid var(--border);">
             <td style="padding:12px 15px;"><strong style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${esc(r.name)}</strong> <small style="color:${stationColor[r.station||'Kitchen']};font-size:11px;">${r.station||'Kitchen'}</small></td>
             <td style="padding:12px 15px;font-size:13px;color:var(--brand-accent);">$${Number(r.cost||0).toFixed(2)}</td>
             <td style="padding:12px 15px;font-size:13px;">$${Number(r.price||0).toFixed(2)}</td>
             <td style="padding:12px 15px;min-width:140px;"><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;"><div style="width:${Math.min(100,Math.max(0,r.gp))}%;background:${gpColor};height:100%;border-radius:4px;"></div></div><strong style="color:${gpColor};font-size:14px;min-width:38px;">${r.gp}%</strong></div></td>
+            <td style="padding:12px 15px;text-align:center;">${suggestCell}</td>
             <td style="padding:12px 15px;text-align:right;"><button onclick="window.editRecipeForm('${r.id}')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Edit</button></td>
         </tr>`;
     }).join('');
+    if (!window._applySuggestedPrice) {
+        window._applySuggestedPrice = (rid, newPrice) => {
+            const r = (window.recipes||[]).find(x => x.id === rid);
+            if (!r) return;
+            window.confirmAction({
+                title: '💰 Apply Suggested Price',
+                message: 'Set <strong>' + window.esc(r.name) + '</strong> price to <strong>$' + Number(newPrice).toFixed(2) + '</strong>?<br><small style="color:var(--text-muted);">Current: $' + Number(r.price||0).toFixed(2) + ' · Target: ' + GP_TARGET + '% GP</small>',
+                confirmLabel: 'Apply $' + Number(newPrice).toFixed(2),
+                tier: 'standard',
+                onConfirm: () => {
+                    r.price = Number(newPrice);
+                    if (window._recalcRecipe) window._recalcRecipe(r);
+                    r.modifiedAt = new Date().toISOString();
+                    window.saveToDisk();
+                    window.showToast('✅ ' + r.name + ' → $' + Number(newPrice).toFixed(2) + ' (GP ' + r.gp + '%)', 'success');
+                    window.showView('margins');
+                }
+            });
+        };
+    }
     return `
     <div style="max-width:1100px;margin:auto;">
         ${window._marginsTabBar('margins')}
@@ -133,8 +160,8 @@ window.renderMarginView = () => {
             <div class="card" style="text-align:center;border-top:4px solid var(--red);"><div style="font-size:34px;font-weight:bold;color:var(--red);">${below.length}</div><div style="font-size:12px;color:var(--text-muted);">Below ${GP_TARGET}%</div></div>
             <div class="card" style="text-align:center;border-top:4px solid var(--green);"><div style="font-size:34px;font-weight:bold;color:var(--green);">${above.length}</div><div style="font-size:12px;color:var(--text-muted);">At or Above Target</div></div>
         </div>
-        ${below.length>0?`<div class="card" style="padding:0;overflow:visible;margin-bottom:20px;border-top:4px solid var(--red);"><div style="padding:15px 20px;background:rgba(239,68,68,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--red);">⚠️ Below ${GP_TARGET}% (${below.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th></th></tr></thead><tbody>${rowHtml(below)}</tbody></table></div></div>`:`<div class="card" style="border-top:4px solid var(--green);text-align:center;padding:20px;margin-bottom:20px;"><p style="color:var(--green);font-weight:bold;font-size:16px;margin:0;">✅ All recipes above ${GP_TARGET}% GP target.</p></div>`}
-        <div class="card" style="padding:0;overflow:visible;"><div style="padding:15px 20px;background:rgba(16,185,129,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--green);">✓ Healthy Margins (${above.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th></th></tr></thead><tbody>${rowHtml(above)}</tbody></table></div></div>
+        ${below.length>0?`<div class="card" style="padding:0;overflow:visible;margin-bottom:20px;border-top:4px solid var(--red);"><div style="padding:15px 20px;background:rgba(239,68,68,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--red);">⚠️ Below ${GP_TARGET}% (${below.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th style="padding:10px 15px;text-align:center;">Suggest</th><th></th></tr></thead><tbody>${rowHtml(below)}</tbody></table></div></div>`:`<div class="card" style="border-top:4px solid var(--green);text-align:center;padding:20px;margin-bottom:20px;"><p style="color:var(--green);font-weight:bold;font-size:16px;margin:0;">✅ All recipes above ${GP_TARGET}% GP target.</p></div>`}
+        <div class="card" style="padding:0;overflow:visible;"><div style="padding:15px 20px;background:rgba(16,185,129,0.08);border-bottom:1px solid var(--border);"><h3 style="margin:0;color:var(--green);">✓ Healthy Margins (${above.length})</h3></div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#111;font-size:12px;color:var(--text-muted);text-transform:uppercase;"><th style="padding:10px 15px;text-align:left;">Recipe</th><th style="padding:10px 15px;text-align:left;">Cost</th><th style="padding:10px 15px;text-align:left;">Sell</th><th style="padding:10px 15px;text-align:left;">GP%</th><th style="padding:10px 15px;text-align:center;">Suggest</th><th></th></tr></thead><tbody>${rowHtml(above)}</tbody></table></div></div>
     </div>`;
 };
 
@@ -188,7 +215,7 @@ window.runBulkHtmlImport = (event) => {
                 const directions = directionsEl ? Array.from(directionsEl.querySelectorAll('p')).map(p=>p.textContent.trim()).filter(t=>t.length>0).join('\n') : '';
                 const notes = notesEl ? notesEl.textContent.trim() : '';
                 const method = [directions,notes].filter(Boolean).join('\n\n');
-                const ingredients = rawIngredients.map(line=>{const p=window._parseIngredientLine(line);return{type:'raw',name:p.name||line,qty:p.qty,unit:p.unit};});
+                const ingredients = rawIngredients.map(line=>{const p=window._parseIngredientLine(line);return{type:'raw',name:p.name||line,qty:p.qty,unit:p.unit,_rawName:line};});
                 window.recipes.push({
                     id: window.generateId('rec'), name, posAlias:'',
                     type: window._courseToType(course), station: window._courseToStation(course),
@@ -253,7 +280,7 @@ Recipe: ${rawText}`;
         const aiResult=JSON.parse(rawJson);
         window.tempIngs=aiResult.ingredients.map(ing=>{
             if(ing.matchedInvId&&window.inventoryItems.find(x=>x.id===ing.matchedInvId)){const inv=window.inventoryItems.find(x=>x.id===ing.matchedInvId);return{type:'inv',ref:ing.matchedInvId,qty:ing.qty,unit:inv.useUnit||ing.unit,name:inv.recipeName||inv.name};}
-            return {type:'raw',name:ing.name,qty:ing.qty||0,unit:ing.unit||''};
+            return {type:'raw',name:ing.name,qty:ing.qty||0,unit:ing.unit||'',_rawName:ing.name};
         });
         const newObj={id:window.generateId('rec'),name:aiResult.name||'Imported Recipe',posAlias:'',type:'Menu',station:'Kitchen',status:'Active',price:0,yieldQty:aiResult.yieldQty||1,yieldUnit:'Portion',method:aiResult.method||'',ingredients:window.tempIngs,cost:0,gp:0,allergens:[],photo:'',videoUrl:'',archived:false};
         window.recipes.push(newObj); window.editRecipeForm(newObj.id); window.showToast("AI Parsing Complete!");
@@ -277,7 +304,10 @@ window.renderAiBatchLinker = () => {
         '<div class="card" style="border-top:5px solid var(--purple);text-align:center;margin-bottom:20px;">' +
             '<div style="font-size:42px;font-weight:bold;color:var(--purple);">' + totalRaw + '</div>' +
             '<div style="color:var(--text-muted);font-size:13px;margin-bottom:15px;">' + rawRecipes.length + ' recipes with unlinked ingredients</div>' +
-            '<button onclick="window.runAiBatchLink()" class="btn btn-purple" style="font-size:16px;padding:14px 30px;">✨ Run AI Batch Linker</button>' +
+            '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+                '<button onclick="window.runAutoLinkUnambiguous()" class="btn btn-outline" style="font-size:14px;padding:12px 22px;border-color:var(--green);color:var(--green);" title="Scan & link raw ingredients that parse to a single unambiguous inventory match — no AI needed">⚡ Auto-Link Unambiguous</button>' +
+                '<button onclick="window.runAiBatchLink()" class="btn btn-purple" style="font-size:16px;padding:14px 30px;">✨ Run AI Batch Linker</button>' +
+            '</div>' +
         '</div>' +
         '<div id="batch-link-status" style="margin-bottom:15px;"></div>' +
         '<div id="batch-link-results"></div>' +
@@ -454,45 +484,115 @@ window.renderBatchLinkQueue = () => {
     const withMatch = pending.filter(q=>q.suggestedInvId);
     const noMatch = pending.filter(q=>!q.suggestedInvId);
 
+    // Grouped vs flat view toggle
+    const groupMode = window._batchLinkGroupMode !== false; // default: grouped on
+
     // Summary + action buttons (always shown)
     let html = '<div class="card" style="padding:15px;margin-bottom:15px;border-top:3px solid var(--purple);">';
     html += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">';
     if (withMatch.length>0) html += '<button onclick="window.acceptAllBatchLinks()" class="btn btn-green" style="font-size:15px;padding:12px 24px;">✅ Accept All ' + withMatch.length + ' Matches</button>';
     if (accepted.length>0) html += '<button onclick="window.commitBatchLinks()" class="btn btn-purple" style="font-size:15px;padding:12px 24px;">💾 Commit ' + accepted.length + ' Links</button>';
+    html += '<div style="margin-left:auto;display:flex;gap:4px;background:var(--bg-main);border-radius:6px;padding:3px;">' +
+        '<button onclick="window._batchLinkGroupMode=true;window.renderBatchLinkQueue()" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;border-radius:4px;color:' + (groupMode?'#fff':'var(--text-muted)') + ';background:' + (groupMode?'var(--purple)':'transparent') + ';">📦 Grouped</button>' +
+        '<button onclick="window._batchLinkGroupMode=false;window.renderBatchLinkQueue()" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;border-radius:4px;color:' + (!groupMode?'#fff':'var(--text-muted)') + ';background:' + (!groupMode?'var(--purple)':'transparent') + ';">📜 All Items</button>' +
+    '</div>';
     html += '</div>';
     html += '<div style="font-size:13px;color:var(--text-muted);">🔗 ' + withMatch.length + ' suggested · ❓ ' + noMatch.length + ' no match · ✅ ' + accepted.length + ' accepted</div>';
     html += '</div>';
 
-    // Paginated display — only render 50 items at a time to prevent freezing
-    const PAGE_SIZE = 50;
-    const allPending = [...withMatch, ...noMatch];
-    const totalPages = Math.ceil(allPending.length / PAGE_SIZE);
-    const page = Math.min(window._batchLinkPage || 0, totalPages - 1);
-    const pageItems = allPending.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-    if (allPending.length > 0) {
-        html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">Review Items (' + (page * PAGE_SIZE + 1) + '–' + Math.min((page + 1) * PAGE_SIZE, allPending.length) + ' of ' + allPending.length + ')</h3>';
-        pageItems.forEach(item => {
-            const qIdx = queue.indexOf(item);
-            const hasSuggestion = !!item.suggestedInvId;
-            const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
-            html += '<div class="card" style="border-left:4px solid '+(hasSuggestion ? (cc[item.confidence]||'var(--border)') : 'var(--border)')+';padding:15px;margin-bottom:10px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
-                '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
-                (item.confidence!=='none'&&hasSuggestion?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
-                '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
-                '<div style="display:flex;gap:6px;">' +
-                '<button onclick="window.acceptBatchLink('+qIdx+')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
-                '<button onclick="window.skipBatchLink('+qIdx+')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
-                '</div></div></div>';
+    if (groupMode) {
+        // ── Group pending items by suggestedInvId ──
+        const groups = new Map(); // key: invId or 'NONE', val: [{queue items}]
+        pending.forEach(item => {
+            const key = item.suggestedInvId || 'NONE';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(item);
         });
-        // Pagination controls
-        if (totalPages > 1) {
-            html += '<div style="display:flex;justify-content:center;gap:10px;margin:20px 0;">';
-            if (page > 0) html += '<button onclick="window._batchLinkPage=' + (page-1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">← Prev</button>';
-            html += '<span style="padding:8px 16px;color:var(--text-muted);">Page ' + (page+1) + ' of ' + totalPages + '</span>';
-            if (page < totalPages - 1) html += '<button onclick="window._batchLinkPage=' + (page+1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">Next →</button>';
-            html += '</div>';
+        const groupKeys = Array.from(groups.keys());
+        // Sort: suggested groups first (by group size desc), then NONE last
+        groupKeys.sort((a, b) => {
+            if (a === 'NONE') return 1;
+            if (b === 'NONE') return -1;
+            return groups.get(b).length - groups.get(a).length;
+        });
+        const totalGroups = groupKeys.length;
+        if (totalGroups > 0) {
+            html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">Grouped by Target (' + totalGroups + ' groups, ' + pending.length + ' raw ingredients)</h3>';
+            groupKeys.forEach(key => {
+                const groupItems = groups.get(key);
+                const isUnmatched = key === 'NONE';
+                const inv = !isUnmatched ? (window.inventoryItems||[]).find(x => x.id === key) : null;
+                const groupConf = !isUnmatched ? (groupItems[0].confidence || 'none') : 'none';
+                const borderCol = isUnmatched ? 'var(--border)' : (cc[groupConf] || 'var(--border)');
+                const targetName = inv ? (inv.recipeName || inv.name) : '— No suggestion —';
+                const targetUnit = inv ? (inv.useUnit || 'unit') : '';
+
+                // Sample raw names (up to 3)
+                const samples = groupItems.slice(0, 3).map(g => '<code style="font-size:11px;color:var(--orange);">' + esc(g.rawName) + '</code>').join(', ');
+                const moreCount = groupItems.length - 3;
+                const moreLabel = moreCount > 0 ? ' <span style="color:var(--text-muted);font-size:11px;">+' + moreCount + ' more</span>' : '';
+                const recipeSet = new Set(groupItems.map(g => g.recipeName));
+                const recipeNote = recipeSet.size > 1 ? ' · across <strong>' + recipeSet.size + '</strong> recipes' : ' · in <strong>' + Array.from(recipeSet)[0] + '</strong>';
+
+                // Inv dropdown for overriding
+                const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===key?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
+
+                html += '<div class="card" style="border-left:4px solid ' + borderCol + ';padding:15px;margin-bottom:10px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
+                        '<div style="flex:1;min-width:240px;">' +
+                            '<div style="font-size:11px;color:var(--text-muted);">Suggested target' +
+                                (isUnmatched ? '' : '<span style="font-size:10px;color:' + (cc[groupConf]||'') + ';margin-left:6px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">' + groupConf + '</span>') +
+                            '</div>' +
+                            '<strong style="font-size:14px;color:' + (isUnmatched ? 'var(--text-muted)' : 'var(--green)') + ';">' + esc(targetName) + (targetUnit ? ' <span style="color:var(--text-muted);font-weight:normal;font-size:12px;">(' + esc(targetUnit) + ')</span>' : '') + '</strong>' +
+                            '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><strong>' + groupItems.length + '</strong> raw ingredient' + (groupItems.length !== 1 ? 's' : '') + recipeNote + '</div>' +
+                            '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">e.g. ' + samples + moreLabel + '</div>' +
+                        '</div>' +
+                        '<div style="flex:1;min-width:200px;">' +
+                            '<label style="font-size:10px;color:var(--text-muted);">Override target:</label>' +
+                            '<select id="bl-grp-sel-' + esc(key) + '" class="input-box" style="margin:2px 0;font-size:12px;"><option value="">-- choose --</option>' + invOpts + '</select>' +
+                        '</div>' +
+                        '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                            (isUnmatched
+                                ? '<button onclick="window._batchGroupOverride(\'NONE\')" class="btn btn-green" style="font-size:12px;padding:6px 14px;">✓ Link ' + groupItems.length + ' with override</button>'
+                                : '<button onclick="window._batchGroupAccept(\'' + esc(key) + '\')" class="btn btn-green" style="font-size:12px;padding:6px 14px;">✓ Link all ' + groupItems.length + '</button>') +
+                            '<button onclick="window._batchGroupSkip(\'' + esc(key) + '\')" class="btn btn-outline" style="font-size:12px;padding:6px 14px;">Skip group</button>' +
+                            (!isUnmatched ? '<button onclick="window._batchGroupExpand(\'' + esc(key) + '\')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:var(--text-muted);">Show all ' + groupItems.length + ' &raquo;</button>' : '') +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            });
+        }
+    } else {
+        // ── Flat view (legacy) ──
+        const PAGE_SIZE = 50;
+        const allPending = [...withMatch, ...noMatch];
+        const totalPages = Math.ceil(allPending.length / PAGE_SIZE);
+        const page = Math.min(window._batchLinkPage || 0, totalPages - 1);
+        const pageItems = allPending.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+        if (allPending.length > 0) {
+            html += '<h3 style="color:var(--brand-dark);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:15px;">Review Items (' + (page * PAGE_SIZE + 1) + '–' + Math.min((page + 1) * PAGE_SIZE, allPending.length) + ' of ' + allPending.length + ')</h3>';
+            pageItems.forEach(item => {
+                const qIdx = queue.indexOf(item);
+                const hasSuggestion = !!item.suggestedInvId;
+                const invOpts = (window.inventoryItems||[]).filter(x=>!x.archived).map(x=>'<option value="'+x.id+'" '+(x.id===item.suggestedInvId?'selected':'')+'>'+esc(x.name)+' ('+esc(x.useUnit||'unit')+')</option>').join('');
+                html += '<div class="card" style="border-left:4px solid '+(hasSuggestion ? (cc[item.confidence]||'var(--border)') : 'var(--border)')+';padding:15px;margin-bottom:10px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">' +
+                    '<div style="flex:1;"><div style="font-size:12px;color:var(--text-muted);">'+esc(item.recipeName)+'</div><strong style="color:var(--orange);">'+esc(item.rawName)+'</strong>' +
+                    (item.confidence!=='none'&&hasSuggestion?'<span style="font-size:11px;color:'+(cc[item.confidence]||'')+';margin-left:8px;border:1px solid currentColor;padding:1px 6px;border-radius:8px;">'+item.confidence+'</span>':'')+'</div>' +
+                    '<div style="flex:2;min-width:180px;"><select id="bl-sel-'+qIdx+'" class="input-box" style="margin:0 0 6px 0;"><option value="">-- Skip --</option>'+invOpts+'</select></div>' +
+                    '<div style="display:flex;gap:6px;">' +
+                    '<button onclick="window.acceptBatchLink('+qIdx+')" class="btn btn-green" style="font-size:12px;padding:6px 12px;">✓ Link</button>' +
+                    '<button onclick="window.skipBatchLink('+qIdx+')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">Skip</button>' +
+                    '</div></div></div>';
+            });
+            if (totalPages > 1) {
+                html += '<div style="display:flex;justify-content:center;gap:10px;margin:20px 0;">';
+                if (page > 0) html += '<button onclick="window._batchLinkPage=' + (page-1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">← Prev</button>';
+                html += '<span style="padding:8px 16px;color:var(--text-muted);">Page ' + (page+1) + ' of ' + totalPages + '</span>';
+                if (page < totalPages - 1) html += '<button onclick="window._batchLinkPage=' + (page+1) + ';window.renderBatchLinkQueue()" class="btn btn-outline" style="padding:8px 16px;">Next →</button>';
+                html += '</div>';
+            }
         }
     }
 
@@ -502,7 +602,164 @@ window.renderBatchLinkQueue = () => {
     }
     resultsDiv.innerHTML = html;
 };
+// =============================================================================
+// AUTO-LINK UNAMBIGUOUS — scan raw ingredients, link where parsed name has
+// exactly one inventory match. No AI needed; instant.
+// =============================================================================
+window.runAutoLinkUnambiguous = () => {
+    const E = window.esc;
+    const inv = (window.inventoryItems || []).filter(i => !i.archived);
+    // Build a name index: normalised "kikkoman soy sauce" / "soy sauce" → [invItems]
+    const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const nameIdx = {};
+    inv.forEach(i => {
+        const candidates = new Set();
+        if (i.name) candidates.add(_norm(i.name));
+        if (i.recipeName) candidates.add(_norm(i.recipeName));
+        candidates.forEach(c => {
+            if (!c) return;
+            (nameIdx[c] = nameIdx[c] || []).push(i);
+        });
+    });
+
+    const proposals = []; // { recipeId, recipeName, ingIdx, ing, inv }
+    const noise = /^(step\s*\d|add\s|mix\s|combine\s|garnish|optional|to taste|as needed|for serving|salt and pepper)$/i;
+
+    (window.recipes || []).filter(r => !r.archived).forEach(r => {
+        (r.ingredients || []).forEach((ing, idx) => {
+            if (ing.type !== 'raw') return;
+            const sourceText = ing._rawName || ing.name || '';
+            if (!sourceText.trim() || noise.test(sourceText.trim())) return;
+            const parsed = window._parseIngredientLine(sourceText);
+            const parsedNorm = _norm(parsed.name || sourceText);
+            if (!parsedNorm) return;
+            const matches = nameIdx[parsedNorm];
+            if (!matches || matches.length !== 1) return; // need exactly one unambiguous match
+            proposals.push({ recipeId: r.id, recipeName: r.name, ingIdx: idx, ing, inv: matches[0], parsedQty: parsed.qty, parsedUnit: parsed.unit });
+        });
+    });
+
+    if (proposals.length === 0) {
+        return window.showToast('No unambiguous matches found. Try the AI Batch Linker for ambiguous ones.', 'info');
+    }
+
+    // Group by inventory item for the preview modal
+    const groups = {};
+    proposals.forEach(p => {
+        const key = p.inv.id;
+        if (!groups[key]) groups[key] = { inv: p.inv, items: [] };
+        groups[key].items.push(p);
+    });
+    const groupRows = Object.values(groups).sort((a,b) => b.items.length - a.items.length).slice(0, 30).map(g => {
+        const sampleRecipes = Array.from(new Set(g.items.map(it => it.recipeName))).slice(0, 3).map(n => E(n)).join(', ');
+        const moreRecs = g.items.length - 3 > 0 ? ' +' + (g.items.length - 3) + ' more' : '';
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:5px 8px;font-size:12px;"><strong>' + E(g.inv.recipeName || g.inv.name) + '</strong></td>' +
+            '<td style="padding:5px 8px;text-align:center;font-size:12px;font-weight:600;">' + g.items.length + '</td>' +
+            '<td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">' + sampleRecipes + moreRecs + '</td>' +
+        '</tr>';
+    }).join('');
+    const totalGroups = Object.keys(groups).length;
+
+    const previewHtml =
+        '<p style="margin:0 0 12px;font-size:13px;">Found <strong style="color:var(--green);">' + proposals.length + '</strong> raw ingredients with a single unambiguous inventory match across <strong>' + totalGroups + '</strong> inventory items. No AI required — these are exact-name parses.</p>' +
+        '<div style="max-height:50vh;overflow-y:auto;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);">' +
+                    '<th style="text-align:left;padding:6px 8px;">Inventory Item</th>' +
+                    '<th style="text-align:center;padding:6px 8px;">Occurrences</th>' +
+                    '<th style="text-align:left;padding:6px 8px;">Sample Recipes</th>' +
+                '</tr></thead><tbody>' + groupRows + '</tbody>' +
+            '</table>' +
+            (totalGroups > 30 ? '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px;">…and ' + (totalGroups - 30) + ' more inventory items</div>' : '') +
+        '</div>';
+
+    // Stash proposals for commit
+    window._autoLinkProposals = proposals;
+    window.confirmAction({
+        title: '⚡ Auto-Link Unambiguous',
+        message: previewHtml,
+        confirmLabel: 'Link ' + proposals.length + ' Ingredients',
+        tier: 'standard',
+        onConfirm: window._commitAutoLinkUnambiguous
+    });
+};
+
+window._commitAutoLinkUnambiguous = () => {
+    const proposals = window._autoLinkProposals || [];
+    let count = 0;
+    proposals.forEach(p => {
+        const r = (window.recipes || []).find(x => x.id === p.recipeId);
+        if (!r) return;
+        const ing = r.ingredients && r.ingredients[p.ingIdx];
+        if (!ing || ing.type !== 'raw') return;
+        const sourceText = ing._rawName || ing.name || '';
+        const qty = (ing.qty && ing.qty !== 1) ? ing.qty : (p.parsedQty || 1);
+        const unit = ing.unit || p.parsedUnit || p.inv.useUnit || 'unit';
+        r.ingredients[p.ingIdx] = {
+            type: 'inv',
+            ref: p.inv.id,
+            qty: qty,
+            unit: unit,
+            name: p.inv.recipeName || p.inv.name,
+            _rawName: sourceText
+        };
+        count++;
+    });
+    if (typeof window.recalcAllCosts === 'function') window.recalcAllCosts();
+    else window.saveToDisk();
+    window._autoLinkProposals = null;
+    window.showToast('⚡ Auto-linked ' + count + ' ingredients across ' + new Set(proposals.map(p => p.recipeId)).size + ' recipes.', 'success');
+    window.showView('linker');
+};
+
 window._saveBatchQueue = () => { try { localStorage.setItem('_batchLinkQueue', JSON.stringify(window._batchLinkQueue)); } catch(e) {} };
+// Group helpers (suggested-target grouping in Batch Linker)
+window._batchGroupAccept = (invId) => {
+    (window._batchLinkQueue || []).forEach(item => {
+        if (item.accepted || item.skipped) return;
+        if (item.suggestedInvId === invId) item.accepted = true;
+    });
+    window._saveBatchQueue();
+    window.renderBatchLinkQueue();
+};
+window._batchGroupSkip = (invId) => {
+    const key = invId === 'NONE' ? null : invId;
+    (window._batchLinkQueue || []).forEach(item => {
+        if (item.accepted || item.skipped) return;
+        if ((item.suggestedInvId || null) === key) item.skipped = true;
+    });
+    window._saveBatchQueue();
+    window.renderBatchLinkQueue();
+};
+window._batchGroupOverride = (invId) => {
+    // Read the dropdown for this group, apply that target to all items in the group, accept them.
+    const sel = document.getElementById('bl-grp-sel-' + invId);
+    if (!sel || !sel.value) return window.showToast('Pick a target from the dropdown first.', 'error');
+    const newId = sel.value;
+    const inv = (window.inventoryItems || []).find(i => i.id === newId);
+    if (!inv) return window.showToast('Invalid target.', 'error');
+    const key = invId === 'NONE' ? null : invId;
+    let count = 0;
+    (window._batchLinkQueue || []).forEach(item => {
+        if (item.accepted || item.skipped) return;
+        if ((item.suggestedInvId || null) === key) {
+            item.suggestedInvId = newId;
+            item.suggestedInvName = inv.name;
+            item.accepted = true;
+            count++;
+        }
+    });
+    window._saveBatchQueue();
+    window.renderBatchLinkQueue();
+    window.showToast('✓ Linked ' + count + ' to ' + (inv.recipeName || inv.name), 'success');
+};
+window._batchGroupExpand = (invId) => {
+    // Flip to flat view, scroll user to relevant items (best-effort)
+    window._batchLinkGroupMode = false;
+    window.renderBatchLinkQueue();
+    window.showToast('Switched to "All Items" view to edit group individually.', 'info');
+};
 window.acceptBatchLink = (qIdx) => { const sel=document.getElementById('bl-sel-'+qIdx); const id=sel?sel.value:window._batchLinkQueue[qIdx].suggestedInvId; if(!id) return window.showToast('Select an item first.','error'); const inv=(window.inventoryItems||[]).find(x=>x.id===id); window._batchLinkQueue[qIdx].suggestedInvId=id; window._batchLinkQueue[qIdx].suggestedInvName=inv?inv.name:id; window._batchLinkQueue[qIdx].accepted=true; window._saveBatchQueue(); window.renderBatchLinkQueue(); };
 window.skipBatchLink = (qIdx) => { window._batchLinkQueue[qIdx].skipped=true; window._saveBatchQueue(); window.renderBatchLinkQueue(); };
 window.acceptAllBatchLinks = () => { (window._batchLinkQueue||[]).forEach(item=>{ if(!item.accepted&&!item.skipped&&item.suggestedInvId) item.accepted=true; }); window._saveBatchQueue(); window.renderBatchLinkQueue(); };
@@ -530,6 +787,48 @@ window.commitBatchLinks = () => {
 // =============================================================================
 
 // Aggregate sales volumes from depletion logs (non-reversed) into weekly averages
+// 8-week per-recipe sales volume — returns array of weekly counts (oldest → newest)
+window._calcRecipeWeeklyHistory = (recipeName, weeks) => {
+    weeks = weeks || 8;
+    if (!recipeName) return new Array(weeks).fill(0);
+    const target = recipeName.toLowerCase().trim();
+    const now = Date.now();
+    const buckets = new Array(weeks).fill(0);
+    (window.depletionLogs || []).filter(d => !d.reversed && d.itemsSold).forEach(d => {
+        let ts = null;
+        if (d.ts) ts = new Date(d.ts).getTime();
+        else if (d.date) {
+            const m = d.date.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (m) ts = new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+            else { const p = d.date.split('/'); if (p.length === 3) ts = new Date(p[2], p[1]-1, p[0]).getTime(); }
+        }
+        if (!ts) return;
+        const weeksAgo = Math.floor((now - ts) / (7 * 86400000));
+        if (weeksAgo < 0 || weeksAgo >= weeks) return;
+        (d.itemsSold || []).forEach(item => {
+            if ((item.recipeName || '').toLowerCase().trim() === target) {
+                buckets[weeks - 1 - weeksAgo] += (item.qtySold || 0);
+            }
+        });
+    });
+    return buckets;
+};
+
+// Render a tiny SVG sparkline from a series
+window._sparkline = (values, opts) => {
+    opts = opts || {};
+    const w = opts.width || 80; const h = opts.height || 20;
+    const color = opts.color || 'var(--blue)';
+    if (!values || values.length === 0) return '<span style="font-size:10px;color:var(--text-muted);">—</span>';
+    const max = Math.max(1, ...values);
+    const step = w / Math.max(1, values.length - 1);
+    const points = values.map((v, i) => (i * step).toFixed(1) + ',' + (h - (v / max) * (h - 2) - 1).toFixed(1)).join(' ');
+    return '<svg width="' + w + '" height="' + h + '" style="vertical-align:middle;display:inline-block;">' +
+        '<polyline fill="none" stroke="' + color + '" stroke-width="1.5" points="' + points + '"/>' +
+        '<circle cx="' + ((values.length - 1) * step).toFixed(1) + '" cy="' + (h - (values[values.length-1] / max) * (h - 2) - 1).toFixed(1) + '" r="2" fill="' + color + '"/>' +
+    '</svg>';
+};
+
 window._calcPosCovers = () => {
     const logs = (window.depletionLogs||[]).filter(d => !d.reversed && d.itemsSold && d.itemsSold.length > 0);
     if (logs.length === 0) return {};
@@ -704,7 +1003,7 @@ window.renderMenuEngineeringView = () => {
                 '<td style="padding:8px 10px;"><strong style="cursor:pointer;color:var(--blue);font-size:13px;" onclick="window.editRecipeForm(\''+r.id+'\')">'+E(r.name)+'</strong><br><small style="color:'+(sc[r.station||'Kitchen']||'var(--text-muted)')+';">'+(r.station||'Kitchen')+'</small></td>' +
                 '<td style="padding:8px 10px;color:'+gc+';font-weight:bold;font-size:13px;">'+r.gp+'%'+fixBtn+'</td>' +
                 '<td style="padding:8px 10px;font-size:12px;">$'+Number(r.price||0).toFixed(2)+'<br><small style="color:var(--text-muted);">cost $'+Number(r.cost||0).toFixed(2)+'</small></td>' +
-                '<td style="padding:8px 10px;font-weight:bold;font-size:13px;">'+(r.coversPerWeek||0)+'</td>' +
+                '<td style="padding:8px 10px;font-weight:bold;font-size:13px;">'+(r.coversPerWeek||0)+'<br>'+window._sparkline(window._calcRecipeWeeklyHistory(r.name, 8),{color:cat.css,width:70,height:18})+'</td>' +
                 '<td style="padding:8px 10px;text-align:right;font-size:12px;"><strong style="color:'+(r._weeklyProfit>=0?'var(--green)':'var(--red)')+';">$'+r._weeklyProfit.toFixed(0)+'</strong><br><small style="color:var(--text-muted);">/wk</small></td>' +
             '</tr>';
         }).join('');

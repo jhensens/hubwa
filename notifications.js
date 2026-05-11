@@ -256,11 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (doc.exists) {
                 let data = doc.data();
                 let changed = false;
+                const _safeLen = v => {
+                    if (Array.isArray(v)) return v.length;
+                    if (v === undefined || v === null) return 0;
+                    const s = JSON.stringify(v);
+                    return s ? s.length : 0;
+                };
                 window.saveKeys.forEach(k => {
                     if (data[k] !== undefined) {
-                        const newLen = Array.isArray(data[k]) ? data[k].length : JSON.stringify(data[k]).length;
-                        const oldLen = Array.isArray(window[k]) ? window[k].length : JSON.stringify(window[k]).length;
-                        if (newLen !== oldLen) changed = true;
+                        if (_safeLen(data[k]) !== _safeLen(window[k])) changed = true;
                         window[k] = data[k];
                     }
                 });

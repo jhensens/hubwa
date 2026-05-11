@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260511e';
+const CACHE_NAME = 'hobart-hub-20260511g';
 const APP_SHELL = [
     './',
     './index.html',
@@ -29,7 +29,8 @@ const APP_SHELL = [
     './compliance.js',
     './documents.js',
     './dashboard.js',
-    './engagement.js'
+    './engagement.js',
+    './dataHealth.js'
 ];
 
 // Install: cache app shell

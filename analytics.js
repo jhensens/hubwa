@@ -1028,3 +1028,179 @@ window.renderSupplierSpendView = () => {
     return html;
 };
 
+// =============================================================================
+// LIGHTSPEED RECONCILIATION VIEW
+// Compares daily lsRevenue to costed depletion → theoretical GP → variance
+// =============================================================================
+window.renderLsReconcileView = () => {
+    const E = window.esc;
+    const GP_T = window.GP_TARGET || 67;
+    const VAR_FLAG = 15; // % variance to flag
+    const sales = window.salesData || [];
+    const logs = (window.depletionLogs || []).filter(l => !l.reversed);
+    const inv = window.inventoryItems || [];
+    const invById = {}; inv.forEach(i => { invById[i.id] = i; });
+
+    // Daily cost from depletion runs
+    const dailyCost = {};
+    logs.forEach(l => {
+        const d = l.date; if (!d) return;
+        let c = 0;
+        (l.stockChanges || []).forEach(sc => {
+            const item = invById[sc.id];
+            if (!item) return;
+            const delta = Math.abs(Number(sc.delta || 0)); // delta is in buy units
+            c += delta * Number(item.price || 0);
+        });
+        dailyCost[d] = (dailyCost[d] || 0) + c;
+    });
+
+    // Daily revenue from salesData (lsRevenue preferred; falls back to manual)
+    const dailyRev = {};
+    sales.forEach(s => {
+        if (!s.date) return;
+        const eff = window._effectiveRevenue ? window._effectiveRevenue(s) : Number(s.lsRevenue || s.total || 0);
+        if (eff > 0) dailyRev[s.date] = eff;
+    });
+
+    // Merge dates
+    const allDates = Array.from(new Set([...Object.keys(dailyRev), ...Object.keys(dailyCost)])).sort().reverse();
+    const last30 = allDates.slice(0, 30);
+
+    let flagged = 0, totalDays = 0, totalRev = 0, totalCost = 0;
+    const rows = last30.map(d => {
+        const rev = dailyRev[d] || 0;
+        const cost = dailyCost[d] || 0;
+        if (rev <= 0 && cost <= 0) return '';
+        const gp = rev > 0 ? ((rev - cost) / rev * 100) : 0;
+        const varPct = gp - GP_T;
+        const flagged_ = rev > 0 && cost > 0 && Math.abs(varPct) >= VAR_FLAG;
+        if (rev > 0 && cost > 0) { totalDays++; totalRev += rev; totalCost += cost; if (flagged_) flagged++; }
+        const flagBadge = !rev ? '<span style="font-size:10px;color:var(--text-muted);">no revenue</span>'
+            : !cost ? '<span style="font-size:10px;color:var(--text-muted);">no depletion</span>'
+            : flagged_ ? '<span style="font-size:10px;color:var(--red);font-weight:600;">⚠️ variance</span>'
+            : '<span style="font-size:10px;color:var(--green);">ok</span>';
+        const gpColor = gp >= GP_T ? 'var(--green)' : gp >= GP_T - 5 ? 'var(--orange)' : 'var(--red)';
+        return `<tr style="border-bottom:1px solid var(--border);${flagged_?'background:rgba(239,68,68,0.04);':''}">
+            <td style="padding:8px 10px;font-size:12px;">${E(d)}</td>
+            <td style="padding:8px 10px;font-size:12px;text-align:right;">$${rev.toFixed(2)}</td>
+            <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--brand-accent);">$${cost.toFixed(2)}</td>
+            <td style="padding:8px 10px;font-size:12px;text-align:right;font-weight:600;color:${gpColor};">${gp.toFixed(1)}%</td>
+            <td style="padding:8px 10px;font-size:12px;text-align:right;color:${Math.abs(varPct)>=VAR_FLAG?'var(--red)':'var(--text-muted)'};">${varPct>0?'+':''}${varPct.toFixed(1)}pp</td>
+            <td style="padding:8px 10px;text-align:right;">${flagBadge}</td>
+        </tr>`;
+    }).filter(Boolean).join('');
+
+    const avgGp = totalRev > 0 ? ((totalRev - totalCost) / totalRev * 100).toFixed(1) : '—';
+
+    let html = '<div style="max-width:1100px;margin:auto;">' +
+        '<h2 style="margin:0 0 4px 0;">⚖️ Lightspeed Reconciliation</h2>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Daily revenue vs costed depletion (last 30 days). Variance ≥' + VAR_FLAG + 'pp from ' + GP_T + '% target is flagged.</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;">' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--blue);"><div style="font-size:22px;font-weight:700;">' + totalDays + '</div><div style="font-size:11px;color:var(--text-muted);">Days with data</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--green);"><div style="font-size:22px;font-weight:700;">$' + totalRev.toFixed(0) + '</div><div style="font-size:11px;color:var(--text-muted);">Revenue total</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--brand-accent);"><div style="font-size:22px;font-weight:700;">$' + totalCost.toFixed(0) + '</div><div style="font-size:11px;color:var(--text-muted);">Costed depletion</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid ' + (avgGp >= GP_T ? 'var(--green)' : 'var(--red)') + ';"><div style="font-size:22px;font-weight:700;color:' + (avgGp >= GP_T ? 'var(--green)' : 'var(--red)') + ';">' + avgGp + '%</div><div style="font-size:11px;color:var(--text-muted);">Effective GP</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--red);"><div style="font-size:22px;font-weight:700;color:var(--red);">' + flagged + '</div><div style="font-size:11px;color:var(--text-muted);">Flagged days</div></div>' +
+        '</div>';
+
+    if (totalDays === 0) {
+        html += '<div class="card" style="padding:30px;text-align:center;">' +
+            '<div style="font-size:48px;">📉</div>' +
+            '<p style="color:var(--text-muted);">No overlapping revenue + depletion days yet. Sync Lightspeed and run depletion to populate.</p></div>';
+    } else {
+        html += '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+                    '<th style="text-align:left;padding:8px 10px;">Date</th>' +
+                    '<th style="text-align:right;padding:8px 10px;">Revenue</th>' +
+                    '<th style="text-align:right;padding:8px 10px;">Costed Depletion</th>' +
+                    '<th style="text-align:right;padding:8px 10px;">Theoretical GP%</th>' +
+                    '<th style="text-align:right;padding:8px 10px;">Δ vs Target</th>' +
+                    '<th style="text-align:right;padding:8px 10px;">Status</th>' +
+                '</tr></thead>' +
+                '<tbody>' + rows + '</tbody>' +
+            '</table></div>';
+    }
+    html += '</div>';
+    return html;
+};
+
+// =============================================================================
+// WASTE REPORT — pivot wastageLogs + depletionLogs (with reason) by reason
+// =============================================================================
+window.renderWasteReportView = () => {
+    const E = window.esc;
+    const inv = window.inventoryItems || [];
+    const invById = {}; inv.forEach(i => { invById[i.id] = i; });
+
+    // Gather waste entries from wastageLogs (manual)
+    const entries = [];
+    (window.wastageLogs || []).forEach(w => {
+        const date = (w.date || w.ts || '').slice(0,10);
+        const item = invById[w.itemId || w.id];
+        const cost = Number(w.cost || ((item ? (item.price||0) : 0) * (Number(w.qty||0)) / (item ? (item.yield||1) : 1)));
+        entries.push({ date, reason: w.reason || 'Unspecified', cost, source: 'wastage', name: w.itemName || (item && item.name) || '' });
+    });
+    // Plus any depletionLogs with reason annotation (rare today, but ready)
+    (window.depletionLogs || []).filter(l => !l.reversed && l.reason).forEach(l => {
+        let c = 0;
+        (l.stockChanges || []).forEach(sc => {
+            const item = invById[sc.id]; if (!item) return;
+            c += Math.abs(Number(sc.delta||0)) * Number(item.price||0);
+        });
+        entries.push({ date: l.date, reason: l.reason || 'Depletion', cost: c, source: 'depletion', name: '' });
+    });
+
+    // 8-week range
+    const eightAgo = new Date(Date.now() - 8*7*86400000); const cutoff = eightAgo.toISOString().slice(0,10);
+    const recent = entries.filter(e => e.date >= cutoff);
+
+    const byReason = {};
+    recent.forEach(e => {
+        byReason[e.reason] = (byReason[e.reason] || 0) + e.cost;
+    });
+    const total = Object.values(byReason).reduce((s, v) => s + v, 0);
+    const sortedReasons = Object.entries(byReason).sort((a,b) => b[1] - a[1]);
+
+    let html = '<div style="max-width:1000px;margin:auto;">' +
+        '<h2 style="margin:0 0 4px 0;">🗑️ Waste Report</h2>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Last 8 weeks of wastage by reason — pulled from manual wastage logs + reasoned depletion entries.</div>';
+
+    if (sortedReasons.length === 0) {
+        html += '<div class="card" style="padding:30px;text-align:center;"><div style="font-size:48px;">✨</div><p style="color:var(--text-muted);">No wastage logged in the last 8 weeks — nice work!</p></div></div>';
+        return html;
+    }
+
+    html += '<div class="card" style="padding:16px;margin-bottom:16px;border-top:3px solid var(--red);">' +
+        '<div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">Total wasted (8 weeks)</div>' +
+        '<div style="font-size:34px;font-weight:700;color:var(--red);">$' + total.toFixed(2) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Across ' + recent.length + ' log entries · ' + sortedReasons.length + ' reasons</div>' +
+    '</div>';
+
+    html += '<div class="card" style="padding:0;overflow:hidden;">' +
+        '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
+            '<th style="text-align:left;padding:10px 14px;">Reason</th>' +
+            '<th style="text-align:right;padding:10px 14px;">Entries</th>' +
+            '<th style="text-align:right;padding:10px 14px;">Total Cost</th>' +
+            '<th style="text-align:right;padding:10px 14px;">Share</th>' +
+        '</tr></thead><tbody>' +
+        sortedReasons.map(([reason, cost]) => {
+            const count = recent.filter(e => e.reason === reason).length;
+            const share = total > 0 ? (cost / total * 100) : 0;
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:10px 14px;font-size:13px;font-weight:600;">' + E(reason) + '</td>' +
+                '<td style="padding:10px 14px;text-align:right;font-size:12px;color:var(--text-muted);">' + count + '</td>' +
+                '<td style="padding:10px 14px;text-align:right;font-size:13px;color:var(--red);font-weight:600;">$' + cost.toFixed(2) + '</td>' +
+                '<td style="padding:10px 14px;text-align:right;min-width:180px;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">' +
+                        '<div style="flex:0 0 100px;background:var(--border);border-radius:4px;height:6px;overflow:hidden;"><div style="width:' + share.toFixed(0) + '%;background:var(--red);height:100%;"></div></div>' +
+                        '<span style="font-size:12px;min-width:40px;">' + share.toFixed(1) + '%</span>' +
+                    '</div></td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    return html;
+};
+

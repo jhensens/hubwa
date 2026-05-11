@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '11 May 2026';
-window._hubBuildId = '20260511e';
+window._hubBuildId = '20260511g';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -684,7 +684,23 @@ window.renderManagerHub = () => {
     });
     lowStock.slice(0,4).forEach(i => focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:E(i.name)+' below par', view:'inventory'}));
     if (lowStock.length > 4) focusItems.push({pri:3, icon:'📦', color:'var(--orange)', text:'+'+(lowStock.length-4)+' more below par', view:'inventory'});
-    openTickets.slice(0,2).forEach(t => focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:E(t.item)+' — open ticket', view:'maintenance'}));
+    // Defects: urgent ones get pri:0; oldest first; show up to 3 + overflow count
+    const sortedDefects = openTickets.slice().sort((a,b) => {
+        if ((b.urgent?1:0) !== (a.urgent?1:0)) return (b.urgent?1:0) - (a.urgent?1:0);
+        return String(a.date||'').localeCompare(String(b.date||''));
+    });
+    sortedDefects.slice(0,3).forEach(t => {
+        const ageDays = t.date ? Math.floor((today - new Date(t.date)) / 86400000) : 0;
+        const ageLabel = ageDays > 0 ? ' · ' + ageDays + 'd' : '';
+        focusItems.push({
+            pri: t.urgent ? 0 : 4,
+            icon: t.urgent ? '🚨' : '🛠️',
+            color: t.urgent ? 'var(--red)' : 'var(--orange)',
+            text: E(t.item) + ' — ' + (t.urgent ? 'URGENT' : 'open') + ageLabel,
+            view: 'maintenance'
+        });
+    });
+    if (sortedDefects.length > 3) focusItems.push({pri:4, icon:'🛠️', color:'var(--orange)', text:'+'+(sortedDefects.length-3)+' more open ticket'+(sortedDefects.length-3===1?'':'s'), view:'maintenance'});
     expiringQuals.slice(0,2).forEach(q => focusItems.push({pri:5, icon:'🎓', color:q.status==='expired'?'var(--red)':'var(--orange)', text:E(q.staff)+' — '+E(q.qual)+(q.status==='expired'?' EXPIRED':' expires in '+q.days+'d'), view:'orientation'}));
     marginAlerts.slice(0,2).forEach(a => focusItems.push({pri:6, icon:'📉', color:'var(--red)', text:E(a.name)+' margin: '+a.currentGp+'%', view:'margins'}));
     // Supplier cutoff alerts — warn if items below PAR and cutoff approaching
@@ -917,6 +933,18 @@ window.renderManagerHub = () => {
     html += '<div style="font-size:22px;font-weight:800;color:'+compColor+';">'+(breaches.length>0?breaches.length+'!':checkPct+'%')+'</div>';
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">'+todayTemps.length+' temp logs · '+(breaches.length>0?'<span style="color:var(--red);font-weight:600;">'+breaches.length+' breach'+(breaches.length===1?'':'es')+'</span>':'0 breaches')+'</div>';
+    // 7-day breach trend
+    const _sevenDaysAgo = new Date(today.getTime() - 7*86400000);
+    const _week7Breaches = (window.tempLogs||[]).filter(t => {
+        const ts = t.time ? new Date(t.time) : null;
+        if (!ts || ts < _sevenDaysAgo) return false;
+        const v = parseFloat(t.value); if (isNaN(v)) return false;
+        const u = (t.unit || '').toLowerCase();
+        const isFreezer = u.includes('freezer') || u.includes('freeze');
+        return isFreezer ? (v > -15) : (v > 5);
+    });
+    const _trendColor = _week7Breaches.length === 0 ? 'var(--green)' : _week7Breaches.length <= 2 ? 'var(--orange)' : 'var(--red)';
+    html += '<div style="font-size:11px;margin-top:2px;color:'+_trendColor+';font-weight:'+(_week7Breaches.length>0?'600':'400')+';">7-day breaches: '+_week7Breaches.length+'</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Checklist: '+checkPct+'% complete</div>';
     if (allFridgeUnits.length > 0) {
         var fcCol = fridgeCoverage === 100 ? 'var(--green)' : fridgeCoverage >= 50 ? 'var(--orange)' : 'var(--red)';

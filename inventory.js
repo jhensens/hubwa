@@ -453,6 +453,183 @@ window.showYieldProblems = () => {
     });
 };
 
+// ── Smart Yield Wizard — subcategory-grouped + hint-based bulk yield setup ──
+// Catches items with yield=1 that silently break recipe costing. Groups by subcategory,
+// applies subcategory defaults where no name-hint matches, allows per-row/per-group/all accept.
+window._subcatYieldDefaults = {
+    // food
+    'Proteins': { yield: 1000, unit: 'g' },
+    'Protein': { yield: 1000, unit: 'g' },
+    'Seafood': { yield: 1000, unit: 'g' },
+    'Meat': { yield: 1000, unit: 'g' },
+    'Poultry': { yield: 1000, unit: 'g' },
+    'Produce': { yield: 1000, unit: 'g' },
+    'Vegetables': { yield: 1000, unit: 'g' },
+    'Fruit': { yield: 1000, unit: 'g' },
+    'Herbs': { yield: 100, unit: 'g' },
+    'Dairy': { yield: 1000, unit: 'g' },
+    'Sauces': { yield: 1000, unit: 'ml' },
+    'Condiments': { yield: 1000, unit: 'ml' },
+    'Oils': { yield: 1000, unit: 'ml' },
+    'Pantry': { yield: 1000, unit: 'g' },
+    'Dry Goods': { yield: 1000, unit: 'g' },
+    'Spices': { yield: 100, unit: 'g' },
+    // beverage already handled by fixBevYields — included for completeness if user runs both
+    'Spirits': { yield: 700, unit: 'ml' },
+    'Wine': { yield: 750, unit: 'ml' },
+    'Liqueurs': { yield: 700, unit: 'ml' },
+    'Sake': { yield: 720, unit: 'ml' }
+};
+
+window.renderYieldWizard = () => {
+    const E = window.esc;
+    // Find candidates: yield<=1 AND used in a recipe (so wrong yield actively breaks costing)
+    const usedIds = new Set();
+    (window.recipes || []).forEach(r => {
+        (r.ingredients || []).forEach(ing => { if (ing.type === 'inv' && ing.ref) usedIds.add(ing.ref); });
+    });
+    const candidates = (window.inventoryItems || []).filter(inv => {
+        if (inv.archived) return false;
+        if ((inv.yield || 1) > 1) return false;
+        return usedIds.has(inv.id);
+    });
+
+    if (candidates.length === 0) {
+        window.showToast('🎉 No items with yield=1 in use — costing is clean.', 'success');
+        return;
+    }
+
+    // Group by subcategory (fallback to category)
+    const groups = {};
+    candidates.forEach(inv => {
+        const key = (inv.subcategory && inv.subcategory.trim()) || (inv.category || 'Uncategorised');
+        (groups[key] = groups[key] || []).push(inv);
+    });
+    const groupNames = Object.keys(groups).sort();
+
+    // Per-item suggestion: name hint > subcat default > category default > leave blank
+    const suggest = (inv, groupKey) => {
+        const hint = window._getYieldHint(inv.name || '');
+        if (hint) return { yield: hint.yield, unit: hint.unit, source: 'name-hint', hint: hint.hint };
+        const sd = window._subcatYieldDefaults[groupKey];
+        if (sd) return { yield: sd.yield, unit: sd.unit, source: 'subcat-default', hint: 'Typical ' + groupKey };
+        return { yield: '', unit: inv.useUnit || 'g', source: 'manual', hint: '' };
+    };
+
+    const groupBlock = (groupKey) => {
+        const items = groups[groupKey];
+        const rows = items.map(inv => {
+            const s = suggest(inv, groupKey);
+            const sourceTag = s.source === 'name-hint' ? '<span style="font-size:9px;color:var(--blue);">💡 from name</span>'
+                : s.source === 'subcat-default' ? '<span style="font-size:9px;color:var(--purple);">📦 group default</span>'
+                : '<span style="font-size:9px;color:var(--text-muted);">manual</span>';
+            return `<tr style="border-bottom:1px solid var(--border);" data-yw-row="${inv.id}">
+                <td style="padding:6px 8px;font-size:12px;">
+                    <input type="checkbox" class="yw-pick" data-yw-id="${inv.id}" checked style="margin-right:6px;">
+                    <strong>${E(inv.name)}</strong>
+                    ${s.hint ? '<div style="font-size:10px;color:var(--text-muted);margin-left:22px;">'+E(s.hint)+'</div>' : ''}
+                </td>
+                <td style="padding:6px 8px;text-align:center;font-size:11px;color:var(--red);">${inv.yield||1} ${E(inv.useUnit||'?')}</td>
+                <td style="padding:6px 8px;text-align:center;">
+                    <input type="number" step="1" min="0" class="input-box yw-y" data-yw-id="${inv.id}" value="${s.yield}" style="width:80px;margin:0;padding:4px;font-size:12px;">
+                </td>
+                <td style="padding:6px 8px;text-align:center;">
+                    <select class="input-box yw-u" data-yw-id="${inv.id}" style="width:72px;margin:0;padding:4px;font-size:12px;">
+                        <option value="g" ${s.unit==='g'?'selected':''}>g</option>
+                        <option value="ml" ${s.unit==='ml'?'selected':''}>ml</option>
+                        <option value="each" ${s.unit==='each'?'selected':''}>each</option>
+                    </select>
+                </td>
+                <td style="padding:6px 8px;text-align:center;">${sourceTag}</td>
+            </tr>`;
+        }).join('');
+        return `<details open style="border:1px solid var(--border);border-radius:8px;margin-bottom:10px;padding:8px 12px;">
+            <summary style="cursor:pointer;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+                <span>${E(groupKey)} <span style="color:var(--text-muted);font-weight:normal;font-size:11px;">(${items.length})</span></span>
+                <span>
+                    <button onclick="event.stopPropagation();window._yieldWizardToggleGroup('${E(groupKey).replace(/'/g,"\\'")}', true)" class="btn btn-outline" style="font-size:10px;padding:2px 8px;">Select all</button>
+                    <button onclick="event.stopPropagation();window._yieldWizardToggleGroup('${E(groupKey).replace(/'/g,"\\'")}', false)" class="btn btn-outline" style="font-size:10px;padding:2px 8px;">None</button>
+                </span>
+            </summary>
+            <table style="width:100%;border-collapse:collapse;margin-top:8px;">
+                <thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">
+                    <th style="text-align:left;padding:4px 8px;">Item</th>
+                    <th style="text-align:center;padding:4px 8px;">Current</th>
+                    <th style="text-align:center;padding:4px 8px;">New Yield</th>
+                    <th style="text-align:center;padding:4px 8px;">Unit</th>
+                    <th style="text-align:center;padding:4px 8px;">Source</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </details>`;
+    };
+
+    // Stash candidates so toggle/apply helpers can find them
+    window._yieldWizardGroups = groups;
+
+    const html = `<div style="max-height:72vh;overflow-y:auto;">
+        <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">
+            <strong>${candidates.length} items</strong> are used in recipes but have <code>yield=1</code> — this silently inflates recipe costs.
+            Suggestions come from name patterns first (💡), then subcategory defaults (📦). Adjust as needed, untick rows to skip, then apply.
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <button onclick="window._yieldWizardToggleAll(true)" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Select all</button>
+            <button onclick="window._yieldWizardToggleAll(false)" class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Select none</button>
+        </div>
+        ${groupNames.map(groupBlock).join('')}
+    </div>`;
+
+    window.confirmAction({
+        title: '🧪 Smart Yield Wizard',
+        message: html,
+        confirmLabel: '💾 Apply & Recalculate',
+        tier: 'standard',
+        onConfirm: () => window._commitYieldWizard()
+    });
+};
+
+window._yieldWizardToggleGroup = (groupKey, on) => {
+    const items = (window._yieldWizardGroups || {})[groupKey] || [];
+    items.forEach(inv => {
+        const cb = document.querySelector('.yw-pick[data-yw-id="' + inv.id + '"]');
+        if (cb) cb.checked = !!on;
+    });
+};
+window._yieldWizardToggleAll = (on) => {
+    document.querySelectorAll('.yw-pick').forEach(cb => { cb.checked = !!on; });
+};
+window._commitYieldWizard = () => {
+    let applied = 0;
+    document.querySelectorAll('.yw-pick').forEach(cb => {
+        if (!cb.checked) return;
+        const id = cb.getAttribute('data-yw-id');
+        const inv = (window.inventoryItems || []).find(i => i.id === id);
+        if (!inv) return;
+        const yEl = document.querySelector('.yw-y[data-yw-id="' + id + '"]');
+        const uEl = document.querySelector('.yw-u[data-yw-id="' + id + '"]');
+        const newY = yEl ? parseFloat(yEl.value) : 0;
+        const newU = uEl ? uEl.value : inv.useUnit;
+        if (newY > 0) {
+            inv.yield = newY;
+            inv.useUnit = newU;
+            applied++;
+        }
+    });
+    if (applied > 0) {
+        if (typeof window.recalcAllCosts === 'function') {
+            const rc = window.recalcAllCosts();
+            window.showToast('✅ ' + applied + ' yields set, ' + rc + ' recipe costs recalculated.', 'success');
+        } else {
+            window.saveToDisk();
+            window.showToast('✅ ' + applied + ' yields set.', 'success');
+        }
+    } else {
+        window.showToast('No yields applied (blank or 0).', 'info');
+    }
+    window._yieldWizardGroups = null;
+    window.showView('inventory');
+};
+
 // Delete all recipes (backs up to localStorage first)
 window.deleteAllRecipes = () => {
     const count = (window.recipes || []).length;
@@ -1162,6 +1339,56 @@ window._previewInventoryImport = function(csvText, fileName) {
         });
         html += '</details>';
     }
+    // ── Recipe-cost impact preview ── projects new costs against GP_TARGET (67%)
+    const _gpTgt = window.GP_TARGET || 67;
+    const _projected = {};
+    updatedItems.forEach(u => {
+        const ex = u.existing;
+        const newP = u.diffs.find(d => d.field === 'price'); const newY = u.diffs.find(d => d.field === 'yield');
+        if (!newP && !newY) return;
+        _projected[ex.id] = { price: newP ? Number(newP.to) : Number(ex.price||0), yield: newY ? Number(newY.to) : Number(ex.yield||1) };
+    });
+    const _projIds = Object.keys(_projected);
+    if (_projIds.length > 0) {
+        const _impactedRecipes = [];
+        (window.recipes||[]).forEach(r => {
+            if (r.archived || !r.ingredients || !r.ingredients.length) return;
+            let touches = false;
+            let newCost = 0;
+            r.ingredients.forEach(ing => {
+                if (ing.type === 'inv' && _projected[ing.ref]) {
+                    touches = true;
+                    const p = _projected[ing.ref];
+                    newCost += Number(ing.qty || 0) * ((p.price||0) / (p.yield||1));
+                } else {
+                    newCost += window._ingCost ? window._ingCost(ing) : 0;
+                }
+            });
+            if (!touches) return;
+            const oldCost = Number(r.cost || 0);
+            const newGp = r.price > 0 ? ((r.price - newCost) / r.price * 100) : 0;
+            const oldGp = Number(r.gp || 0);
+            _impactedRecipes.push({ r, oldCost, newCost, oldGp, newGp });
+        });
+        const _drops = _impactedRecipes.filter(x => x.newGp < _gpTgt);
+        if (_impactedRecipes.length > 0) {
+            const dropColor = _drops.length > 0 ? 'var(--red)' : 'var(--green)';
+            html += '<details ' + (_drops.length > 0 ? 'open' : '') + ' style="margin-bottom:12px;border:1px solid '+dropColor+';border-radius:6px;padding:8px 12px;background:rgba(239,68,68,'+(_drops.length>0?'0.05':'0')+');">' +
+                '<summary style="cursor:pointer;font-weight:600;font-size:13px;color:'+dropColor+';">' +
+                (_drops.length > 0 ? '⚠️ ' : '✅ ') +
+                _impactedRecipes.length + ' recipes affected · ' +
+                _drops.length + ' will drop below ' + _gpTgt + '% GP</summary>';
+            _impactedRecipes.sort((a,b) => a.newGp - b.newGp).slice(0, 30).forEach(x => {
+                const dir = x.newCost > x.oldCost ? '↑' : x.newCost < x.oldCost ? '↓' : '·';
+                const gpBadge = x.newGp < _gpTgt ? '<span style="color:var(--red);font-weight:600;">'+x.newGp.toFixed(1)+'%</span>' : '<span style="color:var(--green);">'+x.newGp.toFixed(1)+'%</span>';
+                html += '<div style="font-size:11px;padding:3px 0;border-bottom:1px dashed var(--border);">' +
+                    '<strong>' + esc(x.r.name) + '</strong> &nbsp; cost $' + x.oldCost.toFixed(2) + ' '+dir+' $' + x.newCost.toFixed(2) +
+                    ' &nbsp; GP ' + x.oldGp.toFixed(1) + '% → ' + gpBadge + '</div>';
+            });
+            if (_impactedRecipes.length > 30) html += '<div style="font-size:11px;color:var(--text-muted);font-style:italic;padding:4px;">…and ' + (_impactedRecipes.length - 30) + ' more</div>';
+            html += '</details>';
+        }
+    }
     html += '</div>';
     html += '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">';
     html += '<button onclick="window.closeModal()" class="btn btn-outline">Cancel</button>';
@@ -1470,7 +1697,12 @@ window._filterInvItems = (isWeekend) => {
         if (window.invFilters.filter === 'Active' && item.archived) return false;
         if (window.invFilters.filter === 'Archived' && !item.archived) return false;
         if (window.invFilters.filter === 'Below PAR' && (item.stock >= parTarget || item.archived)) return false;
-        if (!['Active','Archived','Below PAR'].includes(window.invFilters.filter) && item.category !== window.invFilters.filter) return false;
+        if (window.invFilters.filter === 'Unlinked') {
+            if (item.archived) return false;
+            window._invUsedIdsCache = window._invUsedIdsCache || (() => { const s = new Set(); (window.recipes||[]).forEach(r => (r.ingredients||[]).forEach(ing => { if (ing.type==='inv' && ing.ref) s.add(ing.ref); })); return s; })();
+            if (window._invUsedIdsCache.has(item.id)) return false;
+        }
+        if (!['Active','Archived','Below PAR','Unlinked'].includes(window.invFilters.filter) && item.category !== window.invFilters.filter) return false;
         if (window.invFilters.search) {
             const s = window.invFilters.search.toLowerCase();
             return (item.name && item.name.toLowerCase().includes(s)) ||
@@ -1494,6 +1726,7 @@ window._filterInvItems = (isWeekend) => {
 
 window.renderInventoryView = () => {
     let isWeekend = [0, 5, 6].includes(new Date().getDay());
+    window._invUsedIdsCache = null; // invalidate per render
     let filtered = window._filterInvItems(isWeekend);
 
     const cats = [...new Set((window.inventoryItems || []).filter(i => !i.archived).map(i => i.category || 'Other'))];
@@ -1502,10 +1735,15 @@ window.renderInventoryView = () => {
         const par = isWeekend ? (i.parWeekend||i.par||0) : (i.parWeekday||i.par||0);
         return i.stock < par;
     }).length;
+    // Unlinked count — items not referenced by any recipe ingredient
+    const _usedIds = new Set();
+    (window.recipes||[]).forEach(r => (r.ingredients||[]).forEach(ing => { if (ing.type==='inv' && ing.ref) _usedIds.add(ing.ref); }));
+    const unlinkedCount = (window.inventoryItems||[]).filter(i => !i.archived && !_usedIds.has(i.id)).length;
     const belowBadge = belowParCount > 0 ? ' <span style="background:var(--red);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;">' + belowParCount + '</span>' : '';
-    const pillsHtml = ['Active', 'Below PAR', ...cats, 'Archived'].map(c =>
+    const unlinkedBadge = unlinkedCount > 0 ? ' <span style="background:var(--orange);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px;">' + unlinkedCount + '</span>' : '';
+    const pillsHtml = ['Active', 'Below PAR', 'Unlinked', ...cats, 'Archived'].map(c =>
         '<div class="tag-pill ' + (window.invFilters.filter===c?'active':'') + '" onclick="window.invFilters.filter=\'' + c + '\'; window.showView(\'inventory\')">' +
-        (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c) + '</div>'
+        (c==='Below PAR' ? '🚨 Below PAR' + belowBadge : c==='Unlinked' ? '🔗 Unlinked' + unlinkedBadge : c) + '</div>'
     ).join('');
 
     const result = window._buildInvAccordion(filtered, isWeekend);
@@ -1528,6 +1766,7 @@ window.renderInventoryView = () => {
                 <button onclick="window.printStockLevels()" class="btn btn-outline" style="font-size:12px; padding:8px 14px;">🖨️ Print Stock</button>
                 <button onclick="window.fixAllYields()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--purple); color:var(--purple);" title="Auto-fix yields from item names and recalculate recipe costs">🔧 Fix Yields</button>
                 <button onclick="window.showYieldProblems()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--orange); color:var(--orange);" title="Find items with wrong yields causing inflated recipe costs">⚠️ Yield Issues</button>
+                <button onclick="window.renderYieldWizard()" class="btn btn-outline" style="font-size:12px; padding:8px 14px; border-color:var(--blue); color:var(--blue);" title="Subcategory-grouped wizard — assign yields to all yield=1 items used in recipes">🧪 Yield Wizard</button>
                 <button onclick="window.resetAllStock()" class="btn btn-outline" style="color:var(--red); border-color:var(--red); font-size:12px;">⚠️ Wipe Stock</button>
                 <button onclick="window.editInvItem()" class="btn btn-blue">+ Add Product</button>
             </div>
@@ -1582,7 +1821,14 @@ window._invBulkAction = (action) => {
                 // Unlink dangling recipe ingredient references
                 (window.recipes || []).forEach(r => {
                     (r.ingredients || []).forEach(ing => {
-                        if (ing.type === 'inv' && ids.includes(ing.ref)) { ing.type = 'raw'; ing.name = (ing.name || 'Deleted item') + ' (unlinked)'; ing.ref = null; }
+                        if (ing.type === 'inv' && ids.includes(ing.ref)) {
+                            // Preserve _rawName for re-parsing if it was set; otherwise capture the frozen display name as raw fallback
+                            var preservedRaw = ing._rawName || ing.name || 'Deleted item';
+                            ing.type = 'raw';
+                            ing.name = (ing.name || 'Deleted item') + ' (unlinked)';
+                            ing.ref = null;
+                            ing._rawName = preservedRaw;
+                        }
                     });
                 });
                 window.inventoryItems = window.inventoryItems.filter(i => !ids.includes(i.id));
@@ -1668,30 +1914,119 @@ window._getRecipesUsingItem = (invId) => {
     return (window.recipes||[]).filter(r => !r.archived && (r.ingredients||[]).some(ing => ing.type==='inv' && ing.ref===invId));
 };
 
+// Find recipes that *mention* this inv item by name in a raw ingredient — but aren't linked
+window._getRecipesMentioningItem = (invId) => {
+    const inv = (window.inventoryItems||[]).find(i => i.id === invId);
+    if (!inv) return [];
+    const _norm = s => (s||'').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const candidates = [];
+    if (inv.recipeName) candidates.push(_norm(inv.recipeName));
+    if (inv.name) candidates.push(_norm(inv.name));
+    // Also accept the last word as a loose hint when name is multi-word
+    const dedup = Array.from(new Set(candidates));
+    if (dedup.length === 0) return [];
+    const hits = [];
+    (window.recipes||[]).filter(r => !r.archived).forEach(r => {
+        (r.ingredients||[]).forEach((ing, idx) => {
+            if (ing.type !== 'raw') return;
+            const source = ing._rawName || ing.name || '';
+            const parsed = window._parseIngredientLine(source);
+            const parsedNorm = _norm(parsed.name || source);
+            if (!parsedNorm) return;
+            // Match if parsedNorm equals any candidate, or candidate is contained as a whole-word substring
+            const matchFound = dedup.some(c => parsedNorm === c || parsedNorm.split(' ').includes(c) || c.split(' ').every(tok => parsedNorm.split(' ').includes(tok)));
+            if (matchFound) hits.push({ recipe: r, ingIdx: idx, source });
+        });
+    });
+    return hits;
+};
+
 window._renderWhereUsed = (invId) => {
     const recipes = window._getRecipesUsingItem(invId);
+    const mentions = window._getRecipesMentioningItem(invId);
+    let html = '';
+
     if (recipes.length === 0) {
-        return `<div style="background:rgba(245,158,11,0.08);border:1px solid var(--orange);border-radius:8px;padding:12px 15px;margin-bottom:15px;">
+        html += `<div style="background:rgba(245,158,11,0.08);border:1px solid var(--orange);border-radius:8px;padding:12px 15px;margin-bottom:10px;">
             <span style="font-size:12px;color:var(--orange);font-weight:600;">⚠️ Not used in any recipe</span>
             <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">This item isn't linked to any recipes yet.</span>
         </div>`;
+    } else {
+        const rows = recipes.map(r => {
+            const ing = (r.ingredients||[]).find(i => i.type==='inv' && i.ref===invId);
+            const qty = ing ? ing.qty : '?';
+            const typeColor = r.type==='Batch'?'var(--purple)':'var(--green)';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+                <span style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${window.esc(r.name)}</span>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <span style="color:var(--text-muted);">qty: ${qty}</span>
+                    <span style="font-size:10px;color:${typeColor};border:1px solid ${typeColor};padding:1px 6px;border-radius:8px;">${r.type}</span>
+                </div>
+            </div>`;
+        }).join('');
+        html += `<details style="margin-bottom:10px;" open>
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--blue);padding:8px 0;">📋 Used in ${recipes.length} recipe${recipes.length!==1?'s':''}</summary>
+            <div class="card" style="padding:12px;margin-top:6px;">${rows}</div>
+        </details>`;
     }
-    const rows = recipes.map(r => {
-        const ing = (r.ingredients||[]).find(i => i.type==='inv' && i.ref===invId);
-        const qty = ing ? ing.qty : '?';
-        const typeColor = r.type==='Batch'?'var(--purple)':'var(--green)';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
-            <span style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${r.id}')">${window.esc(r.name)}</span>
-            <div style="display:flex;gap:10px;align-items:center;">
-                <span style="color:var(--text-muted);">qty: ${qty}</span>
-                <span style="font-size:10px;color:${typeColor};border:1px solid ${typeColor};padding:1px 6px;border-radius:8px;">${r.type}</span>
+
+    // ── Reverse linker: raw ingredients mentioning this item by name but not linked ──
+    if (mentions.length > 0) {
+        const sampleRows = mentions.slice(0, 8).map(m =>
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--border);font-size:12px;">
+                <div><span style="cursor:pointer;color:var(--blue);" onclick="window.viewRecipe('${m.recipe.id}')">${window.esc(m.recipe.name)}</span>
+                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">raw: "${window.esc(m.source)}"</div></div>
+            </div>`
+        ).join('');
+        const moreLabel = mentions.length > 8 ? `<div style="font-size:11px;color:var(--text-muted);padding:4px 0;font-style:italic;">…and ${mentions.length - 8} more</div>` : '';
+        html += `<details style="margin-bottom:15px;" open>
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--orange);padding:8px 0;">🔗 Mentioned by name but not linked (${mentions.length})</summary>
+            <div class="card" style="padding:12px;margin-top:6px;border-left:3px solid var(--orange);">
+                <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">These recipes have raw ingredients that match this item's name. One click links them all.</p>
+                ${sampleRows}${moreLabel}
+                <button onclick="window._bulkLinkMentions('${invId}')" class="btn btn-outline" style="font-size:12px;padding:6px 12px;border-color:var(--green);color:var(--green);margin-top:8px;">⚡ Link all ${mentions.length}</button>
             </div>
-        </div>`;
-    }).join('');
-    return `<details style="margin-bottom:15px;" open>
-        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--blue);padding:8px 0;">📋 Used in ${recipes.length} recipe${recipes.length!==1?'s':''}</summary>
-        <div class="card" style="padding:12px;margin-top:6px;">${rows}</div>
-    </details>`;
+        </details>`;
+    }
+    return html;
+};
+
+window._bulkLinkMentions = (invId) => {
+    const inv = (window.inventoryItems||[]).find(i => i.id === invId);
+    if (!inv) return window.showToast('Inventory item not found.', 'error');
+    const mentions = window._getRecipesMentioningItem(invId);
+    if (mentions.length === 0) return window.showToast('Nothing to link.', 'info');
+    window.confirmAction({
+        title: '⚡ Bulk Link by Name',
+        message: `Link <strong>${mentions.length}</strong> raw ingredient${mentions.length!==1?'s':''} across <strong>${new Set(mentions.map(m=>m.recipe.id)).size}</strong> recipes to <strong>${window.esc(inv.recipeName||inv.name)}</strong>?<br><small style="color:var(--text-muted);">Quantities will be parsed from the raw text where possible.</small>`,
+        confirmLabel: `Link ${mentions.length}`,
+        tier: 'standard',
+        onConfirm: () => {
+            let count = 0;
+            mentions.forEach(m => {
+                const r = m.recipe;
+                const ing = r.ingredients && r.ingredients[m.ingIdx];
+                if (!ing || ing.type !== 'raw') return;
+                const sourceText = ing._rawName || ing.name || '';
+                const parsed = window._parseIngredientLine(sourceText);
+                const qty = (ing.qty && ing.qty !== 1) ? ing.qty : (parsed.qty || 1);
+                const unit = ing.unit || parsed.unit || inv.useUnit || 'unit';
+                r.ingredients[m.ingIdx] = {
+                    type: 'inv',
+                    ref: inv.id,
+                    qty: qty,
+                    unit: unit,
+                    name: inv.recipeName || inv.name,
+                    _rawName: sourceText
+                };
+                count++;
+            });
+            if (typeof window.recalcAllCosts === 'function') window.recalcAllCosts();
+            else window.saveToDisk();
+            window.showToast(`⚡ Linked ${count} ingredient${count!==1?'s':''} to ${inv.recipeName||inv.name}`, 'success');
+            window.editInvItem(invId);
+        }
+    });
 };
 
 window.editInvItem = (id = null) => {
@@ -1761,6 +2096,26 @@ window.subInvItem = (id, addAnother, isModal = false) => {
     if (!nameVal) return window.showToast('Item name is required.', 'error');
     let existingIdx = window.inventoryItems.findIndex(i => i.id === id);
     const price = parseFloat(document.getElementById('iv-p').value) || 0;
+    // ── Zero-price guard: warn if saving $0 for an item used in recipes ──
+    if (price === 0 && existingIdx >= 0 && !window._zeroPriceConfirmed) {
+        const usedBy = (window.recipes || []).filter(r => !r.archived && (r.ingredients||[]).some(ing => ing.type==='inv' && ing.ref === id));
+        if (usedBy.length > 0) {
+            const sample = usedBy.slice(0, 5).map(r => '• ' + window.esc(r.name)).join('<br>');
+            const moreNote = usedBy.length > 5 ? '<br><em style="color:var(--text-muted);">…and ' + (usedBy.length - 5) + ' more</em>' : '';
+            window.confirmAction({
+                title: '⚠️ Zero Price Will Break Costing',
+                message: '<strong>' + window.esc(nameVal) + '</strong> is used in <strong>' + usedBy.length + ' recipe' + (usedBy.length!==1?'s':'') + '</strong>. Saving with $0 price means those recipes will cost $0 from this ingredient.<br><br>' + sample + moreNote + '<br><br>Save anyway?',
+                confirmLabel: 'Save with $0',
+                tier: 'dangerous',
+                onConfirm: () => {
+                    window._zeroPriceConfirmed = true;
+                    try { window.subInvItem(id, addAnother, isModal); }
+                    finally { window._zeroPriceConfirmed = false; }
+                }
+            });
+            return;
+        }
+    }
     let obj = {
         id: id,
         name: nameVal,

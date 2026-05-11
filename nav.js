@@ -142,6 +142,11 @@ window.showView = (view) => {
         else if (view === 'batch-qty-fix' && window.renderBatchQtyFixView) content.innerHTML = window.renderBatchQtyFixView();
         else if (view === 'depletion-match-rate' && window.renderDepletionMatchRateView) content.innerHTML = window.renderDepletionMatchRateView();
         else if (view === 'depletion-history' && window.renderDepletionHistoryView) content.innerHTML = window.renderDepletionHistoryView();
+        else if (view === 'pos-alias-manager' && window.renderPosAliasManager) content.innerHTML = window.renderPosAliasManager();
+        else if (view === 'depletion-audit' && window.renderDepletionAuditView) content.innerHTML = window.renderDepletionAuditView();
+        else if (view === 'ls-reconcile' && window.renderLsReconcileView) content.innerHTML = window.renderLsReconcileView();
+        else if (view === 'waste-report' && window.renderWasteReportView) content.innerHTML = window.renderWasteReportView();
+        else if (view === 'data-health' && window.renderDataHealthView) content.innerHTML = window.renderDataHealthView();
         else if (view === 'ask-hub' && window.renderAskHubView) content.innerHTML = window.renderAskHubView();
         else if (view === 'my-hub' && window.renderMyHubView) content.innerHTML = window.renderMyHubView();
         else if (view === 'badge-management' && window.renderBadgeManagementView) content.innerHTML = window.renderBadgeManagementView();
@@ -260,6 +265,11 @@ window.globalSearch = (query) => {
         { keywords: ['badge', 'recognition', 'kudos', 'achievement'], icon: '🏆', label: 'Badge Management', sub: 'Staff recognition badges', view: 'badge-management' },
         { keywords: ['onboard', 'orientation', 'training', 'new staff'], icon: '👥', label: 'Staff Management', sub: 'Onboarding, qualifications, directory', view: 'orientation' },
         { keywords: ['pos', 'linker', 'link', 'lightspeed', 'kounta', 'mapping', 'pos alias', 'auto-link'], icon: '🔗', label: 'POS Auto-Linker', sub: 'Import POS products & match to recipes', view: 'pos-linker' },
+        { keywords: ['pos alias', 'alias', 'alias manager', 'pos override'], icon: '🔗', label: 'POS Alias Manager', sub: 'Custom POS → recipe overrides + test', view: 'pos-alias-manager' },
+        { keywords: ['depletion audit', 'match audit', 'unmatched', 'confidence'], icon: '🔍', label: 'Depletion Audit', sub: 'Match scores & unmapped POS items', view: 'depletion-audit' },
+        { keywords: ['reconcile', 'reconciliation', 'lightspeed reconcile', 'revenue variance', 'gp variance'], icon: '⚖️', label: 'Lightspeed Reconciliation', sub: 'Revenue vs costed depletion variance', view: 'ls-reconcile' },
+        { keywords: ['waste report', 'wastage rollup', 'waste by reason'], icon: '🗑️', label: 'Waste Report', sub: 'Wastage rollup by reason', view: 'waste-report' },
+        { keywords: ['data health', 'integrity', 'orphan', 'data audit'], icon: '🩺', label: 'Data Health', sub: 'Orphan refs, batch cycles, duplicates', view: 'data-health' },
         { keywords: ['setup', 'wizard', 'seed', 'bwi default'], icon: '🏮', label: 'BWI Setup Wizard', sub: 'Load venue defaults', view: null }
     ];
     viewLinks.forEach(function(vl) {

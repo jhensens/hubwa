@@ -634,6 +634,8 @@ window.renderPOSLinkerView = function() {
             '</div>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
                 '<button onclick="window.viewCurrentMappings()" class="btn btn-outline">📋 View Mappings (' + mapCount + ')</button>' +
+                '<button onclick="window.showView(\'pos-alias-manager\')" class="btn btn-outline" style="color:var(--blue);border-color:var(--blue);">🔗 Alias Manager (' + (window.posAliasOverrides||[]).length + ')</button>' +
+                '<button onclick="window.showView(\'depletion-audit\')" class="btn btn-outline" style="color:var(--purple);border-color:var(--purple);">🔍 Depletion Audit</button>' +
                 '<button onclick="window.clearPOSMappings()" class="btn btn-outline" style="color:var(--red);">Clear All</button>' +
             '</div>' +
         '</div>' +
@@ -772,14 +774,24 @@ window._bwiPOSClean = function(name) {
     var s = (name || '');
     // Strip trailing " wa" / " Wa" (BWI venue tag on food items)
     s = s.replace(/\s+wa$/i, '');
-    // Strip parenthetical portion counts: (5), (3), (serve of 3), (Serve of 5)
-    s = s.replace(/\s*\((?:serve\s+of\s+)?\d+\)\s*/gi, ' ');
+    // Strip parenthetical portion counts: (5), (3), (5pc), (serve of 3), (Serve of 5)
+    s = s.replace(/\s*\((?:serve\s+of\s+)?\d+\s*(?:pc|pcs|pce|piece|pieces|x)?\)\s*/gi, ' ');
+    // Strip standalone count units: 5pc, 5pcs, 3x, 10g, 20g (when standalone — not part of size like 425ml)
+    s = s.replace(/\b\d+\s*(?:pc|pcs|pce|piece|pieces)\b/gi, ' ');
     // Strip size markers: 425ml, 500ml, 700ml, 1L, 1.5L, 80ml, 300ml
     s = s.replace(/\b\d+(?:\.\d+)?(?:ml|l)\b/gi, ' ');
-    // Strip serve-type suffixes: SCH (schooner), POT, BTL (bottle), GLS (glass)
-    s = s.replace(/\b(?:SCH|POT|BTL|GLS)\b/gi, ' ');
+    // Strip serve-type suffixes: SCH (schooner), POT, BTL (bottle), GLS (glass), CAN, JUG, TIN
+    s = s.replace(/\b(?:SCH|POT|BTL|GLS|CAN|JUG|TIN)\b/gi, ' ');
     // Strip trailing price remnants if any
     s = s.replace(/\$\d+(?:\.\d+)?/g, ' ');
+    // Pluralisation: collapse common food plurals so "Spring Rolls" matches "Spring Roll"
+    // Safe word-final s/es stripped only on multi-letter tokens that don't end in "ss"
+    s = s.replace(/\b([a-z]{4,}?)(?:es|s)\b/gi, function(match, root) {
+        // keep "ss" endings (e.g., glass, dress)
+        if (/ss$/i.test(match)) return match;
+        // keep words that look like they need the trailing s (heuristic: 4+ letter root)
+        return root;
+    });
     return s.replace(/\s+/g, ' ').trim();
 };
 
@@ -1049,7 +1061,7 @@ window._runPOSAutoMatchAsync = function(posProducts) {
     var recipes = (window.recipes || []).filter(function(r) { return !r.archived; });
     var inventory = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
     var existingMappings = window.posMappings || {};
-    var aliasMap = window._bwiAliasMap || {};
+    var aliasMap = window._getEffectiveAliasMap();
 
     // Pre-build targets with BOTH raw normalised AND BWI-cleaned normalised names
     var targets = [];
@@ -1256,6 +1268,7 @@ window._runPOSAutoMatch = function(posProducts) {
     autoMatched.sort(function(a,b) { return b.score - a.score; });
 
     window._posLinkResults = { autoMatched: autoMatched, suggested: suggested, unmatched: unmatched, alreadyMapped: alreadyMapped };
+    if (window._snapshotDepletionAudit) window._snapshotDepletionAudit();
     window._showPOSLinkReview();
 };
 
@@ -1318,25 +1331,44 @@ window._showPOSLinkReview = function() {
             '</div>';
         });
         html += '</div>';
-        html += '<div style="display:flex;gap:6px;margin-top:8px;">' +
+        html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center;">' +
             '<button onclick="window._posAcceptAllSuggested()" class="btn btn-outline" style="font-size:11px;padding:6px 12px;color:var(--green);border-color:var(--green);">✓ Accept All Suggested</button>' +
-            '<button onclick="window._posRejectAllSuggested()" class="btn btn-outline" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:var(--red);">✗ Skip All Suggested</button>' +
+            '<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">or threshold:</span>' +
+            '<button onclick="window._posAcceptAboveThreshold(0.85)" class="btn btn-outline" style="font-size:11px;padding:6px 10px;color:var(--green);border-color:var(--green);" title="Accept suggestions with score &ge; 85%">≥85%</button>' +
+            '<button onclick="window._posAcceptAboveThreshold(0.75)" class="btn btn-outline" style="font-size:11px;padding:6px 10px;color:var(--green);border-color:var(--green);" title="Accept suggestions with score &ge; 75%">≥75%</button>' +
+            '<button onclick="window._posAcceptAboveThreshold(0.6)" class="btn btn-outline" style="font-size:11px;padding:6px 10px;color:var(--orange);border-color:var(--orange);" title="Accept suggestions with score &ge; 60%">≥60%</button>' +
+            '<button onclick="window._posRejectAllSuggested()" class="btn btn-outline" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:var(--red);margin-left:auto;">✗ Skip All</button>' +
         '</div>';
         html += '</details>';
     }
 
-    // --- Unmatched (just list them — manual linking via search) ---
+    // --- Unmatched: inline quick-link with search ---
     if (r.unmatched.length > 0) {
-        html += '<details style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--red);padding:8px 0;">❌ Unmatched (' + r.unmatched.length + ') — no match found</summary>';
-        html += '<div style="font-size:11px;color:var(--text-muted);padding:4px 0 8px;">These POS products didn\'t match any recipe or inventory item. You can link them manually later from the POS Alias Editor or by editing recipes.</div>';
-        html += '<div style="max-height:300px;overflow-y:auto;margin-top:4px;">';
-        r.unmatched.forEach(function(m) {
-            html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px;">' +
-                '<div style="flex:1;"><strong>' + window.esc(m.pos.name) + '</strong></div>' +
-                '<span style="color:var(--text-muted);font-size:11px;">$' + m.pos.price.toFixed(2) + ' | ' + window.esc(m.pos.group || m.pos.categories) + '</span>' +
+        // Build a small target datalist of recipe + inventory names for the popovers
+        var _qlOptions = [];
+        (window.recipes || []).filter(function(rc) { return !rc.archived; }).forEach(function(rc) {
+            _qlOptions.push('<option value="rec:' + rc.id + '">' + window.esc(rc.name) + ' (recipe)</option>');
+        });
+        (window.inventoryItems || []).filter(function(it) { return !it.archived; }).forEach(function(it) {
+            _qlOptions.push('<option value="inv:' + it.id + '">' + window.esc(it.recipeName || it.name) + ' (inv)</option>');
+        });
+        var qlOptStr = _qlOptions.join('');
+        html += '<details open style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--red);padding:8px 0;">❌ Unmatched (' + r.unmatched.length + ') — link inline below</summary>';
+        html += '<div style="font-size:11px;color:var(--text-muted);padding:4px 0 8px;">Type to filter recipes & inventory. Press <strong>Link</strong> to map the POS name. Mappings auto-learn for next import.</div>';
+        html += '<div style="max-height:340px;overflow-y:auto;margin-top:4px;">';
+        r.unmatched.forEach(function(m, uidx) {
+            var posName = m.pos.name;
+            var safePos = window.esc(posName);
+            html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px;" id="ql-row-' + uidx + '">' +
+                '<div style="flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>' + safePos + '</strong>' +
+                    '<div style="font-size:10px;color:var(--text-muted);">$' + (m.pos.price||0).toFixed(2) + ' · ' + window.esc(m.pos.group || m.pos.categories || '') + '</div></div>' +
+                '<input list="ql-targets" id="ql-input-' + uidx + '" placeholder="Search recipe or inventory..." style="flex:1.5;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-main);color:var(--text-main);">' +
+                '<button onclick="window._posQuickLink(' + uidx + ')" class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:var(--blue);border-color:var(--blue);">Link</button>' +
             '</div>';
         });
-        html += '</div></details>';
+        html += '</div>';
+        html += '<datalist id="ql-targets">' + qlOptStr + '</datalist>';
+        html += '</details>';
     }
 
     // --- Already mapped ---
@@ -1379,6 +1411,150 @@ window._posRejectAllSuggested = function() {
     window.closeModal();
     window._showPOSLinkReview();
 };
+// Render the "POS names mapped to this recipe" section for the recipe view
+window._renderPosMappingsForRecipe = function(recipeId) {
+    var E = window.esc;
+    var mappings = window.posMappings || {};
+    var rec = (window.recipes || []).find(function(x) { return x.id === recipeId; });
+    if (!rec) return '';
+    // Direct mappings
+    var direct = [];
+    Object.keys(mappings).forEach(function(posName) {
+        if (mappings[posName] === recipeId) direct.push(posName);
+    });
+    // recipe.posAlias is implicit and not in posMappings, surface if distinct
+    var aliasField = rec.posAlias && direct.indexOf(rec.posAlias) === -1 ? rec.posAlias : null;
+
+    // posAliasOverrides entries that target this recipe (matched by normalised name)
+    var recNorm = window._normalise ? window._normalise(rec.name) : (rec.name || '').toLowerCase();
+    var overrideRows = (window.posAliasOverrides || []).filter(function(o) {
+        return o && o.target && (o.target === recNorm || o.target === (rec.name || '').toLowerCase());
+    });
+
+    var totalCount = direct.length + (aliasField ? 1 : 0) + overrideRows.length;
+    if (totalCount === 0) {
+        return '<div class="card" style="padding:14px;margin-bottom:15px;border-left:3px solid var(--text-muted);">' +
+            '<h3 style="margin:0 0 8px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">POS Mappings</h3>' +
+            '<p style="font-size:12px;color:var(--text-muted);margin:0;">No POS names map to this recipe yet. Import a Lightspeed product CSV from POS Auto-Linker to map.</p>' +
+        '</div>';
+    }
+
+    var html = '<div class="card" style="padding:14px;margin-bottom:15px;border-left:3px solid var(--green);">' +
+        '<h3 style="margin:0 0 10px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">POS Mappings (' + totalCount + ')</h3>';
+
+    if (direct.length > 0) {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Mapped from POS imports:</div>';
+        direct.forEach(function(p) {
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--border);font-size:12px;">' +
+                '<code style="font-size:12px;">' + E(p) + '</code>' +
+                '<button onclick="window._deletePosMappingForRecipe(\'' + p.replace(/'/g,"\\'") + '\',\'' + recipeId + '\')" class="btn btn-outline" style="font-size:10px;padding:2px 8px;color:var(--red);border-color:var(--red);">Remove</button>' +
+            '</div>';
+        });
+    }
+    if (aliasField) {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px;">Recipe\'s own POS alias field:</div>' +
+            '<div style="padding:5px 0;font-size:12px;"><code>' + E(aliasField) + '</code> <span style="font-size:10px;color:var(--text-muted);">(set on recipe — edit to change)</span></div>';
+    }
+    if (overrideRows.length > 0) {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;margin-bottom:4px;">Custom alias overrides:</div>';
+        overrideRows.forEach(function(o) {
+            html += '<div style="padding:5px 0;font-size:12px;border-bottom:1px dashed var(--border);"><code>' + E(o.pos) + '</code> <span style="font-size:10px;color:var(--text-muted);">(source: ' + E(o.source || '—') + ')</span></div>';
+        });
+    }
+    html += '<div style="margin-top:8px;font-size:11px;"><a href="#" onclick="event.preventDefault();window.showView(\'pos-alias-manager\')" style="color:var(--blue);">Manage POS aliases →</a></div>';
+    html += '</div>';
+    return html;
+};
+
+window._deletePosMappingForRecipe = function(posName, recipeId) {
+    window.confirmAction({
+        title: 'Remove POS Mapping',
+        message: 'Remove mapping <code>' + window.esc(posName) + '</code> from this recipe? Future POS imports of that name will become unmatched.',
+        confirmLabel: 'Remove',
+        tier: 'standard',
+        onConfirm: function() {
+            if (window.posMappings && window.posMappings[posName]) delete window.posMappings[posName];
+            window.saveToDisk();
+            window.showToast('Mapping removed.');
+            window.viewRecipe(recipeId);
+        }
+    });
+};
+
+// Inline quick-link for an unmatched POS row
+window._posQuickLink = function(uidx) {
+    var r = window._posLinkResults; if (!r) return;
+    var m = r.unmatched[uidx]; if (!m) return;
+    var input = document.getElementById('ql-input-' + uidx);
+    if (!input) return;
+    var val = (input.value || '').trim();
+    if (!val) return window.showToast('Pick or type a target.', 'error');
+    // Accept either "rec:ID" / "inv:ID" (from datalist) OR a free-text name; try to resolve free text
+    var match = null;
+    if (val.indexOf('rec:') === 0) {
+        var rid = val.slice(4);
+        var rec = (window.recipes || []).find(function(x) { return x.id === rid; });
+        if (rec) match = { id: rec.id, name: rec.name, type: 'recipe' };
+    } else if (val.indexOf('inv:') === 0) {
+        var iid = val.slice(4);
+        var inv = (window.inventoryItems || []).find(function(x) { return x.id === iid; });
+        if (inv) match = { id: inv.id, name: inv.recipeName || inv.name, type: 'inventory' };
+    }
+    // Free-text fallback: find by name (case-insensitive)
+    if (!match) {
+        var v = val.toLowerCase();
+        var rec2 = (window.recipes || []).find(function(x) { return !x.archived && (x.name || '').toLowerCase() === v; });
+        if (rec2) match = { id: rec2.id, name: rec2.name, type: 'recipe' };
+        if (!match) {
+            var inv2 = (window.inventoryItems || []).find(function(x) { return !x.archived && ((x.recipeName || x.name || '').toLowerCase() === v); });
+            if (inv2) match = { id: inv2.id, name: inv2.recipeName || inv2.name, type: 'inventory' };
+        }
+    }
+    if (!match) return window.showToast('No matching recipe or inventory item found.', 'error');
+
+    // Apply mapping immediately (and also auto-learn alias)
+    window.posMappings = window.posMappings || {};
+    if (match.type === 'recipe') {
+        window.posMappings[m.pos.name] = match.id;
+        var rcObj = (window.recipes || []).find(function(x) { return x.id === match.id; });
+        if (rcObj && !rcObj.posAlias) rcObj.posAlias = m.pos.name;
+    } else {
+        window.posMappings[m.pos.name] = 'inv:' + match.id;
+    }
+    // Auto-learn alias
+    try {
+        var posNorm = window._normalise ? window._normalise(m.pos.name) : (m.pos.name || '').toLowerCase();
+        var tgtNorm = window._normalise ? window._normalise(match.name) : (match.name || '').toLowerCase();
+        window.posAliasOverrides = window.posAliasOverrides || [];
+        var exists = window.posAliasOverrides.some(function(o) { return o.pos === posNorm; });
+        if (!exists && posNorm !== tgtNorm) {
+            window.posAliasOverrides.push({ pos: posNorm, target: tgtNorm, addedAt: new Date().toISOString(), source: 'quick-link' });
+        }
+    } catch(e) {}
+    // Move from unmatched → alreadyMapped in the in-memory results so the row fades
+    r.alreadyMapped.push({ pos: m.pos, mappedTo: match.id });
+    r.unmatched.splice(uidx, 1);
+    window.saveToDisk();
+    // Visually collapse the row
+    var row = document.getElementById('ql-row-' + uidx);
+    if (row) { row.style.opacity = '0.4'; row.style.background = 'rgba(16,185,129,0.08)'; row.innerHTML = '<div style="flex:1;font-size:12px;color:var(--green);">✓ ' + window.esc(m.pos.name) + ' → <strong>' + window.esc(match.name) + '</strong></div>'; }
+    window.showToast('✓ Linked: ' + m.pos.name + ' → ' + match.name, 'success');
+};
+
+window._posAcceptAboveThreshold = function(threshold) {
+    var r = window._posLinkResults;
+    if (!r) return;
+    var accepted = 0;
+    r.suggested.forEach(function(m, idx) {
+        if (m.score >= threshold) {
+            window._posLinkDecisions['sug_' + idx] = 'accept';
+            accepted++;
+        }
+    });
+    window.closeModal();
+    window._showPOSLinkReview();
+    window.showToast('✓ Accepted ' + accepted + ' suggestions ≥ ' + Math.round(threshold * 100) + '%', 'success');
+};
 
 // --- Confirm and save all mappings ---
 window._confirmPOSLinks = function() {
@@ -1389,7 +1565,14 @@ window._confirmPOSLinks = function() {
     var savedCount = 0;
     var decisions = window._posLinkDecisions || {};
 
-    var _saveMatch = function(posName, match) {
+    // Track how many aliases we permanently learned this session
+    var learnedAliases = 0;
+    window.posAliasOverrides = window.posAliasOverrides || [];
+    var existingOverridePos = {};
+    window.posAliasOverrides.forEach(function(o) { if (o && o.pos) existingOverridePos[o.pos.toLowerCase()] = true; });
+    var existingCurated = window._bwiAliasMap || {};
+
+    var _saveMatch = function(posName, match, source) {
         if (!match) return;
         if (match.type === 'recipe') {
             mappings[posName] = match.id;
@@ -1398,6 +1581,23 @@ window._confirmPOSLinks = function() {
         } else {
             mappings[posName] = 'inv:' + match.id;
         }
+        // ── Auto-learn alias: persist into posAliasOverrides so future imports auto-match ──
+        // Skip if this exact (pos → target) is already curated or overridden.
+        try {
+            var posNorm = window._normalise ? window._normalise(posName) : (posName || '').toLowerCase();
+            var posClean = window._normalise && window._bwiPOSClean ? window._normalise(window._bwiPOSClean(posName)) : posNorm;
+            var targetName = match.name || '';
+            var targetNorm = window._normalise ? window._normalise(targetName) : (targetName || '').toLowerCase();
+            if (posNorm && targetNorm && posNorm !== targetNorm) {
+                var alreadyCurated = existingCurated[posNorm] === targetNorm || existingCurated[posClean] === targetNorm;
+                var alreadyOverride = existingOverridePos[posNorm];
+                if (!alreadyCurated && !alreadyOverride) {
+                    window.posAliasOverrides.push({ pos: posNorm, target: targetNorm, addedAt: new Date().toISOString(), source: source || 'review' });
+                    existingOverridePos[posNorm] = true;
+                    learnedAliases++;
+                }
+            }
+        } catch(e) { /* non-fatal */ }
         savedCount++;
     };
 
@@ -1407,13 +1607,13 @@ window._confirmPOSLinks = function() {
         if (!cb.checked) return;
         var idx = parseInt(cb.getAttribute('data-auto-idx'));
         var m = r.autoMatched[idx];
-        if (m && m.match) _saveMatch(m.pos.name, m.match);
+        if (m && m.match) _saveMatch(m.pos.name, m.match, 'auto');
     });
 
     // Process suggested matches (only accepted ones)
     r.suggested.forEach(function(m, idx) {
         if (decisions['sug_' + idx] === 'accept' && m.match) {
-            _saveMatch(m.pos.name, m.match);
+            _saveMatch(m.pos.name, m.match, 'suggested');
         }
     });
 
@@ -1421,7 +1621,9 @@ window._confirmPOSLinks = function() {
     window._posLinkDecisions = {};
     window.saveToDisk();
     window.closeModal();
-    window.showToast(savedCount + ' POS mappings saved! Total: ' + Object.keys(mappings).length);
+    var msg = savedCount + ' POS mappings saved!';
+    if (learnedAliases > 0) msg += ' (' + learnedAliases + ' new aliases learned for future imports)';
+    window.showToast(msg);
     window.showView('pos-linker');
 };
 
@@ -1594,5 +1796,239 @@ window.renderDepletionMatchRateView = function() {
 
     html += '</div>';
     return html;
+};
+
+// =============================================================================
+// POS ALIAS MANAGER — runtime override layer for venue-specific aliases
+// =============================================================================
+// window.posAliasOverrides: array of { pos: 'normalised POS name', target: 'normalised target' }
+// Merged on top of the curated _bwiAliasMap at lookup time.
+window.posAliasOverrides = window.posAliasOverrides || [];
+
+window._getEffectiveAliasMap = function() {
+    var merged = Object.assign({}, window._bwiAliasMap || {});
+    (window.posAliasOverrides || []).forEach(function(o) {
+        if (o && o.pos && o.target) merged[o.pos.toLowerCase()] = o.target.toLowerCase();
+    });
+    return merged;
+};
+
+window.renderPosAliasManager = function() {
+    var E = window.esc;
+    var curated = Object.keys(window._bwiAliasMap || {}).length;
+    var overrides = (window.posAliasOverrides || []);
+    var recipes = (window.recipes || []).filter(function(r) { return !r.archived; });
+    var inventory = (window.inventoryItems || []).filter(function(i) { return !i.archived; });
+
+    var targetSet = new Set();
+    recipes.forEach(function(r) { targetSet.add(window._normalise(r.name)); if (r.posAlias) targetSet.add(window._normalise(r.posAlias)); });
+    inventory.forEach(function(i) { targetSet.add(window._normalise(i.name)); });
+    var targetOpts = Array.from(targetSet).sort().map(function(t) { return '<option value="' + E(t) + '">'; }).join('');
+
+    var rowsHtml = overrides.length === 0
+        ? '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No custom aliases yet. Add one below — these layer on top of the ' + curated + ' built-in aliases.</td></tr>'
+        : overrides.map(function(o, i) {
+            return '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:6px 8px;font-size:12px;"><code>' + E(o.pos) + '</code></td>' +
+                '<td style="padding:6px 8px;font-size:12px;color:var(--green);"><code>' + E(o.target) + '</code></td>' +
+                '<td style="padding:6px 8px;text-align:right;"><button onclick="window._deletePosAlias(' + i + ')" class="btn btn-outline" style="font-size:10px;padding:2px 8px;color:var(--red);border-color:var(--red);">Delete</button></td>' +
+            '</tr>';
+        }).join('');
+
+    var html = '<div style="max-width:900px;margin:auto;">' +
+        '<button onclick="window.showView(\'depletion\')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;margin-bottom:6px;">← Back to Depletion</button>' +
+        '<h2 style="margin:0 0 4px 0;">🔗 POS Alias Manager</h2>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Custom POS aliases layer on top of ' + curated + ' built-in entries. Map a POS product name (lowercase, normalised) to a recipe/inventory name to fix mismatched depletion linking.</div>' +
+        '<div class="card" style="padding:16px;margin-bottom:18px;border-top:3px solid var(--blue);">' +
+            '<h3 style="margin:0 0 10px 0;font-size:14px;">Add Override</h3>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">' +
+                '<div><label style="font-size:11px;color:var(--text-muted);">POS name (as it appears)</label>' +
+                    '<input type="text" id="alias-pos" class="input-box" placeholder="e.g. yakisoba noodles wa">' +
+                '</div>' +
+                '<div><label style="font-size:11px;color:var(--text-muted);">Target (recipe/item name)</label>' +
+                    '<input type="text" id="alias-target" class="input-box" list="alias-target-list" placeholder="e.g. yakisoba fried noodles">' +
+                    '<datalist id="alias-target-list">' + targetOpts + '</datalist>' +
+                '</div>' +
+                '<button onclick="window._addPosAlias()" class="btn btn-blue" style="padding:10px 16px;">+ Add</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card" style="padding:16px;margin-bottom:18px;border-top:3px solid var(--purple);">' +
+            '<h3 style="margin:0 0 10px 0;font-size:14px;">Test Match</h3>' +
+            '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">' +
+                '<input type="text" id="alias-test" class="input-box" placeholder="Type a POS product name to see what it would link to..." oninput="window._testAliasMatch()">' +
+                '<button onclick="window._testAliasMatch()" class="btn btn-outline" style="padding:10px 16px;">Test</button>' +
+            '</div>' +
+            '<div id="alias-test-result" style="margin-top:12px;font-size:12px;color:var(--text-muted);">Result will appear here.</div>' +
+        '</div>' +
+        '<div class="card" style="padding:0;overflow:hidden;">' +
+            '<div style="padding:12px 16px;background:#111;display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="font-size:13px;">Custom Overrides (' + overrides.length + ')</strong>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);">' +
+                    '<th style="text-align:left;padding:8px 8px;">POS Name</th>' +
+                    '<th style="text-align:left;padding:8px 8px;">Maps To</th>' +
+                    '<th style="text-align:right;padding:8px 8px;">Action</th>' +
+                '</tr></thead>' +
+                '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+        '</div>' +
+    '</div>';
+    return html;
+};
+
+window._addPosAlias = function() {
+    var pos = (document.getElementById('alias-pos').value || '').trim().toLowerCase();
+    var target = (document.getElementById('alias-target').value || '').trim().toLowerCase();
+    if (!pos || !target) return window.showToast('Both fields required.', 'error');
+    window.posAliasOverrides = window.posAliasOverrides || [];
+    if (window.posAliasOverrides.some(function(o) { return o.pos === pos; })) return window.showToast('Override for that POS name already exists.', 'error');
+    window.posAliasOverrides.push({ pos: pos, target: target, addedAt: new Date().toISOString() });
+    window.saveToDisk();
+    window.showToast('✅ Alias added.', 'success');
+    window.showView('pos-alias-manager');
+};
+
+window._deletePosAlias = function(idx) {
+    if (!window.posAliasOverrides || !window.posAliasOverrides[idx]) return;
+    var o = window.posAliasOverrides[idx];
+    window.confirmAction({
+        title: 'Delete Alias',
+        message: 'Remove override <code>' + window.esc(o.pos) + '</code> → <code>' + window.esc(o.target) + '</code>?',
+        confirmLabel: 'Delete',
+        tier: 'standard',
+        onConfirm: function() {
+            window.posAliasOverrides.splice(idx, 1);
+            window.saveToDisk();
+            window.showToast('Alias removed.');
+            window.showView('pos-alias-manager');
+        }
+    });
+};
+
+// =============================================================================
+// DEPLETION AUDIT VIEW — read-only view of last POS match results
+// =============================================================================
+window.renderDepletionAuditView = function() {
+    var E = window.esc;
+    var r = window._posLinkResults;
+    var log = (window.depletionAuditLog || []).slice().reverse();
+
+    var html = '<div style="max-width:1000px;margin:auto;">' +
+        '<button onclick="window.showView(\'pos-linker\')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;margin-bottom:6px;">← Back to POS Linker</button>' +
+        '<h2 style="margin:0 0 4px 0;">🔍 Depletion Audit</h2>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Read-only diagnostic of the last POS auto-match run. Flag mismatches and create aliases for unmatched items.</div>';
+
+    if (!r) {
+        html += '<div class="card" style="text-align:center;padding:40px;border-top:3px solid var(--text-muted);">' +
+            '<div style="font-size:48px;margin-bottom:10px;">📋</div>' +
+            '<p style="color:var(--text-muted);margin:0;">No POS link results in memory. Run <strong>POS Auto-Linker</strong> first, then return here for confidence audit.</p>' +
+            '<button onclick="window.showView(\'pos-linker\')" class="btn btn-blue" style="margin-top:14px;">Go to POS Linker</button>';
+        if (log.length > 0) {
+            html += '<details style="margin-top:24px;text-align:left;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">Previous audit snapshots (' + log.length + ')</summary>';
+            log.slice(0, 10).forEach(function(s) {
+                html += '<div style="font-size:11px;color:var(--text-muted);padding:4px 0;border-bottom:1px dashed var(--border);">' +
+                    E(s.ts || '?') + ' · auto: <strong>' + (s.auto||0) + '</strong> · suggested: <strong>' + (s.suggested||0) + '</strong> · unmatched: <strong>' + (s.unmatched||0) + '</strong></div>';
+            });
+            html += '</details>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    var total = r.autoMatched.length + r.suggested.length + r.unmatched.length + r.alreadyMapped.length;
+    var matchedPct = total > 0 ? Math.round(((r.autoMatched.length + r.alreadyMapped.length) / total) * 100) : 0;
+    var lowConf = r.autoMatched.filter(function(m) { return m.score < 0.75; });
+
+    html +=
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px;">' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--green);"><div style="font-size:22px;font-weight:700;color:var(--green);">' + matchedPct + '%</div><div style="font-size:11px;color:var(--text-muted);">Overall Match Rate</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--green);"><div style="font-size:22px;font-weight:700;">' + r.autoMatched.length + '</div><div style="font-size:11px;color:var(--text-muted);">Auto-Matched</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--orange);"><div style="font-size:22px;font-weight:700;color:var(--orange);">' + lowConf.length + '</div><div style="font-size:11px;color:var(--text-muted);">Low Confidence</div></div>' +
+            '<div class="card" style="padding:12px;text-align:center;border-top:3px solid var(--red);"><div style="font-size:22px;font-weight:700;color:var(--red);">' + r.unmatched.length + '</div><div style="font-size:11px;color:var(--text-muted);">Unmatched</div></div>' +
+        '</div>';
+
+    var rowOf = function(m, statusColor, allowAddAlias) {
+        var posName = m.pos ? m.pos.name : '?';
+        var target = m.match ? m.match.name : '—';
+        var score = (m.score || 0).toFixed(2);
+        var addBtn = allowAddAlias ? '<button onclick="window._auditAddAlias(\'' + E(posName).replace(/\\/g,"\\\\").replace(/'/g,"\\'") + '\')" class="btn btn-outline" style="font-size:10px;padding:2px 8px;color:var(--blue);border-color:var(--blue);">+ Add Alias</button>' : '';
+        return '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:6px 8px;font-size:12px;">' + E(posName) + '</td>' +
+            '<td style="padding:6px 8px;font-size:12px;color:var(--text-muted);">' + E(target) + '</td>' +
+            '<td style="padding:6px 8px;font-size:11px;color:' + statusColor + ';text-align:center;font-weight:600;">' + score + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;">' + addBtn + '</td>' +
+        '</tr>';
+    };
+
+    if (lowConf.length > 0) {
+        html += '<details open class="card" style="padding:0;margin-bottom:14px;border-top:3px solid var(--orange);">' +
+            '<summary style="cursor:pointer;padding:10px 14px;font-weight:700;color:var(--orange);">⚠️ Low-Confidence Matches (' + lowConf.length + ')</summary>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);"><th style="text-align:left;padding:6px 8px;">POS Name</th><th style="text-align:left;padding:6px 8px;">Matched To</th><th style="padding:6px 8px;">Score</th><th></th></tr></thead>' +
+            '<tbody>' + lowConf.map(function(m) { return rowOf(m, 'var(--orange)', true); }).join('') + '</tbody></table></details>';
+    }
+
+    if (r.unmatched.length > 0) {
+        html += '<details open class="card" style="padding:0;margin-bottom:14px;border-top:3px solid var(--red);">' +
+            '<summary style="cursor:pointer;padding:10px 14px;font-weight:700;color:var(--red);">❌ Unmatched (' + r.unmatched.length + ') — these skip depletion</summary>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);"><th style="text-align:left;padding:6px 8px;">POS Name</th><th style="text-align:left;padding:6px 8px;">Best Guess</th><th style="padding:6px 8px;">Score</th><th></th></tr></thead>' +
+            '<tbody>' + r.unmatched.map(function(m) { return rowOf(m, 'var(--red)', true); }).join('') + '</tbody></table></details>';
+    }
+
+    html += '<details class="card" style="padding:0;margin-bottom:14px;border-top:3px solid var(--green);">' +
+        '<summary style="cursor:pointer;padding:10px 14px;font-weight:700;color:var(--green);">✅ Auto-Matched (' + r.autoMatched.length + ')</summary>' +
+        '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;background:rgba(0,0,0,0.2);"><th style="text-align:left;padding:6px 8px;">POS Name</th><th style="text-align:left;padding:6px 8px;">Matched To</th><th style="padding:6px 8px;">Score</th><th></th></tr></thead>' +
+        '<tbody>' + r.autoMatched.map(function(m) { return rowOf(m, m.score >= 0.85 ? 'var(--green)' : 'var(--orange)', false); }).join('') + '</tbody></table></details>';
+
+    html += '</div>';
+    return html;
+};
+
+window._auditAddAlias = function(posName) {
+    window.showView('pos-alias-manager');
+    setTimeout(function() {
+        var el = document.getElementById('alias-pos');
+        if (el) { el.value = (posName || '').toLowerCase(); el.focus(); }
+    }, 50);
+};
+
+// Persist a small snapshot every time match results land
+window._snapshotDepletionAudit = function() {
+    var r = window._posLinkResults; if (!r) return;
+    window.depletionAuditLog = window.depletionAuditLog || [];
+    window.depletionAuditLog.push({
+        ts: new Date().toISOString(),
+        auto: r.autoMatched.length,
+        suggested: r.suggested.length,
+        unmatched: r.unmatched.length,
+        alreadyMapped: r.alreadyMapped.length
+    });
+    // 30-entry cap
+    if (window.depletionAuditLog.length > 30) window.depletionAuditLog.splice(0, window.depletionAuditLog.length - 30);
+};
+
+window._testAliasMatch = function() {
+    var input = (document.getElementById('alias-test').value || '').trim();
+    var out = document.getElementById('alias-test-result');
+    if (!out) return;
+    if (!input) { out.innerHTML = 'Type a POS product name to see what it would link to.'; return; }
+    var posNorm = window._normalise(input);
+    var posClean = window._normalise(window._bwiPOSClean(input));
+    var aliasMap = window._getEffectiveAliasMap();
+    var aliasTarget = aliasMap[posNorm] || aliasMap[posClean];
+    var rows = [];
+    rows.push('<div><strong style="color:var(--text-muted);">Normalised:</strong> <code>' + window.esc(posNorm) + '</code></div>');
+    rows.push('<div><strong style="color:var(--text-muted);">Cleaned:</strong> <code>' + window.esc(posClean) + '</code></div>');
+    if (aliasTarget) {
+        rows.push('<div style="margin-top:6px;color:var(--green);"><strong>✓ Alias match:</strong> → <code>' + window.esc(aliasTarget) + '</code></div>');
+        var sourceCurated = (window._bwiAliasMap || {})[posNorm] || (window._bwiAliasMap || {})[posClean];
+        rows.push('<div style="font-size:10px;color:var(--text-muted);">Source: ' + (sourceCurated ? 'built-in' : 'custom override') + '</div>');
+    } else {
+        rows.push('<div style="margin-top:6px;color:var(--orange);">No alias match — would fall through to fuzzy matching.</div>');
+    }
+    out.innerHTML = rows.join('');
 };
 

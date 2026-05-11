@@ -155,9 +155,42 @@ window.importData = (event) => {
     reader.onload = (e) => {
         try {
             const data = JSON.parse(e.target.result);
-            window.saveKeys.forEach(k => { window[k] = data[k] || window[k]; });
-            window.saveToDisk(); window.showToast('Data restored and synced to Firebase!'); window.showView('dashboard');
-        } catch (err) { window.showToast('Error importing file.', 'error'); console.error(err); }
+            // ── Preview before commit ──
+            const E = window.esc;
+            const counts = {
+                recipes: (data.recipes || []).length,
+                inventoryItems: (data.inventoryItems || []).length,
+                staffDirectory: (data.staffDirectory || []).length,
+                suppliers: (data.suppliers || []).length,
+                tempLogs: (data.tempLogs || []).length,
+                depletionLogs: (data.depletionLogs || []).length,
+                salesData: (data.salesData || []).length,
+                knowledgeBase: (data.knowledgeBase || []).length
+            };
+            const totalKeys = window.saveKeys.filter(k => data[k] !== undefined).length;
+            const summaryRows = Object.entries(counts).map(([k, v]) =>
+                '<tr><td style="padding:4px 8px;font-size:12px;color:var(--text-muted);">' + E(k) + '</td>' +
+                '<td style="padding:4px 8px;font-size:13px;text-align:right;font-weight:600;">' + v + '</td></tr>'
+            ).join('');
+            const fileLabel = E(file.name) + ' · ' + Math.round(file.size / 1024) + ' KB';
+
+            window.confirmAction({
+                title: '📦 Restore Backup — Preview',
+                message: '<p style="margin:0 0 10px;color:var(--text-muted);font-size:12px;"><strong>File:</strong> ' + fileLabel + '<br><strong>Contains:</strong> ' + totalKeys + ' of ' + window.saveKeys.length + ' data keys</p>' +
+                    '<table style="width:100%;border-collapse:collapse;background:var(--bg-main);border-radius:6px;overflow:hidden;">' +
+                    '<tbody>' + summaryRows + '</tbody></table>' +
+                    '<p style="margin:12px 0 0;color:var(--orange);font-size:12px;"><strong>⚠️ This replaces your current data.</strong> A copy of current state is auto-saved to localStorage before restore.</p>',
+                confirmLabel: 'Restore Backup',
+                tier: 'dangerous',
+                onConfirm: () => {
+                    try { localStorage.setItem('_preRestoreBackup', JSON.stringify(Object.fromEntries(window.saveKeys.map(k => [k, window[k]])))); } catch(_) {}
+                    window.saveKeys.forEach(k => { window[k] = data[k] || window[k]; });
+                    window.saveToDisk();
+                    window.showToast('✅ Backup restored and synced to Firebase.', 'success');
+                    window.showView('dashboard');
+                }
+            });
+        } catch (err) { window.showToast('Error parsing backup file.', 'error'); console.error(err); }
     };
     reader.readAsText(file);
 };

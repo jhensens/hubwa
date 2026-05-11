@@ -46,10 +46,25 @@ window._refreshRecList = () => {
         if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
         if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
         if (window.recFilters.filter === 'QtyFix' && !(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed)) return false;
+        if (window.recFilters.filter === 'Unlinked' && !(r.ingredients||[]).some(i=>i.type==='raw')) return false;
         if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
         if (window.recFilters.search) {
             const s = window.recFilters.search.toLowerCase();
-            return r.name.toLowerCase().includes(s) || (r.posAlias && r.posAlias.toLowerCase().includes(s));
+            if (r.name.toLowerCase().includes(s)) return true;
+            if (r.posAlias && r.posAlias.toLowerCase().includes(s)) return true;
+            // Ingredient name search (live-looked-up via inv.recipeName||inv.name)
+            const ingHit = (r.ingredients||[]).some(ing => {
+                if (ing.type === 'inv' && ing.ref) {
+                    const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
+                    const dispName = inv ? (inv.recipeName || inv.name || '') : (ing.name || '');
+                    return dispName.toLowerCase().includes(s);
+                }
+                return (ing.name || '').toLowerCase().includes(s);
+            });
+            if (ingHit) return true;
+            // Allergen search
+            if ((r.allergens || []).some(a => (a || '').toLowerCase().includes(s))) return true;
+            return false;
         }
         return true;
     });
@@ -113,16 +128,34 @@ window.renderRecipeView = () => {
         if (window.recFilters.filter === 'Menu' && r.type !== 'Menu') return false;
         if (window.recFilters.filter === 'Batch' && r.type !== 'Batch') return false;
         if (window.recFilters.filter === 'QtyFix' && !(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed)) return false;
+        if (window.recFilters.filter === 'Unlinked' && !(r.ingredients||[]).some(i=>i.type==='raw')) return false;
         if (window.recFilters.station !== 'All' && (r.station || 'Kitchen') !== window.recFilters.station) return false;
         if (window.recFilters.search) {
             const s = window.recFilters.search.toLowerCase();
-            return r.name.toLowerCase().includes(s) || (r.posAlias && r.posAlias.toLowerCase().includes(s));
+            if (r.name.toLowerCase().includes(s)) return true;
+            if (r.posAlias && r.posAlias.toLowerCase().includes(s)) return true;
+            // Ingredient name search (live-looked-up via inv.recipeName||inv.name)
+            const ingHit = (r.ingredients||[]).some(ing => {
+                if (ing.type === 'inv' && ing.ref) {
+                    const inv = (window.inventoryItems||[]).find(i => i.id === ing.ref);
+                    const dispName = inv ? (inv.recipeName || inv.name || '') : (ing.name || '');
+                    return dispName.toLowerCase().includes(s);
+                }
+                return (ing.name || '').toLowerCase().includes(s);
+            });
+            if (ingHit) return true;
+            // Allergen search
+            if ((r.allergens || []).some(a => (a || '').toLowerCase().includes(s))) return true;
+            return false;
         }
         return true;
     });
     const qtyFixCount = (window.recipes||[]).filter(r=>!r.archived&&(r.ingredients||[]).some(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed)).length;
     const totalQtyFixIngs = (window.recipes||[]).reduce((s,r)=>s+(r.archived?0:(r.ingredients||[]).filter(i=>i.type==='inv'&&i.qty===1&&i._rawName&&!i._qtyConfirmed).length),0);
-    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('') + (qtyFixCount>0?`<div class="tag-pill ${window.recFilters.filter==='QtyFix'?'active':''}" style="border-color:var(--orange);${window.recFilters.filter==='QtyFix'?'background:var(--orange);color:#fff;':'color:var(--orange);'}" onclick="window.recFilters.filter='QtyFix';window.showView(\'recipes\')">🔧 Qty Fix (${qtyFixCount})</div>`:'');
+    const unlinkedRecCount = (window.recipes||[]).filter(r=>!r.archived&&(r.ingredients||[]).some(i=>i.type==='raw')).length;
+    const typePills = ['All','Menu','Batch'].map(c => `<div class="tag-pill ${window.recFilters.filter===c?'active':''}" onclick="window.recFilters.filter='${c}';window.showView(\'recipes\')">${c}</div>`).join('')
+        + (qtyFixCount>0?`<div class="tag-pill ${window.recFilters.filter==='QtyFix'?'active':''}" style="border-color:var(--orange);${window.recFilters.filter==='QtyFix'?'background:var(--orange);color:#fff;':'color:var(--orange);'}" onclick="window.recFilters.filter='QtyFix';window.showView(\'recipes\')">🔧 Qty Fix (${qtyFixCount})</div>`:'')
+        + (unlinkedRecCount>0?`<div class="tag-pill ${window.recFilters.filter==='Unlinked'?'active':''}" style="border-color:var(--red);${window.recFilters.filter==='Unlinked'?'background:var(--red);color:#fff;':'color:var(--red);'}" onclick="window.recFilters.filter='Unlinked';window.showView(\'recipes\')" title="Recipes with raw/unlinked ingredients (cost $0 from those)">🔗 Unlinked (${unlinkedRecCount})</div>`:'');
     const stationPills = ['All','Kitchen','Bar','Prep'].map(s => `<div class="tag-pill ${window.recFilters.station===s?'active':''}" onclick="window.recFilters.station='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
     const statusPills = ['Active','Off Menu','Development'].map(s => `<div class="tag-pill ${window.recFilters.status===s?'active':''}" onclick="window.recFilters.status='${s}';window.showView(\'recipes\')">${s}</div>`).join('');
     // Sort logic for table view
@@ -349,6 +382,9 @@ window.viewRecipe = (id) => {
             <h3 style="margin:0 0 12px 0;color:var(--brand-accent);font-size:13px;text-transform:uppercase;letter-spacing:1px;">Allergens & Dietary</h3>
             ${allergenHtml}
         </div>
+
+        <!-- POS MAPPINGS (reverse lookup) -->
+        ${window._renderPosMappingsForRecipe ? window._renderPosMappingsForRecipe(r.id) : ''}
 
         <!-- COSTING FOOTER -->
         ${r.type==='Menu'?`<div class="card" style="padding:18px;border-top:4px solid ${gpColor};display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:15px;">
@@ -859,6 +895,26 @@ window.subRecipe = (id, totalCost) => {
     const existingIdx = window.recipes.findIndex(x=>x.id===id);
     const type = document.getElementById('r-type').value;
     const oldRecipe = existingIdx>=0 ? window.recipes[existingIdx] : {};
+    // ── Active-recipe pre-save guard: warn if Active+priced but has raw/unlinked ingredients ──
+    const _status = document.getElementById('r-status').value;
+    const _price = type === 'Menu' ? (parseFloat(document.getElementById('r-p').value) || 0) : 0;
+    const _rawIngs = (window.tempIngs || []).filter(i => i.type === 'raw');
+    if (!window._activeRecipeSaveConfirmed && _status === 'Active' && _price > 0 && _rawIngs.length > 0 && type === 'Menu') {
+        const _list = _rawIngs.slice(0, 6).map(i => '• ' + window.esc(i.name || i._rawName || 'unnamed')).join('<br>');
+        const _more = _rawIngs.length > 6 ? '<br><em style="color:var(--text-muted);">…and ' + (_rawIngs.length - 6) + ' more</em>' : '';
+        window.confirmAction({
+            title: '⚠️ Unlinked Ingredients on Active Recipe',
+            message: '<strong>' + window.esc(recipeName) + '</strong> has <strong>' + _rawIngs.length + ' raw / unlinked ingredient' + (_rawIngs.length!==1?'s':'') + '</strong> contributing $0 to cost. The displayed GP will be inflated.<br><br>' + _list + _more + '<br><br>Save as Active anyway?',
+            confirmLabel: 'Save Active',
+            tier: 'dangerous',
+            onConfirm: () => {
+                window._activeRecipeSaveConfirmed = true;
+                try { window.subRecipe(id, totalCost); }
+                finally { window._activeRecipeSaveConfirmed = false; }
+            }
+        });
+        return;
+    }
     const obj = {
         id, name: recipeName,
         posAlias: type!=='Batch'&&document.getElementById('r-pos')?document.getElementById('r-pos').value:'',
@@ -965,6 +1021,15 @@ window.renderBatchQtyFixView = () => {
             const displayName = item.inv?(item.inv.recipeName||item.inv.name):item.ing.name;
             const unit = item.inv?(item.inv.useUnit||''):'';
             const tabIdx = i+1;
+            // Parser suggestion — pre-fill input with parsed qty if parser found ≠1
+            const parsed = window._parseIngredientLine ? window._parseIngredientLine(item.ing._rawName||'') : { qty: 0 };
+            const hasSuggestion = parsed && parsed.qty && parsed.qty !== 1;
+            const suggestedQty = hasSuggestion ? parsed.qty : 1;
+            const suggestedUnit = parsed && parsed.unit ? parsed.unit : '';
+            const initialCost = item.inv ? (suggestedQty * ((item.inv.price||0)/(item.inv.yield||1))) : 0;
+            const hint = hasSuggestion
+                ? `<span style="font-size:9px;color:var(--green);margin-top:1px;">💡 parsed ${suggestedQty}${suggestedUnit?' '+esc(suggestedUnit):''}</span>`
+                : '';
             return `<div style="display:grid;grid-template-columns:1.5fr 1fr 80px auto;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);${i%2===0?'background:rgba(255,255,255,0.01);':''}">
                 <div>
                     <div style="font-size:12px;font-weight:600;">${esc(displayName)}</div>
@@ -975,8 +1040,9 @@ window.renderBatchQtyFixView = () => {
                     <div style="font-size:10px;color:var(--text-muted);">Unit: ${esc(unit)}</div>
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                    <input type="number" step="0.001" min="0" class="input-box bqf-input" tabindex="${tabIdx}" data-recipe-id="${item.recipeId}" data-ing-idx="${item.ingIdx}" data-inv-price="${item.inv?(item.inv.price||0):0}" data-inv-yield="${item.inv?(item.inv.yield||1):1}" value="1" style="margin:0;padding:6px;text-align:center;border-color:var(--orange);font-weight:bold;" oninput="window._bqfCostPreview(this)">
-                    <span class="bqf-cost" style="font-size:10px;color:var(--brand-accent);">$${item.inv?((item.inv.price||0)/(item.inv.yield||1)).toFixed(3):'0.000'}</span>
+                    <input type="number" step="0.001" min="0" class="input-box bqf-input" tabindex="${tabIdx}" data-recipe-id="${item.recipeId}" data-ing-idx="${item.ingIdx}" data-inv-price="${item.inv?(item.inv.price||0):0}" data-inv-yield="${item.inv?(item.inv.yield||1):1}" value="${suggestedQty}" style="margin:0;padding:6px;text-align:center;border-color:${hasSuggestion?'var(--green)':'var(--orange)'};font-weight:bold;" oninput="window._bqfCostPreview(this)">
+                    <span class="bqf-cost" style="font-size:10px;color:var(--brand-accent);">$${initialCost.toFixed(3)}</span>
+                    ${hint}
                 </div>
                 <button onclick="window._confirmQty('${item.recipeId}',${item.ingIdx});window.showView('batch-qty-fix');" class="btn btn-outline" style="font-size:10px;padding:4px 8px;border-color:var(--green);color:var(--green);white-space:nowrap;" title="Confirm qty=1 is correct">✓ OK</button>
             </div>`;
