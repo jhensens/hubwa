@@ -710,7 +710,7 @@ window._commitAutoLinkUnambiguous = () => {
     else window.saveToDisk();
     window._autoLinkProposals = null;
     window.showToast('⚡ Auto-linked ' + count + ' ingredients across ' + new Set(proposals.map(p => p.recipeId)).size + ' recipes.', 'success');
-    window.showView('linker');
+    window.showView('batch-linker');
 };
 
 window._saveBatchQueue = () => { try { localStorage.setItem('_batchLinkQueue', JSON.stringify(window._batchLinkQueue)); } catch(e) {} };
