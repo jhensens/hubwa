@@ -5,6 +5,29 @@
 window._salesTab = window._salesTab || 'week';
 window._salesMonth = window._salesMonth || null; // 'YYYY-MM' format
 
+// =============================================================================
+// REVENUE PRIORITY HELPER — used everywhere we read a daily revenue figure.
+// Prefers live Lightspeed POS data (lsRevenue) when available, falls back to
+// manual entry (total). This means manual entries are never overwritten, and
+// the moment Lightspeed has data for a day, it wins automatically.
+// =============================================================================
+window._effectiveRevenue = (s) => {
+    if (!s) return 0;
+    var ls = Number(s.lsRevenue || 0);
+    if (ls > 0) return ls;
+    return Number(s.total || 0);
+};
+window._hasRevenue = (s) => {
+    if (!s) return false;
+    return Number(s.lsRevenue || 0) > 0 || Number(s.total || 0) > 0;
+};
+window._revenueSource = (s) => {
+    if (!s) return 'none';
+    if (Number(s.lsRevenue || 0) > 0) return 'lightspeed';
+    if (Number(s.total || 0) > 0) return 'manual';
+    return 'none';
+};
+
 
 // =============================================================================
 // REVENUE FORECASTING
@@ -29,11 +52,12 @@ window.renderForecastView = () => {
     const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const dayShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-    // Build day-of-week stats from historical data
+    // Build day-of-week stats from historical data (uses lsRevenue when available)
     const byDow = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
     sales.forEach(s => {
         const d = parseDate(s.date);
-        if (d && s.total > 0) byDow[d.getDay()].push(Number(s.total));
+        const rev = window._effectiveRevenue(s);
+        if (d && rev > 0) byDow[d.getDay()].push(rev);
     });
 
     // Calculate median for each day of week
@@ -52,8 +76,8 @@ window.renderForecastView = () => {
     const lastYearEnd = new Date(now); lastYearEnd.setFullYear(lastYearEnd.getFullYear()-1);
     const lastYearStart = new Date(lastYearEnd); lastYearStart.setDate(lastYearStart.getDate()-90);
 
-    const recentTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=ninetyAgo && d<=now; }).reduce((sum,s)=>sum+Number(s.total||0),0);
-    const lastYearTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=lastYearStart && d<=lastYearEnd; }).reduce((sum,s)=>sum+Number(s.total||0),0);
+    const recentTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=ninetyAgo && d<=now; }).reduce((sum,s)=>sum+window._effectiveRevenue(s),0);
+    const lastYearTotal = sales.filter(s => { const d=parseDate(s.date); return d && d>=lastYearStart && d<=lastYearEnd; }).reduce((sum,s)=>sum+window._effectiveRevenue(s),0);
     const yoyTrend = lastYearTotal > 0 ? (recentTotal - lastYearTotal) / lastYearTotal : 0;
 
     // Seasonal adjustment — compare this month's avg to annual avg
@@ -61,10 +85,11 @@ window.renderForecastView = () => {
     const byMonth = {};
     sales.forEach(s => {
         const d = parseDate(s.date);
-        if (d && s.total > 0) {
+        const rev = window._effectiveRevenue(s);
+        if (d && rev > 0) {
             const m = d.getMonth();
             if (!byMonth[m]) byMonth[m] = [];
-            byMonth[m].push(Number(s.total));
+            byMonth[m].push(rev);
         }
     });
     const monthAvgs = {};
@@ -343,10 +368,10 @@ window.renderSalesView = () => {
         compareLabel = new Date(today.getFullYear(), today.getMonth() - 1, 1).toLocaleString('en-AU', { month: 'long' });
     }
 
-    const sum = arr => arr.reduce((s, d) => s + Number(d.total || 0), 0);
+    const sum = arr => arr.reduce((s, d) => s + window._effectiveRevenue(d), 0);
     const avg = arr => arr.length > 0 ? sum(arr) / arr.length : 0;
-    const best = arr => arr.length > 0 ? arr.reduce((b, d) => Number(d.total) > Number(b.total) ? d : b) : null;
-    const worst = arr => arr.length > 0 ? arr.reduce((w, d) => Number(d.total) < Number(w.total) ? d : w) : null;
+    const best = arr => arr.length > 0 ? arr.reduce((b, d) => window._effectiveRevenue(d) > window._effectiveRevenue(b) ? d : b) : null;
+    const worst = arr => arr.length > 0 ? arr.reduce((w, d) => window._effectiveRevenue(d) < window._effectiveRevenue(w) ? d : w) : null;
 
     const totalRev = sum(periodData);
     const avgDaily = avg(periodData);
@@ -437,21 +462,24 @@ window.renderSalesView = () => {
             '</div>' +
         '</div>';
 
-    // Revenue bar chart — inline SVG
+    // Revenue bar chart — inline SVG (uses lsRevenue when available, falls back to manual total)
     const chartData = periodData.slice(-14); // last 14 days max
     let chartHtml = '';
     if (chartData.length > 0) {
-        const maxVal = Math.max(...chartData.map(d => Number(d.total)));
+        const maxVal = Math.max(...chartData.map(d => window._effectiveRevenue(d)));
         const chartW = 100; // percentage width per bar slot
         const barW = Math.max(10, Math.floor(600 / chartData.length) - 4);
         const svgH = 120;
         const bars = chartData.map((d, i) => {
-            const barH = maxVal > 0 ? Math.max(4, Math.round((Number(d.total) / maxVal) * svgH)) : 4;
+            const dayRev = window._effectiveRevenue(d);
+            const barH = maxVal > 0 ? Math.max(4, Math.round((dayRev / maxVal) * svgH)) : 4;
             const x = i * (barW + 4);
             const isToday = d.date === today.toLocaleDateString('en-AU');
-            const color = isToday ? '#3b82f6' : '#10b981';
+            const isLs = window._revenueSource(d) === 'lightspeed';
+            // Today = blue, Lightspeed = teal-green, Manual = green
+            const color = isToday ? '#3b82f6' : (isLs ? '#10b981' : '#059669');
             return '<rect x="' + x + '" y="' + (svgH - barH) + '" width="' + barW + '" height="' + barH + '" fill="' + color + '" rx="2" opacity="0.85">' +
-                '<title>' + d.date + ': $' + Number(d.total).toFixed(0) + '</title></rect>';
+                '<title>' + d.date + ': $' + dayRev.toFixed(0) + (isLs ? ' ⚡ Lightspeed' : '') + '</title></rect>';
         }).join('');
         const totalW = chartData.length * (barW + 4);
         chartHtml = '<div class="card" style="margin-bottom:20px;">' +
@@ -517,9 +545,11 @@ window.renderSalesView = () => {
         const dateStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
         const s = salesByDate[dateStr] || null;
         const dayLabel = dayNames[d.getDay()];
-        const hasTakings = s && Number(s.total || 0) > 0;
+        const effectiveRev = window._effectiveRevenue(s);
+        const hasTakings = effectiveRev > 0;
+        const revSource = window._revenueSource(s);
         const wageAmt = s ? Number(s.wages || 0) : 0;
-        const wagePctDay = hasTakings && wageAmt > 0 ? ' (' + ((wageAmt / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+        const wagePctDay = hasTakings && wageAmt > 0 ? ' (' + ((wageAmt / effectiveRev) * 100).toFixed(0) + '%)' : '';
 
         // Tanda wage lookup
         var tandaWageCell = '—';
@@ -528,18 +558,26 @@ window.renderSalesView = () => {
         var isoDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
         var tandaDay = weeklyActual[isoDate];
         if (tandaDay && tandaDay.cost > 0) {
-            var tandaPct = hasTakings ? ' (' + ((tandaDay.cost / Number(s.total)) * 100).toFixed(0) + '%)' : '';
+            var tandaPct = hasTakings ? ' (' + ((tandaDay.cost / effectiveRev) * 100).toFixed(0) + '%)' : '';
             tandaWageCell = '<span style="color:var(--blue);">$' + Math.round(tandaDay.cost).toLocaleString('en-AU') + tandaPct + '</span>' +
                 '<br><small style="color:var(--text-muted);">' + tandaDay.hours.toFixed(1) + 'h · ' + tandaDay.count + ' staff</small>';
         }
 
+        // For payment-method cells: show actual values if manual, blanks if from Lightspeed (we don't know breakdown)
+        var eftposCell = (revSource === 'manual' && s && Number(s.eftpos||0) > 0) ? '$' + Number(s.eftpos).toFixed(2) : '—';
+        var cashCell = (revSource === 'manual' && s && Number(s.cash||0) > 0) ? '$' + Number(s.cash).toFixed(2) : '—';
+        var meanduCell = (revSource === 'manual' && s && Number(s.meandu||0) > 0) ? '$' + Number(s.meandu).toFixed(2) : '—';
+        var revBadge = revSource === 'lightspeed'
+            ? ' <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);font-weight:700;" title="Live from Lightspeed POS">⚡ LS</span>'
+            : '';
+
         return '<tr style="border-bottom:1px solid var(--bg-main);cursor:pointer;transition:background 0.15s;' + (!hasTakings ? 'opacity:0.6;' : '') + '" onclick="window.manualTakingsForm(\''+dateStr+'\')" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'\'">' +
             '<td style="padding:7px 8px;font-size:12px;">' + dateStr + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);">' + dayLabel + '</td>' +
-            '<td style="padding:10px;">' + (hasTakings ? '$' + Number(s.eftpos||0).toFixed(2) : '—') + '</td>' +
-            '<td style="padding:10px;">' + (hasTakings ? '$' + Number(s.cash||0).toFixed(2) : '—') + '</td>' +
-            '<td style="padding:6px 8px;font-size:13px;">' + (s && Number(s.meandu||0) > 0 ? '$' + Number(s.meandu).toFixed(2) : '—') + '</td>' +
-            '<td style="padding:10px;font-weight:bold;color:var(--green);">' + (hasTakings ? '$' + Number(s.total).toFixed(2) : '—') + '</td>' +
+            '<td style="padding:10px;">' + eftposCell + '</td>' +
+            '<td style="padding:10px;">' + cashCell + '</td>' +
+            '<td style="padding:6px 8px;font-size:13px;">' + meanduCell + '</td>' +
+            '<td style="padding:10px;font-weight:bold;color:var(--green);">' + (hasTakings ? '$' + effectiveRev.toFixed(2) + revBadge : '—') + '</td>' +
             '<td style="padding:10px;font-size:12px;">' + tandaWageCell + '</td>' +
             '<td style="padding:10px;color:' + (wageAmt > 0 ? 'var(--orange)' : 'var(--red)') + ';font-size:12px;">' + (wageAmt > 0 ? '$' + wageAmt.toLocaleString('en-AU', {minimumFractionDigits:0,maximumFractionDigits:0}) + wagePctDay : '✏️ Add wages') + '</td>' +
             '<td style="padding:10px;color:var(--text-muted);font-size:12px;">' + esc(s ? s.notes || '' : '') + '</td>' +

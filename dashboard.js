@@ -5,7 +5,7 @@
 // VERSION INFO — Shows build version and update details
 // =============================================================================
 window._hubBuildDate = '11 May 2026';
-window._hubBuildId = '20260511d';
+window._hubBuildId = '20260511e';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -210,7 +210,7 @@ function renderCrossContent(venueData, venues) {
         const tempLogs = (data.tempLogs||[]).filter(t=>window._isToday(t.time));
         const weekStart = new Date(today); weekStart.setDate(weekStart.getDate()-today.getDay()+1); weekStart.setHours(0,0,0,0);
         const weekSales = sales.filter(s=>{const d=parseDate(s.date);return d&&d>=weekStart&&d<=today;});
-        const weekRevenue = weekSales.reduce((s,d)=>s+Number(d.total||0),0);
+        const weekRevenue = weekSales.reduce((s,d)=>s+window._effectiveRevenue(d),0);
 
         return { todaySale, lowStock, defects, incidents, overdueTasks, tempLogs, weekRevenue, invCount: inv.filter(i=>!i.archived).length };
     };
@@ -230,7 +230,7 @@ function renderCrossContent(venueData, venues) {
             '</div>';
         }
 
-        const todayRev = s.todaySale ? Number(s.todaySale.total||0) : null;
+        const todayRev = s.todaySale ? window._effectiveRevenue(s.todaySale) : null;
         const revColor = todayRev !== null ? 'var(--green)' : 'var(--text-muted)';
         const revStr = todayRev !== null ? '$' + todayRev.toLocaleString('en-AU',{minimumFractionDigits:0}) : 'Not logged';
 
@@ -272,7 +272,7 @@ function renderCrossContent(venueData, venues) {
 
     const totalTodayRevenue = venues.reduce((sum, v) => {
         const s = getVenueSummary(venueData[v.id]);
-        return sum + (s && s.todaySale ? Number(s.todaySale.total||0) : 0);
+        return sum + (s && s.todaySale ? window._effectiveRevenue(s.todaySale) : 0);
     }, 0);
 
     const totalWeekRevenue = venues.reduce((sum, v) => {
@@ -318,7 +318,7 @@ window.renderPrimeCostView = () => {
     const fourWeeksAgo = new Date(today); fourWeeksAgo.setDate(fourWeeksAgo.getDate()-28);
     const recentSales = sales.filter(s => { const d=parseDate(s.date); return d&&d>=fourWeeksAgo&&d<=today; });
 
-    const totalRevenue = recentSales.reduce((s,d)=>s+Number(d.total||0),0);
+    const totalRevenue = recentSales.reduce((s,d)=>s+window._effectiveRevenue(d),0);
     const totalWages = recentSales.reduce((s,d)=>s+Number(d.wages||0),0);
 
     // Food cost from wastage + recipe costs (estimated)
@@ -333,7 +333,7 @@ window.renderPrimeCostView = () => {
     // Tanda live data
     const tanda = window._tandaData;
     const todayRevSale = sales.find(s => { const d=parseDate(s.date); return d&&d.toDateString()===today.toDateString(); });
-    const todayRev = todayRevSale ? Number(todayRevSale.total||0) : 0;
+    const todayRev = todayRevSale ? window._effectiveRevenue(todayRevSale) : 0;
     const tandaWagePct = tanda && todayRev > 0 ? (Number(tanda.estimatedWageCost)/todayRev*100).toFixed(1) : null;
 
     // Week by week breakdown
@@ -342,7 +342,7 @@ window.renderPrimeCostView = () => {
         const wEnd = new Date(today); wEnd.setDate(wEnd.getDate()-(w*7));
         const wStart = new Date(wEnd); wStart.setDate(wStart.getDate()-6);
         const wSales = sales.filter(s=>{ const d=parseDate(s.date); return d&&d>=wStart&&d<=wEnd; });
-        const wRev = wSales.reduce((s,d)=>s+Number(d.total||0),0);
+        const wRev = wSales.reduce((s,d)=>s+window._effectiveRevenue(d),0);
         const wWages = wSales.reduce((s,d)=>s+Number(d.wages||0),0);
         const wLabour = wRev>0&&wWages>0?(wWages/wRev*100):null;
         const wFood = foodCostPct;
@@ -477,7 +477,7 @@ window.renderManagerHub = () => {
     // --- LAST WEEK SAME DAY ---
     const lwDate = new Date(today); lwDate.setDate(lwDate.getDate() - 7);
     const lwSales = getSalesForDate(lwDate);
-    const lwRev = lwSales ? Number(lwSales.total||0) : 0;
+    const lwRev = lwSales ? window._effectiveRevenue(lwSales) : 0;
     const revDelta = lwRev > 0 && hasTodayData ? ((todayRev - lwRev) / lwRev * 100) : null;
 
     // --- 7-DAY HISTORY ---
@@ -485,7 +485,7 @@ window.renderManagerHub = () => {
     for (let i = 6; i >= 0; i--) {
         const d = new Date(today); d.setDate(d.getDate() - i);
         const s = getSalesForDate(d);
-        last7.push({ date: d, rev: s ? Number(s.total||0) : 0, covers: s ? Number(s.covers||0) : 0, wages: s ? Number(s.wages||0) : 0 });
+        last7.push({ date: d, rev: s ? window._effectiveRevenue(s) : 0, covers: s ? Number(s.lsCovers||s.covers||0) : 0, wages: s ? Number(s.wages||0) : 0 });
     }
     const maxRev7 = Math.max(...last7.map(d => d.rev), 1);
     const avg7Rev = last7.reduce((s,d)=>s+d.rev,0) / 7;
@@ -1344,7 +1344,7 @@ window.saveAndGenerateDebrief = async () => {
 
     // D5: Pull richer ops data for AI context
     const todaySales = (window.salesData||[]).find(s => s.date === today.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/'));
-    const todayRevenue = todaySales ? Number(todaySales.total||0) : null;
+    const todayRevenue = todaySales ? window._effectiveRevenue(todaySales) : null;
     const openTickets = (window.defectLogs||[]).filter(d=>d.status==='Open');
     const todayWasteLogs = (window.wastageLogs||[]).filter(l=>window._isToday(l.time));
     const wasteTotal = todayWasteLogs.reduce((s,w) => s + Number(w.value||0), 0);
