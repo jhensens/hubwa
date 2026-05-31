@@ -452,8 +452,9 @@ window.executeUnifiedDepletion = function() {
     Object.keys(result.deductions).forEach(function(invId) {
         var inv = inventory.find(function(i) { return i.id === invId; });
         if (inv) {
-            // Stock has already been decremented, so current stock IS the "after"
-            var buyUnits = result.deductions[invId] / (inv.yield || 1);
+            // result.deductions[invId] is in use-units; convert to buy-units for stock
+            var useUnits = result.deductions[invId];
+            var buyUnits = useUnits / (inv.yield || 1);
             stockChanges.push({
                 id: inv.id,
                 name: inv.name,

@@ -2,7 +2,7 @@
   "name": "hobart-hub-functions",
   "description": "Cloud Functions for Hobart Hub — Lightspeed OAuth proxy",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

@@ -228,7 +228,13 @@ window.lsPullSales = async (dateFrom) => {
 
     // Default: pull since last pull date, or today
     if (!dateFrom) {
-        dateFrom = creds.lastPull ? creds.lastPull.split('T')[0] : window._isoDate();
+        if (creds.lastPull) {
+            var d = new Date(creds.lastPull);
+            d.setDate(d.getDate() + 1);
+            dateFrom = d.toISOString().split('T')[0];
+        } else {
+            dateFrom = window._isoDate();
+        }
     }
 
     var endpoint = 'companies/' + creds.companyId + '/sites/' + creds.siteId +
@@ -465,6 +471,15 @@ window.openLightspeedSettings = () => {
         '</div>';
         // Prominent "Sync Recent" button — pulls full days for dashboard
         html += '<button onclick="window.showLoadingOverlay(\'Syncing last 7 days from Lightspeed...\');window.lsSyncRecentDays(7).then(function(r){window.hideLoadingOverlay();if(r){window.showToast(\'Synced \'+r.orderCount+\' orders, $\'+(r.revenue||0).toFixed(0)+\' revenue.\');}window.openLightspeedSettings();})" class="btn btn-green" style="width:100%;font-size:13px;margin-bottom:6px;">⚡ Sync Last 7 Days into Dashboard</button>';
+
+        // Product catalog sync
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+            '<button onclick="window.showLoadingOverlay(\'Pulling POS products...\');window.lsPullProducts().then(function(){window.hideLoadingOverlay();window.lsAutoMapProducts();})" class="btn btn-purple" style="font-size:12px;">📦 Sync Products & Auto-Map</button>' +
+            '<button onclick="window.lsAutoMapProducts()" class="btn btn-outline" style="font-size:12px;">🔗 Re-Map Products</button>' +
+        '</div>';
+        if (window._lsProducts) {
+            html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">📦 ' + window._lsProducts.length + ' products loaded</div>';
+        }
 
         // Historical pull (deeper sync)
         html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">' +
@@ -908,6 +923,126 @@ window.lsShowSampleOrder = () => {
         '<pre style="font-size:10px;background:var(--bg-main);padding:10px;border-radius:6px;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;">' + window.esc(json) + '</pre></details>' +
         '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(json) + ').then(function(){window.showToast(\'Copied to clipboard\');})" class="btn btn-outline" style="width:100%;margin-top:10px;font-size:12px;">📋 Copy JSON to clipboard</button>';
     window.openModal('🔬 Sample Order JSON', html);
+};
+
+// Disconnect — clear all credentials
+// =============================================================================
+// PRODUCT CATALOG SYNC — Pull products from POS, auto-map to recipes
+// =============================================================================
+
+window.lsPullProducts = async () => {
+    var creds = window.getLsCredentials();
+    if (!creds.companyId || !creds.siteId) return null;
+    var endpoint = 'companies/' + creds.companyId + '/sites/' + creds.siteId + '/products?fields=categories';
+    var products = await window.fetchKountaAll(endpoint);
+    if (!products || !Array.isArray(products)) return null;
+
+    window._lsProducts = products.map(function(p) {
+        return {
+            id: p.id,
+            name: p.name || '',
+            category: (p.categories && p.categories[0]) ? p.categories[0].name : '',
+            price: p.price || p.unit_price || 0
+        };
+    });
+    window.showToast('Pulled ' + window._lsProducts.length + ' products from Lightspeed.');
+    return window._lsProducts;
+};
+
+window.lsAutoMapProducts = () => {
+    var products = window._lsProducts;
+    if (!products || products.length === 0) return window.showToast('No products loaded. Pull products first.', 'error');
+    var recipes = (window.recipes || []).filter(r => !r.archived && r.type === 'Menu');
+    var _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    var mapped = 0, existing = 0;
+
+    // Build recipe name index
+    var recipeIdx = {};
+    recipes.forEach(r => {
+        recipeIdx[_norm(r.name)] = r;
+        if (r.posAlias) recipeIdx[_norm(r.posAlias)] = r;
+    });
+
+    // Match each product to a recipe
+    var proposals = [];
+    products.forEach(function(p) {
+        var norm = _norm(p.name);
+        if (!norm) return;
+        var exact = recipeIdx[norm];
+        if (exact) {
+            // Already matched or auto-matchable
+            if (!exact.posAlias || _norm(exact.posAlias) === norm) {
+                existing++;
+            } else {
+                proposals.push({ product: p, recipe: exact, type: 'alias-conflict' });
+            }
+            return;
+        }
+        // Try token overlap for close matches
+        var pTokens = norm.split(' ');
+        var bestMatch = null, bestScore = 0;
+        recipes.forEach(function(r) {
+            var rNorm = _norm(r.name);
+            var rTokens = rNorm.split(' ');
+            var overlap = pTokens.filter(t => rTokens.includes(t)).length;
+            var score = (pTokens.length + rTokens.length) > 0 ? (2 * overlap) / (pTokens.length + rTokens.length) : 0;
+            if (score > bestScore && score >= 0.6) { bestScore = score; bestMatch = r; }
+        });
+        if (bestMatch) {
+            proposals.push({ product: p, recipe: bestMatch, type: 'fuzzy', score: Math.round(bestScore * 100) });
+        } else {
+            proposals.push({ product: p, recipe: null, type: 'unmatched' });
+        }
+    });
+
+    // Show results modal
+    var E = window.esc;
+    var matchedRows = proposals.filter(p => p.recipe).sort((a,b) => (b.score||100) - (a.score||100));
+    var unmatchedRows = proposals.filter(p => !p.recipe);
+
+    var html = '<p style="font-size:13px;margin:0 0 12px;">Found <strong>' + products.length + '</strong> POS products. <strong style="color:var(--green);">' + existing + '</strong> already mapped, <strong style="color:var(--blue);">' + matchedRows.length + '</strong> suggested matches, <strong style="color:var(--text-muted);">' + unmatchedRows.length + '</strong> unmatched.</p>';
+
+    if (matchedRows.length > 0) {
+        html += '<div style="max-height:40vh;overflow-y:auto;margin-bottom:12px;"><table style="width:100%;border-collapse:collapse;">';
+        html += '<thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-muted);background:rgba(0,0,0,0.2);"><th style="padding:6px 8px;text-align:left;">POS Product</th><th style="padding:6px 8px;text-align:left;">Hub Recipe</th><th style="padding:6px 8px;text-align:center;">Score</th><th style="padding:6px 8px;text-align:center;">Action</th></tr></thead><tbody>';
+        matchedRows.slice(0, 50).forEach(function(m, i) {
+            html += '<tr style="border-bottom:1px solid var(--border);">' +
+                '<td style="padding:5px 8px;font-size:12px;">' + E(m.product.name) + '<br><span style="font-size:10px;color:var(--text-muted);">' + E(m.product.category) + '</span></td>' +
+                '<td style="padding:5px 8px;font-size:12px;color:var(--blue);">' + E(m.recipe.name) + '</td>' +
+                '<td style="padding:5px 8px;text-align:center;font-size:11px;font-weight:600;color:' + ((m.score||100) >= 80 ? 'var(--green)' : 'var(--orange)') + ';">' + (m.score || '100') + '%</td>' +
+                '<td style="padding:5px 8px;text-align:center;"><button onclick="window._lsAcceptMap(' + i + ')" class="btn btn-outline" style="font-size:10px;padding:2px 8px;color:var(--green);border-color:var(--green);">Accept</button></td>' +
+            '</tr>';
+        });
+        html += '</tbody></table></div>';
+        if (matchedRows.length > 3) {
+            html += '<button onclick="window._lsAcceptAllMaps()" class="btn btn-green" style="width:100%;margin-bottom:8px;">Accept All ' + matchedRows.length + ' Matches</button>';
+        }
+    }
+    if (unmatchedRows.length > 0) {
+        html += '<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">' + unmatchedRows.length + ' unmatched products (no close recipe found)</summary>';
+        html += '<div style="font-size:11px;color:var(--text-muted);max-height:200px;overflow-y:auto;margin-top:6px;">' + unmatchedRows.map(u => E(u.product.name)).join(', ') + '</div></details>';
+    }
+
+    window._lsMapProposals = matchedRows;
+    window.openModal('🔗 POS Product Mapping', html);
+};
+
+window._lsAcceptMap = (idx) => {
+    var m = (window._lsMapProposals || [])[idx];
+    if (!m || !m.recipe) return;
+    m.recipe.posAlias = m.product.name;
+    window.saveToDisk();
+    window.showToast('Mapped: ' + m.product.name + ' → ' + m.recipe.name);
+};
+
+window._lsAcceptAllMaps = () => {
+    var count = 0;
+    (window._lsMapProposals || []).forEach(function(m) {
+        if (m.recipe && !m.recipe.posAlias) { m.recipe.posAlias = m.product.name; count++; }
+    });
+    window.saveToDisk();
+    window.closeModal();
+    window.showToast('Mapped ' + count + ' POS products to recipes.');
 };
 
 // Disconnect — clear all credentials

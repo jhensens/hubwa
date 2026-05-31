@@ -155,7 +155,8 @@ window.showView = (view) => {
         else content.innerHTML = `<div class="card" style="text-align:center;"><h3>Page Not Found</h3><p>Could not find view: ${view}</p></div>`;
     } catch (err) {
         console.error("Error rendering view:", err);
-        content.innerHTML = `<div class="card" style="border-left:5px solid var(--red);"><h3>⚠️ Page Error</h3><p>${err.message}</p></div>`;
+        content.innerHTML = `<div class="card" style="border-left:5px solid var(--red);"><h3>⚠️ Page Error</h3><p>Something went wrong loading this view. Try refreshing.</p></div>`;
+        console.error('View render error (' + view + '):', err);
     }
     // Re-apply role-based sidebar filtering after every view render
     if (window._activeStaffMember) window.applyRoleAccess();

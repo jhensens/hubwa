@@ -1060,7 +1060,7 @@ window.renderLsReconcileView = () => {
     sales.forEach(s => {
         if (!s.date) return;
         const eff = window._effectiveRevenue ? window._effectiveRevenue(s) : Number(s.lsRevenue || s.total || 0);
-        if (eff > 0) dailyRev[s.date] = eff;
+        if (eff > 0) dailyRev[s.date] = (dailyRev[s.date] || 0) + eff;
     });
 
     // Merge dates

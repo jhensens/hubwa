@@ -408,13 +408,16 @@ window.viewRecipe = (id) => {
 window.cascadeRecipeCosts = (changedInvIds) => {
     if (!changedInvIds || changedInvIds.length === 0) return { updatedBatches:0, updatedMenus:0, gpAlerts:[] };
     let updatedBatches = 0, updatedMenus = 0;
+    const updatedBatchIds = [];
     const batchRecipes = (window.recipes || []).filter(r => r.type === 'Batch' && !r.archived);
     batchRecipes.forEach(batch => {
-        if ((batch.ingredients||[]).some(ing => ing.type==='inv' && changedInvIds.includes(ing.ref))) {
-            batch.cost = window._recipeCost(batch); updatedBatches++;
+        const oldCost = batch.cost;
+        const newCost = window._recipeCost(batch);
+        if (oldCost !== newCost) {
+            batch.cost = newCost; updatedBatches++;
+            updatedBatchIds.push(batch.id);
         }
     });
-    const updatedBatchIds = batchRecipes.filter(b => (b.ingredients||[]).some(ing=>ing.type==='inv'&&changedInvIds.includes(ing.ref))).map(b=>b.id);
     const gpAlerts = [];
     (window.recipes||[]).filter(r=>r.type==='Menu'&&!r.archived).forEach(menu => {
         if ((menu.ingredients||[]).some(ing=>(ing.type==='inv'&&changedInvIds.includes(ing.ref))||(ing.type==='batch'&&updatedBatchIds.includes(ing.ref)))) {
@@ -1167,6 +1170,7 @@ window._applyAutoReparse = () => {
     changes.forEach(c => {
         c.ing.qty = c.newQty;
         if (c.newUnit) c.ing.unit = c.newUnit;
+        c.ing._qtyConfirmed = true;
     });
     window.recalcAllCosts();
     window.saveToDisk();
@@ -1305,7 +1309,8 @@ window._commitManualLink = (tIdx, selectId, qtyId) => {
     const qtyEl = document.getElementById(qtyId);
     if (!sel || !sel.value) return window.showToast('Select an item to link.', 'error');
     const qty = parseFloat(qtyEl.value) || 1;
-    const oldName = window.tempIngs[tIdx].name;
+    const existing = window.tempIngs[tIdx];
+    const originalRaw = existing._rawName || existing.name;
     const val = sel.value;
 
     if (val.startsWith('batch_')) {
@@ -1316,7 +1321,7 @@ window._commitManualLink = (tIdx, selectId, qtyId) => {
             type: 'batch', ref: batchId, qty: qty,
             unit: b.yieldUnit || 'unit',
             name: b.name,
-            _rawName: oldName
+            _rawName: originalRaw
         };
         window.closeModal();
         window.showToast(`✅ Linked to batch: ${b.name}`);
@@ -1328,7 +1333,7 @@ window._commitManualLink = (tIdx, selectId, qtyId) => {
             type: 'inv', ref: invId, qty: qty,
             unit: inv.useUnit || 'unit',
             name: inv.recipeName || inv.name,
-            _rawName: oldName
+            _rawName: originalRaw
         };
         window.closeModal();
         window.showToast(`✅ Linked to ${inv.recipeName||inv.name}`);

@@ -153,6 +153,7 @@
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-storage-compat.js"></script>
 
@@ -171,6 +172,16 @@
         firebase.initializeApp(firebaseConfig);
         window.db = firebase.firestore();
         window.storage = firebase.storage();
+        window._authReady = new Promise((resolve) => {
+            firebase.auth().onAuthStateChanged(user => {
+                if (user) { console.log('Firebase auth OK (uid:', user.uid, ')'); resolve(user); }
+            });
+            firebase.auth().signInAnonymously().catch(e => {
+                console.error('Anonymous auth failed:', e.code, e.message);
+                resolve(null);
+            });
+            setTimeout(() => resolve(null), 8000); // fallback if auth hangs
+        });
     } catch(e) { console.error("Firebase init failed", e); }
 </script>
 

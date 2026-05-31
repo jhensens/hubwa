@@ -9,13 +9,18 @@ const fetch = require('node-fetch');
 
 admin.initializeApp();
 
+// Lightspeed credentials — read from functions/.env file (server-side only)
+// Create functions/.env with: LIGHTSPEED_CLIENT_SECRET=xxx and LIGHTSPEED_CLIENT_ID=xxx
+const LS_CONFIG = {
+    client_secret: process.env.LIGHTSPEED_CLIENT_SECRET || '',
+    client_id: process.env.LIGHTSPEED_CLIENT_ID || ''
+};
+
 // CORS headers — allow our hosted Hub to call these functions from the browser
 const ALLOWED_ORIGINS = [
     'https://hobart-hub.web.app',
     'https://hobart-hub.firebaseapp.com',
-    'https://jhensens.github.io',
-    'http://localhost:8080',
-    'http://localhost:5000'
+    'https://jhensens.github.io'
 ];
 
 function applyCors(req, res) {
@@ -50,7 +55,9 @@ exports.lightspeedExchange = functions.https.onRequest(async (req, res) => {
 
     try {
         const { code, redirect_uri, client_id, client_secret } = req.body || {};
-        if (!code || !redirect_uri || !client_id || !client_secret) {
+        const secret = LS_CONFIG.client_secret || client_secret;
+        const cid = LS_CONFIG.client_id || client_id;
+        if (!code || !redirect_uri || !cid || !secret) {
             return res.status(400).json({ error: 'Missing required fields: code, redirect_uri, client_id, client_secret' });
         }
 
@@ -59,8 +66,8 @@ exports.lightspeedExchange = functions.https.onRequest(async (req, res) => {
         params.append('grant_type', 'authorization_code');
         params.append('code', code);
         params.append('redirect_uri', redirect_uri);
-        params.append('client_id', client_id);
-        params.append('client_secret', client_secret);
+        params.append('client_id', cid);
+        params.append('client_secret', secret);
 
         const tokenResponse = await fetch('https://api.kounta.com/v1/token', {
             method: 'POST',
@@ -98,15 +105,17 @@ exports.lightspeedRefresh = functions.https.onRequest(async (req, res) => {
 
     try {
         const { refresh_token, client_id, client_secret } = req.body || {};
-        if (!refresh_token || !client_id || !client_secret) {
+        const secret = LS_CONFIG.client_secret || client_secret;
+        const cid = LS_CONFIG.client_id || client_id;
+        if (!refresh_token || !cid || !secret) {
             return res.status(400).json({ error: 'Missing required fields: refresh_token, client_id, client_secret' });
         }
 
         const params = new URLSearchParams();
         params.append('grant_type', 'refresh_token');
         params.append('refresh_token', refresh_token);
-        params.append('client_id', client_id);
-        params.append('client_secret', client_secret);
+        params.append('client_id', cid);
+        params.append('client_secret', secret);
 
         const tokenResponse = await fetch('https://api.kounta.com/v1/token', {
             method: 'POST',

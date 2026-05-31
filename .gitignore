@@ -1,25 +1,5 @@
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Editor files
-*.swp
-*.swo
-*~
-.vscode/
-.idea/
-
-# Environment / secrets
+node_modules/
+functions/node_modules/
+functions/.env
 .env
-.env.local
-
-# Build artifacts
-*.pyc
-__pycache__/
-
-# Firebase
-.firebase/
-
-# Claude Code
-.claude/
+*.local

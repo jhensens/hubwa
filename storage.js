@@ -58,8 +58,9 @@ window._runDailyBackup = () => {
             // Clean old backups (keep 7 days)
             var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
             var cutoffStr = cutoff.toISOString().split('T')[0];
-            db.collection('backups').where('__name__', '<', vid + '_' + cutoffStr)
-                .get().then(snap => { snap.forEach(doc => doc.ref.delete()); }).catch(() => {});
+            db.collection('backups').get().then(snap => {
+                snap.forEach(doc => { if (doc.id < vid + '_' + cutoffStr && doc.id.startsWith(vid + '_')) doc.ref.delete(); });
+            }).catch(() => {});
         }).catch(() => {});
 };
 
@@ -96,11 +97,12 @@ window.saveToDisk = () => {
             if (syncLabel) { syncLabel.innerHTML = '🟢 Saved Local'; syncLabel.style.color = 'var(--green)'; }
             return;
         }
-        const now = Date.now();
-        if (now - window._lastFirebaseSave < 4000) return; // Extra guard
-        window._lastFirebaseSave = now;
-        let payload = {}; window.saveKeys.forEach(k => payload[k] = window[k]);
-        db.collection('venueData').doc(window.getVenueDocId()).set(payload, { merge: true })
+        const _doWrite = () => {
+            const now = Date.now();
+            if (now - window._lastFirebaseSave < 4000) return;
+            window._lastFirebaseSave = now;
+            let payload = {}; window.saveKeys.forEach(k => payload[k] = window[k]);
+            db.collection('venueData').doc(window.getVenueDocId()).set(payload, { merge: true })
             .then(() => {
                 window._firebaseRetryCount = 0;
                 if (syncLabel) { syncLabel.innerHTML = '🟢 Live Sync'; syncLabel.style.color = 'var(--green)'; }
@@ -119,6 +121,8 @@ window.saveToDisk = () => {
                     if (window.showToast) window.showToast('Data not synced to cloud. Check your connection.', 'error');
                 }
             });
+        };
+        if (window._authReady) { window._authReady.then(_doWrite).catch(_doWrite); } else { _doWrite(); }
     }, 3000); // Wait 3 seconds after last save call before writing to Firebase
 };
 

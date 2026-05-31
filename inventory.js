@@ -647,7 +647,7 @@ window.unlinkAllIngredients = () => {
     (window.recipes || []).forEach(r => {
         (r.ingredients || []).forEach((ing, idx) => {
             if (ing.type === 'inv') {
-                r.ingredients[idx] = { type: 'raw', name: ing._rawName || ing.name, qty: 0, unit: '' };
+                r.ingredients[idx] = { type: 'raw', name: ing._rawName || ing.name, qty: ing.qty || 0, unit: ing.unit || '', _rawName: ing._rawName || ing.name };
                 count++;
             }
         });
@@ -748,7 +748,7 @@ window.cascadeSalesDeductions = function(salesItems, source) {
             } else { unmatched.push({ rawName: rawName, qtySold: qtySold }); }
         } else if (directInv) {
             // Direct inventory deduction
-            var depletion = qtySold * (directInv.yield ? (1 / directInv.yield) : (directInv.useToBy || 1));
+            var depletion = qtySold * (1 / (directInv.yield || 1));
             deductions[directInv.id] = (deductions[directInv.id] || 0) + depletion;
             matched.push({ rawName: rawName, matchType: 'inventory', matchName: directInv.name, qtySold: qtySold });
         } else {
@@ -813,7 +813,7 @@ window.previewSalesDeductions = function(salesItems) {
                 window._cascadeBatchIngredients(recipeId, qtySold, deductions, new Set(), recipes);
             } else { unmatched.push({ rawName: rawName, qtySold: qtySold }); }
         } else if (directInv) {
-            var depletion = qtySold * (directInv.yield ? (1 / directInv.yield) : (directInv.useToBy || 1));
+            var depletion = qtySold * (1 / (directInv.yield || 1));
             deductions[directInv.id] = (deductions[directInv.id] || 0) + depletion;
             matched.push({ rawName: rawName, matchType: 'inventory', matchName: directInv.name, qtySold: qtySold });
         } else {

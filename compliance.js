@@ -469,9 +469,10 @@ window.renderComplianceView = function() {
     const _allTasks = window.rotationalTasks || [];
     let _overdue = 0, _dueToday = 0;
     _allTasks.forEach(t => {
-        if (!t.lastDone) { _overdue++; return; }
+        const lastDone = t.lastLogIso || t.lastDone;
+        if (!lastDone) { _overdue++; return; }
         const interval = _freqMap[t.freq] || 7;
-        const days = Math.floor((Date.now() - new Date(t.lastDone).getTime()) / 86400000);
+        const days = Math.floor((Date.now() - new Date(lastDone).getTime()) / 86400000);
         if (days > interval) _overdue++;
         else if (days >= interval) _dueToday++;
     });

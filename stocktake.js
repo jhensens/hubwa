@@ -267,7 +267,7 @@ window.runAiAllergenScan = async () => {
     }));
     const prompt = `You are an allergen detection AI for a restaurant. For each recipe, identify the following allergens and dietary flags that ARE PRESENT: GF (gluten free), DF (dairy free), VG (vegan), V (vegetarian), NF (nut free), SF (shellfish free), EF (egg free), SPICY, contains: Gluten, Dairy, Eggs, Nuts, Shellfish, Fish, Soy, Sesame.
 Return ONLY JSON: { "results": [ { "id": "recipe_id", "allergens": ["GF", "contains: Dairy"] } ] }
-Recipes: ${JSON.stringify(recipeData)}`;
+Recipes: ${JSON.stringify(recipeData).replace(/[<>]/g, '')}`;
     window.showLoadingOverlay('🤖 AI scanning allergens across all recipes...');
     try {
         const apiKey = window.getApiKey(); if (!apiKey) { window.hideLoadingOverlay(); return; }
@@ -803,7 +803,7 @@ window._renderStocktakeCount = function() {
     zones.forEach(function(z) {
         var isActive = activeZone === z;
         var label = z === 'all' ? 'All Zones' : z;
-        html += '<button class="btn" onclick="window._stocktakeZone=\'' + z.replace(/'/g, "\\'") + '\';window.showView(\'stocktake\')" style="padding:6px 14px;border-radius:16px;font-size:12px;background:' + (isActive ? 'var(--purple)' : 'var(--bg-main)') + ';color:' + (isActive ? '#fff' : 'var(--text-muted)') + ';border:1px solid ' + (isActive ? 'var(--purple)' : 'var(--border)') + ';">' + label + '</button>';
+        html += '<button class="btn" onclick="window._stocktakeZone=\'' + (window.escAttr ? window.escAttr(z) : z.replace(/'/g, "&#39;")) + '\';window.showView(\'stocktake\')" style="padding:6px 14px;border-radius:16px;font-size:12px;background:' + (isActive ? 'var(--purple)' : 'var(--bg-main)') + ';color:' + (isActive ? '#fff' : 'var(--text-muted)') + ';border:1px solid ' + (isActive ? 'var(--purple)' : 'var(--border)') + ';">' + label + '</button>';
     });
     html += '</div>';
     // Search

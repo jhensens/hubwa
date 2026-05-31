@@ -313,13 +313,26 @@ window._pinKey = (key) => {
     }
 };
 
+window._pinAttempts = 0;
+window._pinLockoutUntil = 0;
+
 window.requirePin = (onSuccess) => {
     const pin = localStorage.getItem('venuePin');
     if (!pin) { onSuccess(); return; }
     if (!window.isLocked) { onSuccess(); return; }
     window._showPinModal('🔒 Enter PIN', 'Manager PIN required to continue', async (attempt) => {
+        if (Date.now() < window._pinLockoutUntil) {
+            const secsLeft = Math.ceil((window._pinLockoutUntil - Date.now()) / 1000);
+            const errEl = document.getElementById('pin-error');
+            if (errEl) errEl.textContent = 'Too many attempts. Wait ' + secsLeft + 's.';
+            window._pinBuffer = '';
+            const dots = document.querySelectorAll('.pin-dot');
+            dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
+            return;
+        }
         const hashed = await window._hashPin(attempt);
         if (hashed === pin) {
+            window._pinAttempts = 0;
             window.isLocked = false;
             window._lastActivity = Date.now();
             window.closeModal();
@@ -327,11 +340,18 @@ window.requirePin = (onSuccess) => {
             window.showToast('Hub unlocked.');
             onSuccess();
         } else {
+            window._pinAttempts++;
             window._pinBuffer = '';
             const dots = document.querySelectorAll('.pin-dot');
             dots.forEach(d => { d.style.background = 'transparent'; d.style.border = '2px solid var(--border)'; });
             const errEl = document.getElementById('pin-error');
-            if (errEl) errEl.textContent = 'Incorrect PIN. Try again.';
+            if (window._pinAttempts >= 5) {
+                window._pinLockoutUntil = Date.now() + 30000;
+                if (errEl) errEl.textContent = '5 failed attempts. Locked for 30 seconds.';
+                if (typeof window.logAudit === 'function') window.logAudit('auth', 'pin-lockout', '', '5 failed PIN attempts — 30s lockout');
+            } else {
+                if (errEl) errEl.textContent = 'Incorrect PIN. ' + (5 - window._pinAttempts) + ' attempts remaining.';
+            }
         }
     }, true);
 };

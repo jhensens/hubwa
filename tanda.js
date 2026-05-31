@@ -102,7 +102,7 @@ window.loadTandaData = async () => {
     const weekEndStr = weekEnd.toISOString().split('T')[0];
 
     const weekSchedData = await window.fetchTanda(
-        'schedules?from=' + weekStartStr + '&to=' + weekEndStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true'
+        'schedules?from=' + weekStartStr + '&to=' + weekEndStr + '&user_ids=' + userIds + '&show_costs=true&include_names=true&show_award_interpretation=true'
     );
     const weekSchedules = weekSchedData ? (Array.isArray(weekSchedData) ? weekSchedData : (weekSchedData.schedules || [])) : [];
 
@@ -141,7 +141,7 @@ window.loadTandaData = async () => {
     const shiftsStart = new Date(today); shiftsStart.setDate(shiftsStart.getDate() - 30);
     const shiftsStartStr = shiftsStart.toISOString().split('T')[0];
     const weekShiftsData = await window.fetchTanda(
-        'shifts?from=' + shiftsStartStr + '&to=' + dateStr + '&show_costs=true'
+        'shifts?from=' + shiftsStartStr + '&to=' + dateStr + '&show_costs=true&show_award_interpretation=true'
     );
     const weekShifts = weekShiftsData ? (Array.isArray(weekShiftsData) ? weekShiftsData : (weekShiftsData.shifts || [])) : [];
     let actualHours = 0, actualCost = 0, actualStaff = [];
@@ -312,9 +312,10 @@ window.syncTandaStaff = () => {
     if (!window._tandaStaff || window._tandaStaff.length === 0) return window.showToast('No Tanda staff data. Refresh Tanda first.', 'error');
     let added = 0, updated = 0;
     window._tandaStaff.filter(ts => ts.active).forEach(ts => {
-        const existing = (window.staffDirectory || []).find(s => s.name && ts.name && s.name.toLowerCase().trim() === ts.name.toLowerCase().trim());
+        const existing = (window.staffDirectory || []).find(s => (s.tandaId && s.tandaId === ts.id) || (s.name && ts.name && s.name.toLowerCase().trim() === ts.name.toLowerCase().trim()));
         if (existing) {
-            // Merge: fill blanks only
+            // Merge: fill blanks only + persist tandaId for reliable future matching
+            if (!existing.tandaId) existing.tandaId = ts.id;
             if (!existing.phone && ts.phone) { existing.phone = ts.phone; updated++; }
             if (!existing.email && ts.email) { existing.email = ts.email; updated++; }
             if (!existing.startDate && ts.startDate) existing.startDate = ts.startDate;
@@ -332,7 +333,7 @@ window.syncTandaStaff = () => {
             window.staffDirectory.push({
                 name: ts.name, role: role, phone: ts.phone, email: ts.email,
                 emergency: '', status: 'Active', startDate: ts.startDate, notes: 'Synced from Tanda',
-                qualifications: {}
+                qualifications: {}, tandaId: ts.id
             });
             added++;
         }
@@ -341,7 +342,7 @@ window.syncTandaStaff = () => {
     let qualSynced = 0;
     if (window._tandaData && window._tandaData.qualifications) {
         window._tandaData.qualifications.forEach(function(tq) {
-            const staff = (window.staffDirectory || []).find(s => s.name && tq.name && s.name.toLowerCase().trim() === tq.name.toLowerCase().trim());
+            const staff = (window.staffDirectory || []).find(s => (s.tandaId && s.tandaId === tq.userId) || (s.name && tq.name && s.name.toLowerCase().trim() === tq.name.toLowerCase().trim()));
             if (!staff) return;
             if (!staff.qualifications) staff.qualifications = {};
             // Map Tanda qual type to a slug

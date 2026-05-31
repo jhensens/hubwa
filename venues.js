@@ -42,7 +42,7 @@ window.getLocalKey = (key) => window.getCurrentVenue().id + '_' + key;
 
 window.renderVenueSwitcher = () => {
     if (window.isLocked && localStorage.getItem('venuePin')) {
-        window.requirePin(() => window.renderVenueSwitcher());
+        window.requirePin(() => { if (!window.isLocked) window.renderVenueSwitcher(); });
         return;
     }
     const current = window.getCurrentVenue();

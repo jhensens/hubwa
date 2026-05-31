@@ -68,7 +68,7 @@ window.renderDataHealthView = function() {
     var zeroPriceUsed = [];
     inv.forEach(function(i) {
         if (i.archived) return;
-        if (Number(i.price || 0) !== 0) return;
+        if (Number(i.price || 0) > 0) return;
         var usedBy = recipes.filter(function(r) { return !r.archived && (r.ingredients || []).some(function(ing) { return ing.type === 'inv' && ing.ref === i.id; }); });
         if (usedBy.length > 0) zeroPriceUsed.push({ item: i, usedBy: usedBy });
     });
@@ -182,7 +182,7 @@ window._dhConvertOrphan = function(recipeId, ingIdx) {
         confirmLabel: 'Convert',
         tier: 'standard',
         onConfirm: function() {
-            r.ingredients[ingIdx] = { type: 'raw', name: ing._rawName || ing.name || 'Orphan ingredient', qty: 0, unit: '' };
+            r.ingredients[ingIdx] = { type: 'raw', name: ing._rawName || ing.name || 'Orphan ingredient', qty: ing.qty || 0, unit: ing.unit || '', _rawName: ing._rawName || ing.name };
             if (window._recalcRecipe) window._recalcRecipe(r);
             window.saveToDisk();
             window.showToast('Converted to raw.');

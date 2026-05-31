@@ -1,5 +1,5 @@
 // Hobart Hub Service Worker — Offline Support
-const CACHE_NAME = 'hobart-hub-20260511i';
+const CACHE_NAME = 'hobart-hub-20260531g';
 const APP_SHELL = [
     './',
     './index.html',
@@ -38,7 +38,9 @@ const APP_SHELL = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(APP_SHELL);
+            return Promise.all(
+                APP_SHELL.map(url => cache.add(url).catch(err => console.warn('SW: failed to cache', url, err.message)))
+            );
         }).then(() => self.skipWaiting())
     );
 });

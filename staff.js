@@ -42,7 +42,7 @@ window.renderQualificationsView = function() {
 
     const getStatus = (q, qt) => {
         if (!q) return { cls: 'qual-none', label: 'Not Set' };
-        if (!qt.expiryRequired) return q.verified ? { cls: 'qual-valid', label: 'Verified' } : { cls: 'qual-expiring', label: 'Pending' };
+        if (!qt.expiryRequired && !qt.requiresExpiry) return q.verified ? { cls: 'qual-valid', label: 'Verified' } : { cls: 'qual-expiring', label: 'Pending' };
         if (!q.expiry) return { cls: 'qual-none', label: 'No Date' };
         const days = (new Date(q.expiry) - now) / 86400000;
         if (days < 0) return { cls: 'qual-expired', label: 'Expired' };
@@ -173,7 +173,7 @@ window.renderOrientationView = function(showCompleted = false) {
             </div>
         </div>
         <div id="orientationContent">${filtered.length === 0 ? '<div style="text-align:center;padding:48px 20px;color:var(--text-muted)"><div style="font-size:36px;margin-bottom:12px">🤝</div><div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text-main)">No staff in this view</div><div style="font-size:13px;max-width:320px;margin:0 auto;line-height:1.5">Add a new hire to start tracking their onboarding progress</div></div>' : filtered.map(o => {
-        const template = window.onboardingTemplates[o.role] || window.onboardingTemplates['FOH (Front of House)'];
+        const template = window.onboardingTemplates[o.role] || window.onboardingTemplates['FOH (Front of House)'] || window.onboardingTemplates[Object.keys(window.onboardingTemplates || {})[0]] || {};
         let totalTasks = 0; let completedTasks = 0;
         let phasesHtml = Object.keys(template).map(phase => {
             let phaseTasksHtml = template[phase].map(t => {

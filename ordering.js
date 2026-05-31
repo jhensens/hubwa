@@ -116,7 +116,7 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
         const urgencyColor = { high: 'var(--red)', medium: 'var(--orange)', low: 'var(--text-muted)' };
         const urgencyLabel = { high: '🔴 Urgent', medium: '🟡 Soon', low: '🟢 Low' };
 
-        const html = Object.entries(bySup).map(([sup, items]) => { window._aoSup = sup;
+        const html = Object.entries(bySup).map(([sup, items]) => {
             const rows = items.map(item =>
                 '<tr style="border-bottom:1px solid var(--border);">' +
                 '<td style="padding:7px 10px;"><strong style="font-size:13px;">' + esc(item.itemName) + '</strong><br>' +
@@ -131,7 +131,7 @@ Only include items that genuinely need ordering. Be practical — don't over-ord
             return '<div class="card" style="border-top:4px solid var(--purple);margin-bottom:12px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">' +
                     '<h3 style="margin:0;font-size:15px;">' + esc(sup) + '</h3>' +
-                    '<button onclick="window.generateAiOrderEmail(window._aoSup)" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
+                    '<button onclick="window.generateAiOrderEmail(\'' + window.escAttr(sup) + '\')" class="btn btn-purple" style="font-size:12px;">✉️ Generate Order Email</button>' +
                 '</div>' +
                 '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
                 '<thead><tr style="background:#111;font-size:11px;color:var(--text-muted);text-transform:uppercase;">' +
@@ -290,11 +290,11 @@ window.processLsFile = (filename, text) => {
 
     const header = lines[0].toLowerCase();
 
-    if (header.includes('product') && header.includes('quantity') && header.includes('sale amount')) {
+    if (header.includes('product') && header.includes('quantity') && (header.includes('sale amount') || header.includes('sale_amount'))) {
         return window.parseLsSalesBy(lines);
-    } else if (header.includes('guest count') && header.includes('avg per guest')) {
+    } else if ((header.includes('guest count') || header.includes('guest_count')) && (header.includes('avg per guest') || header.includes('avg_per_guest'))) {
         return window.parseLsGuests(lines);
-    } else if (header.includes('cashup') || header.includes('recorded') && header.includes('counted')) {
+    } else if (header.includes('cashup') || (header.includes('recorded') && header.includes('counted'))) {
         return window.parseLsReconciliation(lines);
     } else {
         return { type: 'Unknown', icon: '❓', status: 'error', message: 'Could not identify report type. Expected Sales By, Guests, or Reconciliation CSV.' };

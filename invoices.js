@@ -727,13 +727,13 @@ window._batchInvoiceProcessCurrent = () => {
         previewInner.innerHTML = '<img src="' + objectUrl + '" style="max-width:100%;border-radius:6px;border:1px solid var(--border);">';
     }
 
-    // Hook into commitInvoice to detect when user commits — intercept the results
-    const origCommit = window.commitInvoice;
-    window.commitInvoice = function(isHistorical) {
+    // Hook into _commitInvoice to detect when user commits — intercept the results
+    const origCommit = window._commitInvoice;
+    window._commitInvoice = function(isHistorical) {
         // Call original
         origCommit(isHistorical);
         // Restore original
-        window.commitInvoice = origCommit;
+        window._commitInvoice = origCommit;
         // Mark entry as done
         entry.status = 'done';
         // Count items from the pending data
@@ -760,7 +760,7 @@ window._batchInvoiceProcessCurrent = () => {
             entry.status = 'error';
             window._batchInvoiceRenderQueue();
             statusEl.innerHTML = '<span style="color:var(--red);">Error: ' + err.message + '</span>';
-            window.commitInvoice = origCommit;
+            window._commitInvoice = origCommit;
             document.getElementById('batch-inv-next-btn').style.display = 'block';
         });
     } else {
@@ -769,7 +769,7 @@ window._batchInvoiceProcessCurrent = () => {
             entry.status = 'error';
             window._batchInvoiceRenderQueue();
             statusEl.innerHTML = '<span style="color:var(--red);">Error: ' + err.message + '</span>';
-            window.commitInvoice = origCommit;
+            window._commitInvoice = origCommit;
             document.getElementById('batch-inv-next-btn').style.display = 'block';
         });
     }

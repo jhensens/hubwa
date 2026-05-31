@@ -396,7 +396,7 @@ window.runAiBatchLink = async () => {
     const processBatch = async (b) => {
         const batch = batches[b];
         const globalOffset = b * BATCH_SIZE;
-        const rawList = batch.map((r, idx) => idx + ':' + r.rawName).join('\n');
+        const rawList = batch.map((r, idx) => idx + ':' + (r.rawName || '').replace(/[`\\\n]/g, ' ').substring(0, 80)).join('\n');
         const prompt = `You are matching recipe ingredients to inventory items for a Japanese izakaya restaurant.
 
 RULES:

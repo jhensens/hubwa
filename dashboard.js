@@ -4,8 +4,8 @@
 // =============================================================================
 // VERSION INFO — Shows build version and update details
 // =============================================================================
-window._hubBuildDate = '11 May 2026';
-window._hubBuildId = '20260511i';
+window._hubBuildDate = '31 May 2026';
+window._hubBuildId = '20260531g';
 
 window._showVersionInfo = () => {
     // Try to get SW cache version
@@ -1418,17 +1418,18 @@ Write a clear, friendly shift debrief that the opening team and management will 
 - End with the close/out times as a simple sign-off line`;
 
     try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const apiKey = window.getApiKey ? window.getApiKey() : null;
+        if (!apiKey) throw new Error('No API key configured');
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'claude-sonnet-4-20250514',
-                max_tokens: 1000,
-                messages: [{ role: 'user', content: prompt }]
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 1000 }
             })
         });
         const data = await response.json();
-        const debrief = data.content && data.content[0] ? data.content[0].text : null;
+        const debrief = data.candidates && data.candidates[0] && data.candidates[0].content ? data.candidates[0].content.parts[0].text : null;
 
         const entry = { date: dateStr, shift, manager: mgr, closeTime, outTime, khTime, notes, urgent, debrief };
         if (!window.handoverLogs) window.handoverLogs = [];

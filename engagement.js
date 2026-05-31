@@ -1181,7 +1181,7 @@ window._renderStaffAnnouncementsCard = (staff) => {
 window._staffAckAnnouncement = (id) => {
     const a = (window.announcements || []).find(x => x.id === id);
     const staff = window._activeStaffMember;
-    if (!a || !staff) return;
+    if (!a || !staff || !staff.name) return;
     if (!a.acknowledged) a.acknowledged = [];
     if (!a.acknowledged.includes(staff.name)) { a.acknowledged.push(staff.name); window.saveToDisk(); window.showView('my-hub'); window.showToast('Acknowledged!'); }
 };

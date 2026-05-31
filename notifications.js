@@ -16,6 +16,7 @@ window.logAudit = function(collection, action, itemId, details) {
     });
     // Keep last 500 entries
     if (window.auditLog.length > 500) window.auditLog = window.auditLog.slice(0, 500);
+    if (window.saveToDisk) window.saveToDisk();
 };
 
 // --- PRINT REPORT UTILITY ---
@@ -136,7 +137,7 @@ window.getNotifications = function() {
         const parts = s.cutoff.split(':');
         const cutoffMins = parseInt(parts[0]) * 100 + parseInt(parts[1] || 0);
         // Alert if within 2 hours before cutoff
-        if (currentHHMM >= (cutoffMins - 200) && currentHHMM <= cutoffMins) {
+        if (currentHHMM >= (cutoffMins - 200) && currentHHMM <= cutoffMins) { // cutoffMins uses HHMM format, so -200 = 2 hours
             // Check if any items from this supplier are below par
             const lowItems = (window.inventoryItems || []).filter(i => !i.archived && i.supplier === s.name && i.par && i.stock < i.par);
             if (lowItems.length > 0) {
@@ -250,9 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 800);
 
-    // Then sync from Firebase in background and re-render if data differs
-    if (typeof db !== 'undefined') {
-        db.collection('venueData').doc(window.getVenueDocId()).get().then((doc) => {
+    // Wait for auth then sync from Firebase — rules require request.auth != null
+    const _doFirebaseSync = () => {
+        window.db.collection('venueData').doc(window.getVenueDocId()).get().then((doc) => {
             if (doc.exists) {
                 let data = doc.data();
                 let changed = false;
@@ -285,5 +286,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const syncLabel = document.getElementById('sync-status');
             if (syncLabel) { syncLabel.innerHTML = '⚠️ Offline Mode'; syncLabel.style.color = 'var(--orange)'; }
         });
+    };
+    if (typeof db !== 'undefined' && window._authReady) {
+        window._authReady.then(() => _doFirebaseSync()).catch(() => _doFirebaseSync());
+    } else if (typeof db !== 'undefined') {
+        _doFirebaseSync();
     }
 });
